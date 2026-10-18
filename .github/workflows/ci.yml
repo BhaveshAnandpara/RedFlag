@@ -39,6 +39,22 @@ jobs:
       - run: uv run mypy src tests
       - run: uv run pytest -q
 
+  # The unit tests run with test-only packages installed, so they cannot notice a package that
+  # the real container is missing. This builds the production image and checks it starts.
+  backend-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image
+        run: docker build -t redflag-backend backend
+      - name: The production image must be able to start
+        run: >
+          docker run --rm
+          -e DATABASE_URL=postgresql://user:pass@localhost:5432/db
+          -e FRONTEND_ORIGIN=http://localhost:3000
+          redflag-backend
+          python -c "import redflag_backend.main"
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
