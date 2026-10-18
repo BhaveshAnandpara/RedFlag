@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { HealthStatus } from "@/components/health-status";
 
 // NEXT_PUBLIC_ variables are readable by anyone, so this must only ever hold the public API address.
@@ -12,6 +14,11 @@ export default function Home() {
           A final security check for AI apps before you release them.
         </p>
       </header>
+      <p>
+        <Link href="/how-it-works" className="font-medium underline underline-offset-4">
+          See how Redflag tests an AI
+        </Link>
+      </p>
       <HealthStatus apiUrl={apiUrl} />
     </main>
   );
