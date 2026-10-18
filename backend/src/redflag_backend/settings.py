@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     frontend_origin: str
     app_version: str = "0.1.0"
     commit_sha: str | None = None
+    # Unlocks the model-router endpoints. When unset, those endpoints stay locked for everyone.
+    owner_token: str | None = None
     # Neon can take several seconds to wake from idle; allow for that before saying "degraded".
     db_timeout_seconds: float = 10.0
 
