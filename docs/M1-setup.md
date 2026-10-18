@@ -1,6 +1,6 @@
 # M1: Model router
 
-**Status: built and verified locally (2026-10-19). Deployment and the live check are pending.** This document records what M1 is, how it works, how to set it up, and how to check it. It describes M1 only and will be updated as later milestones change things.
+**Status: built and verified locally, including against the three real providers with real keys (2026-10-19). Deployment to Render and your live check are pending.** This document records what M1 is, how it works, how to set it up, and how to check it. It describes M1 only and will be updated as later milestones change things.
 
 Related documents: [M0 setup](M0-setup.md) · [Milestone plan](Redflag_Milestones.md) · [M1 design](superpowers/specs/2026-10-19-m1-model-router-design.md) · [M1 build plan](superpowers/plans/2026-10-19-m1-model-router-plan.md)
 
@@ -114,10 +114,12 @@ Two new migrations create the saved-answers, attempt-log and spend tables. They 
 | Where | What | Tests |
 |---|---|---|
 | Backend over HTTP, real Postgres, fake providers | Owner lock (even with a malformed body), fallback on every failure kind, no fallback on a bad key or request, total failure is never a success, unconfigured providers skipped, cool-off, cache hit/expiry/size cap, every budget cap including parallel calls, attempt log, pretend-failure and clear-cache tools, provider status, paid path (off by default, labeled, capped, cap survives a restart), unexpected crashes never leak their message | 42 |
-| Provider adapters against sample HTTP replies | Exact request shapes, reply parsing, every error classification, blocked and empty replies, network trouble, keys never in errors or printouts | 54 |
+| Provider adapters against sample HTTP replies | Exact request shapes, reply parsing, every error classification, blocked and empty replies, network trouble, keys never in errors or printouts | 55 |
 | Test page as a rendered page, network faked | Locked state, wrong password, unlock, labels, budget meter, attempt log and switch notice, each failure message, provider status, test buttons, password never stored | 18 |
 
 No test in CI calls a live provider. The cache rules and the concurrency cap were each proven to be caught by their tests by breaking them on purpose and watching the tests fail.
+
+A rehearsal of the live acceptance steps was also run against the real router with the owner's real keys and a local Postgres: wrong password refused, a real Groq answer, the repeat served from memory, "pretend Groq is out of quota" switching to Gemini with the switch logged, a one-request budget stopping the second request, and no key or password in any response or log.
 
 A local end-to-end run with the real backend, real Postgres and fake providers confirmed the browser's preflight check is allowed from the frontend and refused from any other site, a wrong password gets 401, a rate-limited provider falls back to the next, and a repeat is served from the cache.
 
@@ -129,6 +131,9 @@ A local end-to-end run with the real backend, real Postgres and fake providers c
 | mypy rejected the provider interface | The interface declared `configured` as writable while the adapters expose it read-only | The interface declares it read-only |
 | Gemini reports a bad key as a 400 | It uses an "invalid argument" status with a reason string | The adapter reads the reason and reports an auth error |
 | A tokenless request returned 422 on the live site | My PowerShell quoting mangled the test body | Verified locally and live that the lock is checked before the body, and added a test |
+| The first real Groq call failed: model not found | The default `llama-3.1-8b-instant` is not available on the owner's account. Groq's own list for the key showed `openai/gpt-oss-20b`, `openai/gpt-oss-120b` and a few others | The default is now `openai/gpt-oss-20b`. This is why model names are settings |
+| The first real OpenRouter call reported a rate limit | One free model was rate limited at its upstream provider (Google), while the next free model answered fine. The adapter had wrongly assumed one limit covered every free model | The adapter now tries the next free model after a rate limit, and only reports a rate limit when every free model is limited. The old test encoded the wrong assumption and was replaced |
+| Reasoning models can return an empty reply on a small output cap | They spend the token cap thinking before they write an answer (seen with an OpenRouter free model at 16 tokens) | An empty reply is treated as a failure, never a blank answer. The default output cap is 512 tokens, which leaves room. Raise it if replies come back empty |
 
 ## 6. Checking it on the live site (your acceptance)
 

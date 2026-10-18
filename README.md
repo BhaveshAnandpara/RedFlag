@@ -177,7 +177,7 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 |---|---|---|
 | Backend over HTTP, real Postgres | healthy and degraded replies, no secret leaks, CORS, startup checks, URL handling | 8 |
 | Model router over HTTP, real Postgres, fake providers | owner lock, fallback, cache, budgets, attempt log, test tools, paid cap, no key leaks | 42 |
-| Provider adapters, sample replies only | Groq, OpenRouter and Gemini request shapes, reply parsing, error classification | 54 |
+| Provider adapters, sample replies only | Groq, OpenRouter and Gemini request shapes, reply parsing, error classification | 55 |
 | Status page, network faked | healthy, degraded, waking-up with retry, gives-up states | 4 |
 | Router test page, network faked | locked state, labels, budget meter, attempt log, errors, test buttons | 18 |
 
@@ -237,6 +237,7 @@ Most problems on the live site come from free-tier behavior, not bugs. Find your
 | **"Budget reached (requests / tokens / seconds)"** | The session hit one of its limits. This is the router stopping on purpose | Start a new session (reload the page), or raise the `BUDGET_MAX_*` setting |
 | A provider shows **"cooling down"** | It was rate limited, and the router is skipping it until its wait is over | Wait. It comes back by itself |
 | An answer says **content_blocked** in the attempt log | A provider's safety filter declined that prompt | Expected for some security-style prompts. The router tries the next provider |
+| Replies come back empty or show **server_error** for a thinking model | Reasoning models spend the output cap thinking before they answer | Raise the output cap. The default is 512 tokens. An empty reply is always a failure, never a blank answer |
 | A provider keeps failing with **model unavailable** | The model name in settings is gone or renamed (free model lists rotate) | Check the provider's current model list and update `GROQ_MODEL`, `GEMINI_MODEL` or `OPENROUTER_FREE_MODELS` |
 | Budgets and cooling-down reset on their own | Render restarted or woke from sleep. These live in memory | Expected. Saved answers, the attempt log and the paid-spend total live in Neon and survive |
 

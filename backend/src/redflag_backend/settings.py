@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = Field(default=None, repr=False)
     # Free model names change often, so they are settings, not code. Check them against each
     # provider's current model list when keys are added.
-    groq_model: str = "llama-3.1-8b-instant"
+    groq_model: str = "openai/gpt-oss-20b"
     gemini_model: str = "gemini-3.5-flash-lite"
     # Tried in this order; the first one that is still available answers.
     openrouter_free_models: str = (

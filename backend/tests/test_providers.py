@@ -224,18 +224,40 @@ def test_openrouter_moves_to_the_next_free_model_when_one_is_gone_or_down() -> N
     assert result.model == "free/two:free"
 
 
-def test_openrouter_stops_at_a_rate_limit_instead_of_hammering_every_model() -> None:
+def test_openrouter_tries_the_next_free_model_when_one_is_rate_limited_upstream() -> None:
+    # Seen live: one free model was rate limited at its upstream provider while the next
+    # free model answered. A free model's 429 says nothing about the others.
     tried: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        tried.append(json.loads(request.content)["model"])
-        return httpx.Response(429, headers={"retry-after": "12"}, json={"error": {"code": 429}})
+        model = json.loads(request.content)["model"]
+        tried.append(model)
+        if model == "free/one:free":
+            return httpx.Response(429, json={"error": {"code": 429, "message": "upstream"}})
+        return reply_for(model)
+
+    result = or_ask(or_provider(handler))
+
+    assert tried == ["free/one:free", "free/two:free"]
+    assert result.model == "free/two:free"
+
+
+def test_openrouter_reports_a_rate_limit_only_when_every_free_model_is_rate_limited() -> None:
+    tried: list[str] = []
+    waits = {"free/one:free": "12", "free/two:free": "30"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content)["model"]
+        tried.append(model)
+        return httpx.Response(
+            429, headers={"retry-after": waits[model]}, json={"error": {"code": 429}}
+        )
 
     with pytest.raises(RateLimited) as caught:
         or_ask(or_provider(handler))
 
-    assert caught.value.retry_after == 12.0
-    assert tried == ["free/one:free"]
+    assert tried == ["free/one:free", "free/two:free"]
+    assert caught.value.retry_after == 30.0  # the longest wait, so the router skips us long enough
 
 
 def test_openrouter_reads_an_error_hidden_inside_a_200_reply() -> None:
