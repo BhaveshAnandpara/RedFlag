@@ -33,6 +33,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--providers",
+        help="comma-separated provider names to use, in the router order (default: all)",
+    )
     args = parser.parse_args()
 
     # The router needs no database here (no cache), but Settings insists on these two.
@@ -40,6 +44,9 @@ def main() -> None:
     os.environ.setdefault("FRONTEND_ORIGIN", "http://localhost:3000")
     settings = Settings(_env_file=args.env_file)
     providers = build_providers(settings)
+    if args.providers:
+        wanted = {name.strip() for name in args.providers.split(",")}
+        providers = [p for p in providers if p.name in wanted]
     print("Providers with a key:", [p.name for p in providers if p.configured] or "none")
 
     recordings = asyncio.run(record_all(Router(providers)))

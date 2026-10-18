@@ -82,7 +82,8 @@ class RouterModel:
         self.attempts: list[Attempt] = []
 
     async def __call__(self, messages: Sequence[Message]) -> str:
-        request = LLMRequest(messages=tuple(messages), temperature=0.0)
+        # Headroom for reasoning models, which spend part of the budget thinking before they answer.
+        request = LLMRequest(messages=tuple(messages), temperature=0.0, max_output_tokens=1024)
         try:
             result = await self._router.complete(request, self._budget)
         except RouterFailure as failure:
