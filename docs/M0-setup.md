@@ -209,7 +209,7 @@ Real values live only in Render and Vercel settings and the local git-ignored `.
 ### 5.6 Deployed addresses
 
 - Backend: `https://redflag-8dcv.onrender.com` (health check at `/health`)
-- Frontend: _add the Vercel address here_
+- Frontend: `https://red-flag-gules.vercel.app` (the production address that `FRONTEND_ORIGIN` must match)
 
 ## 6. How it is tested
 
@@ -229,7 +229,7 @@ Real values live only in Render and Vercel settings and the local git-ignored `.
 | First Render deploy crashed: `Could not parse SQLAlchemy URL` | Values copied from `.env.local` kept their surrounding quotes | The backend now strips stray quotes and spaces. A test reproduces the failure |
 | Page loaded but the browser blocked the backend's reply | `FRONTEND_ORIGIN` did not exactly match the Vercel address. The network tab still showed a 200 | Corrected the value. The real error is in the browser Console tab |
 | First Neon request took 5.6 seconds | Neon waking from idle | Raised the database timeout to 10 seconds |
-| `neon init -y` did more than expected | It installed Neon plugins globally and minted an account-wide API key into a Copilot config file | Flagged to the owner, who can revoke it (`neon api-keys revoke 3441847`) |
+| `neon init -y` did more than expected | It installed Neon plugins globally and minted an account-wide API key into a Copilot config file | Flagged to the owner, and the key was revoked (`neon api-keys revoke 3441847`). The Neon plugin and skills it installed remain |
 
 ## 8. What M0 achieved
 

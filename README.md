@@ -8,7 +8,7 @@ Redflag tests whether LLM apps, RAG systems, agents and MCP tools obey their int
 > The app currently has one page: a status check showing whether the backend and its database are healthy. Security testing arrives in later milestones. See the [roadmap](#roadmap).
 
 - Live backend health check: <https://redflag-8dcv.onrender.com/health>
-- Live frontend: _add the Vercel address here_
+- Live frontend: <https://red-flag-gules.vercel.app/>
 
 ## Contents
 
