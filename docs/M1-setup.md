@@ -89,7 +89,9 @@ All need the `X-Owner-Token` header.
 
 ### 2.6 The test page
 
-`/router` on the frontend is an owner-only test tool. It is not linked from anywhere and is marked "noindex". You unlock it with the owner password, which is checked against the backend straight away and kept in memory only, never stored in the browser or put in a URL. It shows each answer's provider, model, memory and paid labels, the budget meter, the attempt log with a "Switched from X to Y" notice, provider status, buttons to pretend a provider is out of quota, and a button to clear the saved answers.
+`/router` on the frontend is an owner-only test tool. It is not linked from anywhere and is marked "noindex". You unlock it with the owner password, which is checked against the backend straight away and kept in memory only, never stored in the browser or put in a URL. It shows each answer's provider, model, memory and paid labels, the budget meter, the attempt log with a "Switched from X to Y" notice, provider status, buttons to pretend a provider is out of quota, a button to clear the saved answers, and a button to start a new session (new budget).
+
+**Each message is sent on its own by default,** so asking the exact same thing twice is an identical request and is answered from memory. Tick "Keep the conversation" to send earlier turns along too; the history then makes every request different, so repeats are not remembered in that mode.
 
 ## 3. Setting it up
 
@@ -115,7 +117,7 @@ Two new migrations create the saved-answers, attempt-log and spend tables. They 
 |---|---|---|
 | Backend over HTTP, real Postgres, fake providers | Owner lock (even with a malformed body), fallback on every failure kind, no fallback on a bad key or request, total failure is never a success, unconfigured providers skipped, cool-off, cache hit/expiry/size cap, every budget cap including parallel calls, attempt log, pretend-failure and clear-cache tools, provider status, paid path (off by default, labeled, capped, cap survives a restart), unexpected crashes never leak their message | 42 |
 | Provider adapters against sample HTTP replies | Exact request shapes, reply parsing, every error classification, blocked and empty replies, network trouble, keys never in errors or printouts | 55 |
-| Test page as a rendered page, network faked | Locked state, wrong password, unlock, labels, budget meter, attempt log and switch notice, each failure message, provider status, test buttons, password never stored | 18 |
+| Test page as a rendered page, network faked | Locked state, wrong password, unlock, labels, budget meter, attempt log and switch notice, each failure message, provider status, test buttons, password never stored, one message per request by default, conversation mode, new session | 21 |
 
 No test in CI calls a live provider. The cache rules and the concurrency cap were each proven to be caught by their tests by breaking them on purpose and watching the tests fail.
 
@@ -133,6 +135,7 @@ A local end-to-end run with the real backend, real Postgres and fake providers c
 | A tokenless request returned 422 on the live site | My PowerShell quoting mangled the test body | Verified locally and live that the lock is checked before the body, and added a test |
 | The first real Groq call failed: model not found | The default `llama-3.1-8b-instant` is not available on the owner's account. Groq's own list for the key showed `openai/gpt-oss-20b`, `openai/gpt-oss-120b` and a few others | The default is now `openai/gpt-oss-20b`. This is why model names are settings |
 | The first real OpenRouter call reported a rate limit | One free model was rate limited at its upstream provider (Google), while the next free model answered fine. The adapter had wrongly assumed one limit covered every free model | The adapter now tries the next free model after a rate limit, and only reports a rate limit when every free model is limited. The old test encoded the wrong assumption and was replaced |
+| On the live site, asking the same question three times never showed "From memory: yes" | The page sent the whole conversation each time, so the second request differed from the first. My local rehearsal sent single messages and missed this | Each message is now sent alone by default, with an opt-in conversation mode and a "Start a new session" button. Found by the owner's live check |
 | Reasoning models can return an empty reply on a small output cap | They spend the token cap thinking before they write an answer (seen with an OpenRouter free model at 16 tokens) | An empty reply is treated as a failure, never a blank answer. The default output cap is 512 tokens, which leaves room. Raise it if replies come back empty |
 
 ## 6. Checking it on the live site (your acceptance)
@@ -142,7 +145,7 @@ Needs the three free keys, `OWNER_TOKEN` and a backend redeploy.
 1. Open `/router` on your Vercel address. It starts locked. A wrong password is refused.
 2. Unlock with the right password. Provider status shows which providers have keys.
 3. Ask a real question and see the answer, the provider and model that gave it, and the budget meter.
-4. Ask the exact same question again and see "From memory: yes".
+4. Ask the exact same question again and see "From memory: yes". (Leave "Keep the conversation" unticked, so the second request is identical to the first.)
 5. Press "Pretend groq is out of quota", ask something new, and see "Switched from groq to gemini" in the attempt log.
 6. (Optional) Check that a tiny budget stops cleanly and the page says which cap was reached.
 

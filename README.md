@@ -179,7 +179,7 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Model router over HTTP, real Postgres, fake providers | owner lock, fallback, cache, budgets, attempt log, test tools, paid cap, no key leaks | 42 |
 | Provider adapters, sample replies only | Groq, OpenRouter and Gemini request shapes, reply parsing, error classification | 55 |
 | Status page, network faked | healthy, degraded, waking-up with retry, gives-up states | 4 |
-| Router test page, network faked | locked state, labels, budget meter, attempt log, errors, test buttons | 18 |
+| Router test page, network faked | locked state, labels, budget meter, attempt log, errors, test buttons, conversation handling | 21 |
 
 No test in CI calls a live model provider.
 

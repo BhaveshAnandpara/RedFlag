@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -348,5 +348,72 @@ describe("RouterTestPage owner tools", () => {
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
     expect(window.location.href).not.toContain("very-secret-password");
+  });
+});
+
+function chatBodies(fetchMock: ReturnType<typeof mockApi>) {
+  return fetchMock.mock.calls
+    .filter(([url]) => String(url).endsWith("/llm/chat"))
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+}
+
+describe("RouterTestPage conversation handling", () => {
+  const routes = {
+    "GET /llm/providers": () => json(200, PROVIDERS),
+    "POST /llm/chat": () => json(200, answer()),
+  };
+
+  it("sends each message on its own by default, so asking the same thing twice can hit memory", async () => {
+    const fetchMock = mockApi(routes);
+    const user = userEvent.setup();
+    render(<RouterTestPage apiUrl={API} />);
+    await unlock(user);
+
+    await send(user, "same question");
+    await screen.findByText("Hi there!");
+    await send(user, "same question");
+    await waitFor(() => expect(chatBodies(fetchMock)).toHaveLength(2));
+
+    const [first, second] = chatBodies(fetchMock);
+    expect(first.messages).toEqual([{ role: "user", content: "same question" }]);
+    expect(second.messages).toEqual(first.messages); // identical request, so it can be remembered
+  });
+
+  it("sends the earlier messages too when the owner turns conversation mode on", async () => {
+    const fetchMock = mockApi(routes);
+    const user = userEvent.setup();
+    render(<RouterTestPage apiUrl={API} />);
+    await unlock(user);
+    await user.click(screen.getByLabelText("Keep the conversation (send earlier messages too)"));
+
+    await send(user, "first");
+    await screen.findByText("Hi there!");
+    await send(user, "second");
+    await waitFor(() => expect(chatBodies(fetchMock)).toHaveLength(2));
+
+    const second = chatBodies(fetchMock)[1];
+    expect(second.messages.map((m: { content: string }) => m.content)).toEqual([
+      "first",
+      "Hi there!",
+      "second",
+    ]);
+  });
+
+  it("starts a fresh session on request: conversation and budget cleared, new session id", async () => {
+    const fetchMock = mockApi(routes);
+    const user = userEvent.setup();
+    render(<RouterTestPage apiUrl={API} />);
+    await unlock(user);
+    await send(user, "one");
+    await screen.findByText(/Requests: 1 of 50/);
+
+    await user.click(screen.getByRole("button", { name: "Start a new session" }));
+
+    expect(screen.queryByText("Hi there!")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Requests: 1 of 50/)).not.toBeInTheDocument();
+    await send(user, "two");
+    await waitFor(() => expect(chatBodies(fetchMock)).toHaveLength(2));
+    const [before, after] = chatBodies(fetchMock);
+    expect(after.session_id).not.toBe(before.session_id);
   });
 });

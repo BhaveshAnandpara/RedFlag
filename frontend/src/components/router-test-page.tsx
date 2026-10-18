@@ -78,6 +78,7 @@ export function RouterTestPage({ apiUrl }: { apiUrl: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState("");
+  const [keepConversation, setKeepConversation] = useState(false);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [budget, setBudget] = useState<Budget | null>(null);
   // Made on first send, not while rendering: the page is pre-rendered, so an id made during
@@ -138,6 +139,15 @@ export function RouterTestPage({ apiUrl }: { apiUrl: string }) {
     }
   }
 
+  function startNewSession() {
+    setEntries([]);
+    setAttempts([]);
+    setBudget(null);
+    setProblem(null);
+    setNotice(null);
+    sessionId.current = null; // the next send makes a new id, so the budget starts over
+  }
+
   async function clearMemory() {
     if (!token) return;
     setNotice(null);
@@ -154,8 +164,10 @@ export function RouterTestPage({ apiUrl }: { apiUrl: string }) {
 
   async function send() {
     if (!token || !draft.trim()) return;
+    // By default each message is sent alone, so asking the same thing twice is an identical
+    // request that can be answered from memory. Conversation mode sends the earlier turns too.
     const history: ChatMessage[] = [
-      ...entries.map(({ role, content }) => ({ role, content })),
+      ...(keepConversation ? entries.map(({ role, content }) => ({ role, content })) : []),
       { role: "user", content: draft },
     ];
     setEntries([...entries, { role: "user", content: draft }]);
@@ -238,7 +250,7 @@ export function RouterTestPage({ apiUrl }: { apiUrl: string }) {
                 <p className="text-xs font-semibold uppercase">
                   {entry.role === "user" ? "You" : "Answer"}
                 </p>
-                <p>{entry.content}</p>
+                <p className="whitespace-pre-wrap">{entry.content}</p>
                 {entry.meta && (
                   <div className="mt-2 text-sm">
                     <p>
@@ -267,13 +279,30 @@ export function RouterTestPage({ apiUrl }: { apiUrl: string }) {
               className="w-full rounded border-2 border-zinc-500 bg-white p-2 text-black"
             />
           </label>
-          <button
-            type="button"
-            onClick={send}
-            className="rounded bg-zinc-900 px-4 py-2 text-white dark:bg-zinc-100 dark:text-black"
-          >
-            Send
-          </button>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={keepConversation}
+              onChange={(event) => setKeepConversation(event.target.checked)}
+            />
+            Keep the conversation (send earlier messages too)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={send}
+              className="rounded bg-zinc-900 px-4 py-2 text-white dark:bg-zinc-100 dark:text-black"
+            >
+              Send
+            </button>
+            <button
+              type="button"
+              onClick={startNewSession}
+              className="rounded border-2 px-4 py-2"
+            >
+              Start a new session
+            </button>
+          </div>
 
           <div className="space-y-2 rounded border-2 p-3 text-sm">
             <h2 className="font-semibold">Providers and test tools</h2>
