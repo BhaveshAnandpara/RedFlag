@@ -77,15 +77,17 @@ Every milestone includes its own automated tests and a short README update, so t
 **Goal:** Safe applications to attack, and a standard way for Redflag to talk to any target.
 
 **What gets built**
-- A vulnerable support bot and a hardened version, selectable in the UI
+- A vulnerable support bot and a hardened version (a made-up online shop, "Acme Store")
 - A fake secret, synthetic documents and a few simulated tools. A tool call is only written to a log, and no real email or API call ever happens
-- A visible tool-call log
+- A tool-call log for every reply
 - A defined policy file format and a common target interface: send a message, get back a response plus the tool-call log
-- Hardening defenses that can be switched on and off one at a time
+- Hardening defenses that can be switched on and off one at a time (in the backend, not on the page)
+- A recording script that sends a few attacks to both bots and saves the replies and tool logs as files
+- A public explainer page ("How Redflag tests your AI") that shows those recorded attacks side by side: the attack, each bot's reply and tool log, and a plain verdict. It makes no AI calls, and each card says when it was recorded and with which model
 
 **Done when**
-- You can chat with both bots on the live site
-- Every tool call appears in the log with its arguments
+- You can open the live explainer page and see recorded attacks on both bots, side by side, with verdicts
+- Every tool call in the recordings appears in the log with its arguments
 - Nothing in the sandbox can reach the network or any real system
 - All data in the repo is synthetic
 
