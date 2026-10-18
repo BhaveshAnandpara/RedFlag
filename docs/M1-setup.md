@@ -1,6 +1,6 @@
 # M1: Model router
 
-**Status: built and verified locally, including against the three real providers with real keys (2026-10-19). Deployment to Render and your live check are pending.** This document records what M1 is, how it works, how to set it up, and how to check it. It describes M1 only and will be updated as later milestones change things.
+**Status: complete and deployed (2026-10-19). Checked on the live site by the owner.** This document records what M1 is, how it works, how to set it up, and how to check it. It describes M1 only and will be updated as later milestones change things.
 
 Related documents: [M0 setup](M0-setup.md) · [Milestone plan](Redflag_Milestones.md) · [M1 design](superpowers/specs/2026-10-19-m1-model-router-design.md) · [M1 build plan](superpowers/plans/2026-10-19-m1-model-router-plan.md)
 
@@ -140,7 +140,7 @@ A local end-to-end run with the real backend, real Postgres and fake providers c
 
 ## 6. Checking it on the live site (your acceptance)
 
-Needs the three free keys, `OWNER_TOKEN` and a backend redeploy.
+Needs the three free keys, `OWNER_TOKEN` and a backend redeploy. **All of these passed on 2026-10-19; see section 8.**
 
 1. Open `/router` on your Vercel address. It starts locked. A wrong password is refused.
 2. Unlock with the right password. Provider status shows which providers have keys.
@@ -156,3 +156,21 @@ Needs the three free keys, `OWNER_TOKEN` and a backend redeploy.
 - **Model names are settings, not code,** because free model lists rotate. If a provider says a model is unavailable, update the setting.
 - **Saved answers include prompts and answers from the test page.** They are only reachable by the owner and expire after 7 days. Retention controls arrive in M10.
 - **Not built yet:** the "paste your own API key" box for visitors, streaming replies, tool calling through the router, and the dashboard. Those come in later milestones.
+
+## 8. What M1 achieved
+
+Checked on the live site against the milestone's "done when" list:
+
+| Done when | Result | Evidence |
+|---|---|---|
+| A simulated rate limit makes the router switch providers instead of failing | Done | With Groq pretending to be out of quota, the next question was answered by Gemini, and the attempt log shows `groq: simulated_rate_limit` then `gemini: ok` |
+| A repeated identical request is served from cache without a new API call | Done | The repeat said "From memory: yes", and the attempt log shows a `cache_hit` row with no provider call |
+| A scan stops cleanly when its budget is reached | Done | A session with a one-request budget answered the first request, then the second returned HTTP 429 `budget_exceeded` naming the `requests` cap, with no answer and no provider call |
+| The page and endpoints reject anyone without the owner password | Done | A wrong password is refused. The live endpoints answered 401 before the password was set |
+| No key appears in the repo, logs, responses or the client bundle | Done | `gitleaks` and the bundle check pass in CI. Live responses, the attempt log and provider status contained no key or password |
+
+Also seen live: with all three providers pretending to be out of quota, the page said "Every provider failed, so nothing was answered" and listed each attempt as a simulation, never as a success.
+
+The paid path has not been exercised on the live site, because no OpenRouter credit has been bought and `ALLOW_PAID_MODELS` is off. It is covered by tests (off by default, needs a cap, labeled, cap survives a restart).
+
+Requirements covered: FR-44 (provider abstraction), FR-45 (fallback, recorded), FR-46 (caching), FR-47 (budgets), NFR-05 (reliability) and NFR-10 (cost control).

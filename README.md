@@ -4,8 +4,8 @@
 
 Redflag tests whether LLM apps, RAG systems, agents and MCP tools obey their intended rules, and shows the evidence behind every finding. It is built to be honest: it never claims an app is "completely secure", and every report must separate what was **tested** from what was **not tested** or **inconclusive**.
 
-> **Status: Milestone 0 of 11 (foundation) is deployed. Milestone 1 (model router) is built and tested, and waiting for deployment and a live check.**
-> The deployed app has one page: a status check showing whether the backend and its database are healthy. M1 adds an owner-only model router and test page. Security testing arrives in later milestones. See the [roadmap](#roadmap).
+> **Status: Milestones 0 and 1 of 11 are deployed and checked: the foundation and the model router.**
+> The public page is a status check showing whether the backend and its database are healthy. M1 added an owner-only model router and test page. Security testing arrives in later milestones. See the [roadmap](#roadmap).
 
 - Live backend health check: <https://redflag-8dcv.onrender.com/health>
 - Live frontend: <https://red-flag-gules.vercel.app/>
@@ -261,8 +261,8 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | # | Milestone | Status |
 |---|---|---|
 | M0 | Foundation and first deploy | ✅ Done |
-| M1 | Model router: provider fallback, caching, budgets | 🛠 Built and tested. Waiting for deployment and your live check |
-| M2 | Demo targets and sandbox: vulnerable and hardened bots | Planned |
+| M1 | Model router: provider fallback, caching, budgets | ✅ Done |
+| M2 | Demo targets and sandbox: vulnerable and hardened bots | Next |
 | M3 | Scan engine with deterministic verdicts | Planned |
 | M4 | Dashboard and reports | Planned |
 | M5 | LLM judge with measured accuracy | Planned |
