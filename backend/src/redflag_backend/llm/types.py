@@ -57,6 +57,16 @@ class ModelUnavailable(ProviderError):
     kind = "model_unavailable"
 
 
+class ContentBlocked(ProviderError):
+    """The provider declined to answer (a safety filter), not an outage or a mistake of ours.
+
+    Recorded as its own outcome so a blocked answer is never mistaken for a real one. Another
+    provider may still answer, so the router treats it as a reason to try the next provider.
+    """
+
+    kind = "content_blocked"
+
+
 class AuthError(ProviderError):
     kind = "auth_error"
 
@@ -67,4 +77,4 @@ class BadRequest(ProviderError):
 
 # Errors that mean "this provider cannot help right now", so trying the next one is sensible.
 # AuthError and BadRequest are the owner's configuration problems and must surface instead.
-FALLBACK_ERRORS = (RateLimited, ServerError, ProviderTimeout, ModelUnavailable)
+FALLBACK_ERRORS = (RateLimited, ServerError, ProviderTimeout, ModelUnavailable, ContentBlocked)

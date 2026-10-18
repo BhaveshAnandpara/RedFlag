@@ -8,6 +8,7 @@ from redflag_backend.app import create_app
 from redflag_backend.llm.types import (
     AuthError,
     BadRequest,
+    ContentBlocked,
     ModelUnavailable,
     ProviderError,
     ProviderTimeout,
@@ -75,8 +76,14 @@ def test_chat_returns_the_first_providers_answer_with_a_full_record() -> None:
 
 @pytest.mark.parametrize(
     "failure",
-    [RateLimited(retry_after=30), ServerError(), ProviderTimeout(), ModelUnavailable()],
-    ids=["rate_limited", "server_error", "timeout", "model_unavailable"],
+    [
+        RateLimited(retry_after=30),
+        ServerError(),
+        ProviderTimeout(),
+        ModelUnavailable(),
+        ContentBlocked(),
+    ],
+    ids=["rate_limited", "server_error", "timeout", "model_unavailable", "content_blocked"],
 )
 def test_chat_falls_back_to_the_next_provider_and_records_both_attempts(
     failure: ProviderError,
@@ -561,3 +568,23 @@ def test_a_request_without_the_owner_token_gets_401_even_if_its_body_is_malforme
     response = client.post("/llm/chat", json={"not": "a valid chat body"})
 
     assert response.status_code == 401
+
+
+def test_the_real_providers_are_built_from_settings_and_no_key_ever_shows() -> None:
+    groq_key, openrouter_key = "gsk-SECRET-1", "sk-or-SECRET-3"
+    settings = Settings(
+        database_url=TEST_DB_URL,
+        frontend_origin="http://localhost:3000",
+        owner_token=OWNER_TOKEN,
+        groq_api_key=groq_key,
+        openrouter_api_key=openrouter_key,  # gemini deliberately has no key
+    )
+    client = TestClient(create_app(settings))  # no injected providers: the real ones
+
+    response = client.get("/llm/providers", headers=OWNER)
+
+    providers = {p["name"]: p["configured"] for p in response.json()["providers"]}
+    assert providers == {"groq": True, "gemini": False, "openrouter": True}
+    for secret in (groq_key, openrouter_key, OWNER_TOKEN, TEST_DB_URL):
+        assert secret not in response.text
+        assert secret not in repr(settings)

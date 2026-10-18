@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from redflag_backend.llm.api import build_llm_router
 from redflag_backend.llm.provider import Provider
+from redflag_backend.llm.providers.factory import build_providers
 from redflag_backend.settings import Settings
 
 
@@ -28,7 +29,8 @@ def create_app(
         settings.database_url,
         connect_args={"connect_timeout": int(settings.db_timeout_seconds)},
     )
-    app.include_router(build_llm_router(settings, providers or [], engine, clock))
+    active_providers = build_providers(settings) if providers is None else providers
+    app.include_router(build_llm_router(settings, active_providers, engine, clock))
 
     @app.get("/health")
     def health() -> JSONResponse:
