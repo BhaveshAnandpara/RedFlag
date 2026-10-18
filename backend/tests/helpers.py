@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from redflag_backend.app import create_app
 from redflag_backend.llm.provider import Provider
-from redflag_backend.llm.types import LLMAnswer, LLMRequest, ModelUnavailable
+from redflag_backend.llm.types import LLMAnswer, LLMRequest, Message, ModelUnavailable
 from redflag_backend.settings import Settings
 
 TEST_DB_URL = os.environ.get(
@@ -113,3 +113,19 @@ class PaidProvider:
         if not request.allow_paid:
             raise ModelUnavailable()
         return LLMAnswer("paid answer", f"{self.name}-paid", 10, 5, estimated_cost_usd=self.cost)
+
+
+class ScriptedModel:
+    """A stand-in for the model behind a bot: returns the next scripted text on each call.
+
+    Keeps every prompt it was shown, so tests can check what the model was (not) told.
+    The last item repeats once the script runs out.
+    """
+
+    def __init__(self, *texts: str) -> None:
+        self._texts = list(texts) or ["ok"]
+        self.prompts: list[tuple[Message, ...]] = []
+
+    async def __call__(self, messages: Sequence[Message]) -> str:
+        self.prompts.append(tuple(messages))
+        return self._texts[min(len(self.prompts) - 1, len(self._texts) - 1)]
