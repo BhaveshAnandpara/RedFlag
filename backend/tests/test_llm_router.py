@@ -553,3 +553,11 @@ def test_an_unexpected_provider_crash_never_leaks_its_message_or_counts_as_succe
     assert failed.json()["error"]["kind"] == "all_providers_failed"
     for place in (recovered.text, failed.text, log_text, caplog.text):
         assert secret not in place
+
+
+def test_a_request_without_the_owner_token_gets_401_even_if_its_body_is_malformed() -> None:
+    client = llm_client([FakeProvider("groq")])
+
+    response = client.post("/llm/chat", json={"not": "a valid chat body"})
+
+    assert response.status_code == 401
