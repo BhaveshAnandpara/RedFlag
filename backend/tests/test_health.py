@@ -88,3 +88,13 @@ def test_database_url_from_neon_is_accepted_as_pasted() -> None:
     assert (
         settings.database_url == "postgresql+psycopg://user:pw@ep-host.neon.tech/db?sslmode=require"
     )
+
+
+def test_database_url_pasted_with_quotes_or_spaces_is_still_accepted() -> None:
+    pasted = ' "postgresql://user:pw@ep-host.neon.tech/db?sslmode=require" '
+
+    settings = Settings(database_url=pasted, frontend_origin="http://localhost:3000")
+
+    assert settings.database_url == (
+        "postgresql+psycopg://user:pw@ep-host.neon.tech/db?sslmode=require"
+    )

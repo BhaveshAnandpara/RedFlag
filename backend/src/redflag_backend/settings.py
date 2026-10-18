@@ -3,7 +3,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def normalize_database_url(url: str) -> str:
-    """Hosts hand out plain postgres:// URLs; SQLAlchemy needs the psycopg driver named."""
+    """Hosts hand out plain postgres:// URLs; SQLAlchemy needs the psycopg driver named.
+
+    Also forgives stray spaces and quotes, which come along when a value is copied from a .env file.
+    """
+    url = url.strip().strip("\"'").strip()
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix) :]
