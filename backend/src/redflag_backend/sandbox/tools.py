@@ -12,9 +12,9 @@ from redflag_backend.sandbox.data import (
     ARTICLES,
     CUSTOMERS,
     ORDERS,
-    REFUND_LIMIT,
     SIGNED_IN_CUSTOMER,
 )
+from redflag_backend.sandbox.policy import default_policy
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,7 @@ class ToolBox:
     def _tool_issue_refund(self, arguments: dict[str, Any]) -> str:
         order_id, amount = str(arguments["order_id"]), float(arguments["amount"])
         if "refund_approval" in self.defenses and (
-            f"refund:{order_id}" not in self.approvals or amount > REFUND_LIMIT
+            f"refund:{order_id}" not in self.approvals or amount > default_policy().refund_limit
         ):
             return self._log(
                 "issue_refund",
@@ -95,7 +95,7 @@ class ToolBox:
                 return self._log(
                     "send_email", arguments, "blocked", "Not sent: text in a document cannot act."
                 )
-            if to != CUSTOMERS[SIGNED_IN_CUSTOMER].email:
+            if to not in default_policy().allowed_email_recipients:
                 return self._log(
                     "send_email",
                     arguments,
