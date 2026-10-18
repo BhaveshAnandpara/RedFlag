@@ -4,8 +4,8 @@
 
 Redflag tests whether LLM apps, RAG systems, agents and MCP tools obey their intended rules, and shows the evidence behind every finding. It is built to be honest: it never claims an app is "completely secure", and every report must separate what was **tested** from what was **not tested** or **inconclusive**.
 
-> **Status: Milestone 0 of 11 (foundation) is deployed.**
-> The app currently has one page: a status check showing whether the backend and its database are healthy. Security testing arrives in later milestones. See the [roadmap](#roadmap).
+> **Status: Milestone 0 of 11 (foundation) is deployed. Milestone 1 (model router) is built and tested, and waiting for deployment and a live check.**
+> The deployed app has one page: a status check showing whether the backend and its database are healthy. M1 adds an owner-only model router and test page. Security testing arrives in later milestones. See the [roadmap](#roadmap).
 
 - Live backend health check: <https://redflag-8dcv.onrender.com/health>
 - Live frontend: <https://red-flag-gules.vercel.app/>
@@ -37,6 +37,24 @@ flowchart LR
 ```
 
 The browser loads the page from Vercel, then calls the backend directly. For that to work, the backend must list the frontend's address in `FRONTEND_ORIGIN`. That setting is the CORS allow-list.
+
+### The model router (M1)
+
+Redflag will ask AI models many questions, and free tiers run out. The router sits inside the backend and keeps that survivable. It is owner-only and has its own test page at `/router`.
+
+```mermaid
+flowchart TD
+    A[Request, with owner password] --> C{Saved answer?}
+    C -- yes --> R[Return it, marked from memory]
+    C -- no --> B{Session budget left?}
+    B -- no --> S[Stop cleanly, name the cap]
+    B -- yes --> G[Groq] -->|rate limited or failed| M[Gemini] -->|rate limited or failed| O[OpenRouter]
+    G -->|answer| K[Save it and return]
+    M -->|answer| K
+    O -->|answer| K
+```
+
+Every attempt is recorded, a failure is never reported as an answer, a bad key is shown at once instead of being hidden by a fallback, and paid models stay off unless you switch them on and set a spending cap. Full detail: [docs/M1-setup.md](docs/M1-setup.md).
 
 ### A visit when the backend is asleep
 
@@ -107,14 +125,15 @@ flowchart LR
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| Backend | Python 3.12, FastAPI, Pydantic, SQLAlchemy, psycopg 3 |
+| Backend | Python 3.12, FastAPI, Pydantic, SQLAlchemy, psycopg 3, `httpx` |
+| Model access | Our own router over Groq, Gemini and OpenRouter (free tiers), plain `httpx` adapters |
 | Database | Postgres on [Neon](https://neon.com), with Alembic migrations |
 | Hosting | [Vercel](https://vercel.com) (frontend), [Render](https://render.com) (backend, Docker), Neon (database), all free tiers |
 | Quality | `ruff`, `mypy` (strict), `pytest`, Vitest + Testing Library |
 | CI | GitHub Actions, `gitleaks` secret scanning |
 | Tooling | `uv`, `pnpm`, Docker, the GitHub and Neon CLIs |
 
-Planned for later milestones: LLM providers (Gemini, Groq, OpenRouter) behind our own router, pgvector for the RAG test corpus, the MCP Python SDK, Playwright end-to-end tests. See the [milestone plan](docs/Redflag_Milestones.md).
+Planned for later milestones: pgvector for the RAG test corpus, the MCP Python SDK, Playwright end-to-end tests. See the [milestone plan](docs/Redflag_Milestones.md).
 
 ## Run it locally
 
@@ -157,7 +176,12 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Suite | What it covers | Tests |
 |---|---|---|
 | Backend over HTTP, real Postgres | healthy and degraded replies, no secret leaks, CORS, startup checks, URL handling | 8 |
-| Frontend page, network faked | healthy, degraded, waking-up with retry, gives-up states | 4 |
+| Model router over HTTP, real Postgres, fake providers | owner lock, fallback, cache, budgets, attempt log, test tools, paid cap, no key leaks | 42 |
+| Provider adapters, sample replies only | Groq, OpenRouter and Gemini request shapes, reply parsing, error classification | 54 |
+| Status page, network faked | healthy, degraded, waking-up with retry, gives-up states | 4 |
+| Router test page, network faked | locked state, labels, budget meter, attempt log, errors, test buttons | 18 |
+
+No test in CI calls a live model provider.
 
 ## Configuration and secrets
 
@@ -167,6 +191,12 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | `DATABASE_URL_UNPOOLED` | Backend host (Render) | **Yes** | Neon direct URL. Migrations prefer it when set |
 | `FRONTEND_ORIGIN` | Backend host (Render) | No | Exact frontend address: `https`, no trailing slash. This is the CORS allow-list |
 | `NEXT_PUBLIC_API_URL` | Frontend host (Vercel) | No | The backend address. Public by design |
+| `OWNER_TOKEN` | Backend host (Render) | **Yes** | The password for the model router and the `/router` page. Use a long random string. While it is unset, the router is locked for everyone |
+| `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY` | Backend host (Render) | **Yes** | One per model provider. A provider with no key is skipped |
+| `GROQ_MODEL`, `GEMINI_MODEL`, `OPENROUTER_FREE_MODELS` | Backend host (Render) | No | Model names. They change often, so check each provider's current list |
+| `ALLOW_PAID_MODELS`, `PAID_SPEND_CAP_USD`, `OPENROUTER_PAID_MODEL` | Backend host (Render) | No | The paid path. Off unless both the switch and a cap above zero are set |
+
+Other router settings (saved-answer expiry and size, per-session limits) have safe defaults and are listed in `backend/.env.example`.
 
 `.env` files are git-ignored, and `.env.example` files list names only. When you paste a URL into a host's settings, paste only the URL, with no quotes. The backend forgives stray quotes and spaces, but it is cleaner without them.
 
@@ -200,15 +230,27 @@ Most problems on the live site come from free-tier behavior, not bugs. Find your
 | Locally, `/health` returns 503 or the backend cannot connect | The local database is not running | Start Docker Desktop, then `docker compose up -d --wait db` |
 | `pnpm typecheck` fails with `Cannot find name 'LayoutProps'` | Next.js route types have not been generated | `pnpm typecheck` already runs `next typegen`. If you ran `tsc` directly, run `pnpm exec next typegen` first |
 | CI fails on the `secrets` job | `gitleaks` found something that looks like a credential | Remove it, and rotate the credential if it was real |
+| `/router` says **"That password was not accepted"** | The password does not match `OWNER_TOKEN` in Render, or `OWNER_TOKEN` is not set at all (the router is then locked for everyone) | Set `OWNER_TOKEN` in Render, redeploy, and type exactly that value |
+| `/router` says **"No provider is configured"** | None of the three API keys is set in Render | Add at least one key (`GROQ_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`) and redeploy |
+| **"Every provider failed, so nothing was answered"** | All free quotas are used up, or the services are down at the same time. The attempt log shows each reason | Wait for the quotas to reset (they usually reset daily). Check each provider's status. This is the situation the paid backup exists for |
+| **"groq rejected its API key"** (or another provider) | The key is wrong, revoked or pasted with extra characters | Paste a fresh key into Render, with no quotes or spaces, and redeploy. The router deliberately shows this instead of hiding it behind another provider |
+| **"Budget reached (requests / tokens / seconds)"** | The session hit one of its limits. This is the router stopping on purpose | Start a new session (reload the page), or raise the `BUDGET_MAX_*` setting |
+| A provider shows **"cooling down"** | It was rate limited, and the router is skipping it until its wait is over | Wait. It comes back by itself |
+| An answer says **content_blocked** in the attempt log | A provider's safety filter declined that prompt | Expected for some security-style prompts. The router tries the next provider |
+| A provider keeps failing with **model unavailable** | The model name in settings is gone or renamed (free model lists rotate) | Check the provider's current model list and update `GROQ_MODEL`, `GEMINI_MODEL` or `OPENROUTER_FREE_MODELS` |
+| Budgets and cooling-down reset on their own | Render restarted or woke from sleep. These live in memory | Expected. Saved answers, the attempt log and the paid-spend total live in Neon and survive |
 
 ## Limitations
 
 - **Cold starts.** The free backend host sleeps after 15 minutes without traffic and takes about a minute to wake. Neon sleeps after 5 minutes and wakes in a few seconds. The first visit after a quiet spell is slow by design.
 - **Free-tier ceilings.** Render: 750 free instance hours a month. Neon: 0.5 GB of storage and 100 compute-hours a month. Vercel Hobby: non-commercial use, with usage quotas. When a ceiling is hit, that part of the app stops until the quota resets. Limits were last checked on 2026-10-18 and change often.
-- **No security testing yet.** Milestone 0 contains no attack library. A "healthy" result means the backend and database respond. It is **not** a security claim.
+- **No security testing yet.** There is no attack library so far. A "healthy" result means the backend and database respond. It is **not** a security claim.
 - **Not complete security.** Even when testing arrives, an OWASP checklist is not proof an app is secure. Reports will always separate tested, untested and inconclusive risks.
 - **No accounts, rate limiting or end-to-end browser tests yet.**
-- **Model providers are free tiers too.** Once added, Gemini, Groq and OpenRouter have small, changing quotas, so scans will be budgeted and cached. When a quota runs out, scans will be marked skipped or errored, never silently passed.
+- **Model providers are free tiers too.** Groq, Gemini and OpenRouter have small quotas that change often (checked 2026-10-18: roughly 30 requests a minute and 1,000 a day on most Groq models, 5 to 15 a minute on Gemini depending on the source, and 20 a minute and 50 a day on OpenRouter's free models, rising to 1,000 a day after $10 of lifetime purchases). The router exists to survive this: fallback, saved answers and hard budgets. When a quota runs out, a request fails visibly. It is never silently passed.
+- **The model router is owner-only for now.** There is no public chat and no "paste your own API key" box yet.
+- **Router memory resets on restart.** Budgets, cool-offs and pretend-failures live in memory, so a Render restart clears them. Saved answers, the attempt log and the paid-spend total live in Neon.
+- **Free model names rotate.** They are settings, not code, so a renamed model is a settings change.
 - **Database versions differ slightly.** Neon runs Postgres 18. Local development and CI use Postgres 16.
 
 ## Roadmap
@@ -218,7 +260,7 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | # | Milestone | Status |
 |---|---|---|
 | M0 | Foundation and first deploy | ✅ Done |
-| M1 | Model router: provider fallback, caching, budgets | Next |
+| M1 | Model router: provider fallback, caching, budgets | 🛠 Built and tested. Waiting for deployment and your live check |
 | M2 | Demo targets and sandbox: vulnerable and hardened bots | Planned |
 | M3 | Scan engine with deterministic verdicts | Planned |
 | M4 | Dashboard and reports | Planned |
@@ -247,6 +289,8 @@ Redflag/
 ## Documentation
 
 - [M0 setup and what it achieved](docs/M0-setup.md)
+- [M1 model router: how it works and how to check it](docs/M1-setup.md)
 - [Milestone plan](docs/Redflag_Milestones.md)
 - [Requirements specification](docs/Redflag_Requirements_Specification.docx)
 - [M0 design](docs/superpowers/specs/2026-10-18-m0-foundation-design.md) and [build plan](docs/superpowers/plans/2026-10-18-m0-foundation-plan.md)
+- [M1 design](docs/superpowers/specs/2026-10-19-m1-model-router-design.md) and [build plan](docs/superpowers/plans/2026-10-19-m1-model-router-plan.md)
