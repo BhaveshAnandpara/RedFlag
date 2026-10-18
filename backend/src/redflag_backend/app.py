@@ -24,11 +24,11 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["X-Owner-Token", "Content-Type"],
     )
-    app.include_router(build_llm_router(settings, providers or [], clock))
     engine = create_engine(
         settings.database_url,
         connect_args={"connect_timeout": int(settings.db_timeout_seconds)},
     )
+    app.include_router(build_llm_router(settings, providers or [], engine, clock))
 
     @app.get("/health")
     def health() -> JSONResponse:

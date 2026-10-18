@@ -17,6 +17,8 @@ class LLMRequest:
     messages: tuple[Message, ...]
     temperature: float = 0.0
     max_output_tokens: int = 512
+    # Set by the router, never by callers. Adapters must not use a paid model unless True.
+    allow_paid: bool = False
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,8 @@ class LLMAnswer:
     model: str
     input_tokens: int
     output_tokens: int
+    # Estimated dollars spent on this answer. Zero for free models.
+    estimated_cost_usd: float = 0.0
 
 
 class ProviderError(Exception):
