@@ -5,7 +5,7 @@
 Redflag tests whether LLM apps, RAG systems, agents and MCP tools obey their intended rules, and shows the evidence behind every finding. It is built to be honest: it never claims an app is "completely secure", and every report must separate what was **tested** from what was **not tested** or **inconclusive**.
 
 > **Status: Milestones 0 and 1 of 11 are deployed and checked: the foundation and the model router.**
-> The public page is a status check showing whether the backend and its database are healthy. M1 added an owner-only model router and test page. Security testing arrives in later milestones. See the [roadmap](#roadmap).
+> The public site has a status check (is the backend and its database healthy) and a page called **How Redflag tests your AI**, which replays recorded attacks on a weak and a hardened demo bot. M1 added an owner-only model router and test page. Real scanning arrives in later milestones. See the [roadmap](#roadmap).
 
 - Live backend health check: <https://redflag-8dcv.onrender.com/health>
 - Live frontend: <https://red-flag-gules.vercel.app/>
@@ -55,6 +55,10 @@ flowchart TD
 ```
 
 Every attempt is recorded, a failure is never reported as an answer, a bad key is shown at once instead of being hidden by a fallback, and paid models stay off unless you switch them on and set a spending cap. Full detail: [docs/M1-setup.md](docs/M1-setup.md).
+
+### The demo targets (M2)
+
+Redflag needs something safe to attack. M2 adds two pretend support bots for a made-up shop, one weak and one hardened, with fake data and pretend tools that only write to a log and cannot reach the network. Four attacks are run against both, each with a verdict that shows its evidence. The public page `/how-it-works` replays those recordings side by side. It is not live and asks no AI anything when opened. Full detail and how to re-record: [docs/M2-setup.md](docs/M2-setup.md).
 
 ### A visit when the backend is asleep
 
@@ -180,6 +184,10 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Provider adapters, sample replies only | Groq, OpenRouter and Gemini request shapes, reply parsing, error classification | 55 |
 | Status page, network faked | healthy, degraded, waking-up with retry, gives-up states | 4 |
 | Router test page, network faked | locked state, labels, budget meter, attempt log, errors, test buttons, conversation handling | 21 |
+| Demo bots through the target interface, scripted model | tool calls, logging, no network reach, weak bot behavior, each defense on and off | 20 |
+| Verdict checks and policy file | pass, fail and inconclusive with evidence, checks follow the policy | 11 |
+| Recording script, fake model through a real router | all attacks recorded for both bots, raw replies kept, failures retried then inconclusive | 5 |
+| Explainer page and the real recordings file | cards, side-by-side runs, tool logs, evidence, no network request, file shape | 11 |
 
 No test in CI calls a live model provider.
 
@@ -245,7 +253,7 @@ Most problems on the live site come from free-tier behavior, not bugs. Find your
 
 - **Cold starts.** The free backend host sleeps after 15 minutes without traffic and takes about a minute to wake. Neon sleeps after 5 minutes and wakes in a few seconds. The first visit after a quiet spell is slow by design.
 - **Free-tier ceilings.** Render: 750 free instance hours a month. Neon: 0.5 GB of storage and 100 compute-hours a month. Vercel Hobby: non-commercial use, with usage quotas. When a ceiling is hit, that part of the app stops until the quota resets. Limits were last checked on 2026-10-18 and change often.
-- **No security testing yet.** There is no attack library so far. A "healthy" result means the backend and database respond. It is **not** a security claim.
+- **No real scanning yet.** The only attacks are four fixed ones on the demo bots, shown as recordings. A "healthy" status means the backend and database respond. Neither is a security claim about any real app.
 - **Not complete security.** Even when testing arrives, an OWASP checklist is not proof an app is secure. Reports will always separate tested, untested and inconclusive risks.
 - **No accounts, rate limiting or end-to-end browser tests yet.**
 - **Model providers are free tiers too.** Groq, Gemini and OpenRouter have small quotas that change often (checked 2026-10-18: roughly 30 requests a minute and 1,000 a day on most Groq models, 5 to 15 a minute on Gemini depending on the source, and 20 a minute and 50 a day on OpenRouter's free models, rising to 1,000 a day after $10 of lifetime purchases). The router exists to survive this: fallback, saved answers and hard budgets. When a quota runs out, a request fails visibly. It is never silently passed.
@@ -262,8 +270,8 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 |---|---|---|
 | M0 | Foundation and first deploy | ✅ Done |
 | M1 | Model router: provider fallback, caching, budgets | ✅ Done |
-| M2 | Demo targets and sandbox: vulnerable and hardened bots | Next |
-| M3 | Scan engine with deterministic verdicts | Planned |
+| M2 | Demo targets and sandbox: vulnerable and hardened bots | Built, awaiting check |
+| M3 | Scan engine with deterministic verdicts | Next |
 | M4 | Dashboard and reports | Planned |
 | M5 | LLM judge with measured accuracy | Planned |
 | M6 | Policy builder | Planned |
@@ -291,7 +299,9 @@ Redflag/
 
 - [M0 setup and what it achieved](docs/M0-setup.md)
 - [M1 model router: how it works and how to check it](docs/M1-setup.md)
+- [M2 demo targets and sandbox: how it works and how to check it](docs/M2-setup.md)
 - [Milestone plan](docs/Redflag_Milestones.md)
 - [Requirements specification](docs/Redflag_Requirements_Specification.docx)
 - [M0 design](docs/superpowers/specs/2026-10-18-m0-foundation-design.md) and [build plan](docs/superpowers/plans/2026-10-18-m0-foundation-plan.md)
 - [M1 design](docs/superpowers/specs/2026-10-19-m1-model-router-design.md) and [build plan](docs/superpowers/plans/2026-10-19-m1-model-router-plan.md)
+- [M2 design](docs/superpowers/specs/2026-10-19-m2-demo-targets-design.md) and [build plan](docs/superpowers/plans/2026-10-19-m2-demo-targets-plan.md)
