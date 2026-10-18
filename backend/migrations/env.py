@@ -11,9 +11,9 @@ from redflag_backend.settings import normalize_database_url
 config = context.config
 
 # The database URL is a secret, so it comes from the environment, never from alembic.ini.
-config.set_main_option(
-    "sqlalchemy.url", normalize_database_url(os.environ["DATABASE_URL"]).replace("%", "%%")
-)
+# Schema changes prefer Neon's direct (unpooled) connection when one is provided.
+_migration_url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ["DATABASE_URL"]
+config.set_main_option("sqlalchemy.url", normalize_database_url(_migration_url).replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

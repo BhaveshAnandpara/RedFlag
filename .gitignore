@@ -20,3 +20,4 @@ coverage/
 # misc
 .superpowers/
 .DS_Store
+.neon

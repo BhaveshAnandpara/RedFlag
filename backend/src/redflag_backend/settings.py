@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     frontend_origin: str
     app_version: str = "0.1.0"
     commit_sha: str | None = None
-    db_timeout_seconds: float = 5.0
+    # Neon can take several seconds to wake from idle; allow for that before saying "degraded".
+    db_timeout_seconds: float = 10.0
 
     @field_validator("database_url")
     @classmethod
