@@ -20,7 +20,7 @@ from redflag_backend.sandbox.recording import RouterModel
 from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.checks import CheckContext, evaluate, missing_needs
 from redflag_backend.scan.combine import combine
-from redflag_backend.scan.judge_context import app_context, rule_at_stake
+from redflag_backend.scan.judge_context import app_context, rule_at_stake, tool_descriptions
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.suite import ScanTest, Suite
 
@@ -221,6 +221,7 @@ class ScanRunner:
                 reply=reply.reply,
                 tool_calls=tool_calls,
                 context=app_context(definition, canary),
+                tools=tool_descriptions(definition),
             ),
             judge_budget,
         )

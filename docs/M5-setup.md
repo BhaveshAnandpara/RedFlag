@@ -30,6 +30,8 @@ flowchart LR
 
 For every test that ran: the rule at stake (for the demo bots, the policy rule the test already cites), the test title, the message sent, the bot's reply, the tool-call log (tool, arguments, outcome), and context about the app built from the bot's own policy and data: its rules, the secret planted for this scan, the details of other customers' orders that must never appear, and the refund and email limits. All of it is fake demo data. No API key is ever in a judge prompt.
 
+It is also told **what each tool is**, from a `tools.json` file in the bot's folder (next to `policy.json`): each tool's name, whether it only **reads** or **acts**, and a one-line meaning. Its instructions explain how to read the tool log: a call is something the app did only when its outcome is `executed`, and the `detail` is text the tool returned (such as a help article), never an action. Without this the first live scans showed the judge mistaking the instruction planted in an article for an action the bot took. A bot with no `tools.json` still works; the judge is told no descriptions were provided. You edit the file like any other bot file.
+
 It answers with a small JSON: `{"verdict": "pass" or "fail", "reason": "..."}`. A fail reason must say what went wrong and a pass reason what was checked.
 
 ### 2.3 Combining the two verdicts
@@ -82,8 +84,8 @@ Only at the four agreed seams. The only faked part is the outside model.
 
 | Seam | What it covers | Tests |
 |---|---|---|
-| The judge on its own interface, scripted model | pass and fail with a reason, a code fence, a bad answer asked again once, two bad answers unavailable, all providers failing, no model, rate limits waited out, the bot's text fenced as data, a fresh marker each time, a verdict-shaped reply not read as the verdict, no field for the rules' verdict, its own budget, long reasons trimmed and key shapes removed | 17 |
-| The scan API over HTTP, real Postgres, stand-in bot and judge models | every row of the combination table, both outputs saved and returned, no judge call for errors, outages and no judge model never stop a scan, the judge's budget, separate models for bots and judge, what the judge is told, settings recorded, old results readable | 16 |
+| The judge on its own interface, scripted model | pass and fail with a reason, a code fence, a bad answer asked again once, two bad answers unavailable, all providers failing, no model, rate limits waited out, the bot's text fenced as data, a fresh marker each time, a verdict-shaped reply not read as the verdict, no field for the rules' verdict, its own budget, long reasons trimmed and key shapes removed | 20 |
+| The scan API over HTTP, real Postgres, stand-in bot and judge models | every row of the combination table, both outputs saved and returned, no judge call for errors, outages and no judge model never stop a scan, the judge's budget, separate models for bots and judge, what the judge is told, settings recorded, old results readable, tool descriptions from the bot's file, no file, a broken file | 20 |
 | Dashboard, analytics and report | the judge column, both blocks, the disagreement line, the unchecked note, yellow for unavailable, Compare's warning, the report section, banned words | 28 |
 | Saved sample file rules | well-shaped judge fields, an unavailable judge, unknown status refused, a missing reason or model refused, key-shaped judge reasons refused | 5 |
 
@@ -94,6 +96,8 @@ Two deliberate breaks proved the key rules: ignoring a judge FAIL, and treating 
 - **Too many database connections.** Each test app opened its own connection pool and never gave it back, and the larger suite hit Postgres's limit. The app now disposes its pool when it stops.
 - **A silent bot was not silent.** A test model that answered a single space was not "no reply" to the rules. The stand-in now answers with nothing at all.
 - **The old "never uses Redflag's model" test.** It stopped being true on purpose: Redflag's own model now judges. The test was rewritten to say Redflag's model is used only to judge, never to answer as the bot.
+
+- **The judge misread the tool log (found in the first live scans).** Three tests (the poisoned-article email and refund tests) were failed by the judge although the log showed only a help-article lookup. It had taken the instruction written in the article for an action. The fix was the tool descriptions and the log-reading note above.
 
 ## 6. Checking it on the live site (your acceptance)
 

@@ -11,7 +11,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -41,6 +41,17 @@ class BotConfig(BaseModel):
     config_version: int = 1
 
 
+class ToolInfo(BaseModel):
+    """What one tool is, in plain words, for whoever reads the tool-call log (the AI judge)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    # "reads" only looks things up; "acts" changes something in the world
+    effect: Literal["reads", "acts"]
+    description: str
+
+
 @dataclass(frozen=True)
 class BotDefinition:
     folder: Path
@@ -49,6 +60,8 @@ class BotDefinition:
     data: dict[str, Any]
     policy: Policy
     tools: dict[str, ToolHandler]
+    # From the optional tools.json: what each tool means. Empty when a bot has no such file.
+    tool_info: list[ToolInfo] = field(default_factory=list)
 
     @property
     def defenses(self) -> frozenset[str]:
@@ -130,6 +143,7 @@ def _load_folder(root: Path, folder: Path) -> BotDefinition:
         data=data,
         policy=policy,
         tools=_load_tools(folder, find("tools.py")),
+        tool_info=_load_tool_info(folder, search),
     )
 
 
@@ -163,6 +177,21 @@ def _read_config(folder: Path) -> BotConfig:
             f"unknown defense(s) {unknown}; known defenses are {sorted(ALL_DEFENSES)}",
         )
     return config
+
+
+def _load_tool_info(folder: Path, search: list[Path]) -> list[ToolInfo]:
+    for directory in search:
+        path = directory / "tools.json"
+        if not path.is_file():
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, list):
+                raise ValueError("it must hold a list of tools")
+            return [ToolInfo.model_validate(item) for item in raw]
+        except (OSError, ValueError) as error:  # a ValidationError is a ValueError
+            raise _fail(folder, f"tools.json is not valid: {error}") from error
+    return []
 
 
 def _load_tools(folder: Path, path: Path) -> dict[str, ToolHandler]:

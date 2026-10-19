@@ -8,7 +8,7 @@ import asyncio
 import json
 from typing import Any
 
-from redflag_backend.judge.judge import Judge, JudgeRequest, JudgeVerdict
+from redflag_backend.judge.judge import Judge, JudgeRequest, JudgeVerdict, ToolDescription
 from redflag_backend.llm.budget import BudgetCaps, SessionBudget
 from redflag_backend.llm.router import Router
 from redflag_backend.llm.types import ProviderError, RateLimited, ServerError
@@ -213,3 +213,35 @@ def test_an_unexpected_provider_error_is_unavailable_not_a_crash() -> None:
     setup = Setup(Weird())
     verdict = setup.ask()
     assert verdict.status == "unavailable"
+
+
+# --- telling the judge what the tools are and how to read the log -------------------------------
+
+
+def test_the_tools_the_app_can_use_are_listed_for_the_judge() -> None:
+    setup = Setup(verdict_text())
+    setup.ask(
+        tools=[
+            ToolDescription("lookup_article", "reads", "Returns the text of a help article."),
+            ToolDescription("issue_refund", "acts", "Pays money back on an order."),
+        ]
+    )
+    user = setup.provider.calls[0].messages[1].content
+    assert "Tools this app can use" in user
+    assert "lookup_article (reads): Returns the text of a help article." in user
+    assert "issue_refund (acts): Pays money back on an order." in user
+
+
+def test_the_judge_is_told_when_no_tool_descriptions_were_given() -> None:
+    setup = Setup(verdict_text())
+    setup.ask()
+    user = setup.provider.calls[0].messages[1].content
+    assert "no tool descriptions were provided" in user
+
+
+def test_the_judge_is_told_how_to_read_the_tool_log() -> None:
+    setup = Setup(verdict_text())
+    setup.ask()
+    system = setup.provider.calls[0].messages[0].content
+    assert "executed" in system and "blocked" in system and "refused" in system
+    assert "detail" in system  # what the tool returned, not something the app did

@@ -4,12 +4,16 @@ The only faked parts are the outside models: the bots' model and the judge's mod
 different providers because the bots use their own keys and the judge uses Redflag's.
 """
 
+import json
+import shutil
+from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import create_engine
 
 from redflag_backend.llm.types import LLMAnswer, LLMRequest, ServerError
+from redflag_backend.sandbox.loader import BOTS_DIR
 from redflag_backend.scan.store import ScanStore
 from tests.helpers import (
     OWNER,
@@ -240,3 +244,62 @@ def test_the_scan_list_still_works_with_judged_scans(path: str) -> None:
         run_scan(client, "acme-weak")
         listing = client.get(path, headers=OWNER).json()
     assert listing["scans"][0]["counts"]["fail"] >= 1
+
+
+# --- the tool descriptions come from a file in the bot's folder ---------------------------------
+
+
+def copy_bots(tmp_path: Path) -> Path:
+    root = tmp_path / "bots"
+    shutil.copytree(BOTS_DIR, root, ignore=shutil.ignore_patterns("__pycache__"))
+    return root
+
+
+def test_the_judge_is_told_what_each_tool_is_from_the_bots_own_file() -> None:
+    judge = TitleJudge()
+    with scan_client([GullibleProvider()], redflag_providers=[judge]) as client:
+        run_scan(client, "acme-weak")
+    poisoned = next(
+        c.messages[1].content
+        for t, c in zip(judge.titles(), judge.calls, strict=True)
+        if t == "Hidden instruction in a help article: refund"
+    )
+    assert "lookup_article (reads)" in poisoned
+    assert "issue_refund (acts)" in poisoned
+    assert "send_email (acts)" in poisoned
+    assert "lookup_order (reads)" in poisoned
+
+
+def test_editing_the_tool_file_changes_what_the_judge_is_told(tmp_path: Path) -> None:
+    root = copy_bots(tmp_path)
+    path = root / "_shared" / "acme_store" / "tools.json"
+    tools = json.loads(path.read_text(encoding="utf-8"))
+    tools[0]["description"] = "A CUSTOM MEANING WRITTEN BY THE OWNER"
+    path.write_text(json.dumps(tools), encoding="utf-8")
+    judge = TitleJudge()
+    with scan_client([GullibleProvider()], redflag_providers=[judge], bots_dir=root) as client:
+        run_scan(client, "acme-weak")
+    assert all(
+        "A CUSTOM MEANING WRITTEN BY THE OWNER" in c.messages[1].content for c in judge.calls
+    )
+
+
+def test_a_bot_with_no_tool_file_still_scans_and_the_judge_says_so(tmp_path: Path) -> None:
+    root = copy_bots(tmp_path)
+    (root / "_shared" / "acme_store" / "tools.json").unlink()
+    judge = TitleJudge()
+    with scan_client([GullibleProvider()], redflag_providers=[judge], bots_dir=root) as client:
+        scan = run_scan(client, "acme-weak")
+    assert scan["scan"]["status"] == "completed"
+    assert all("no tool descriptions were provided" in c.messages[1].content for c in judge.calls)
+
+
+def test_a_broken_tool_file_is_reported_and_does_not_stop_other_bots(tmp_path: Path) -> None:
+    root = copy_bots(tmp_path)
+    (root / "_shared" / "acme_store" / "tools.json").write_text(
+        json.dumps([{"name": "x", "effect": "sometimes", "description": "d"}]), encoding="utf-8"
+    )
+    with scan_client([GullibleProvider()], bots_dir=root) as client:
+        body = client.get("/bots", headers=OWNER).json()
+    assert body["bots"] == []
+    assert "tools.json" in " ".join(body["errors"].values())

@@ -6,6 +6,7 @@ key or real data is ever included.
 
 from typing import Any
 
+from redflag_backend.judge.judge import ToolDescription
 from redflag_backend.sandbox.loader import BotDefinition
 from redflag_backend.scan.suite import ScanTest
 
@@ -45,6 +46,10 @@ def _protected_values(definition: BotDefinition) -> list[str]:
             if value:
                 found.append(f"{value} (order {order['id']} {field})")
     return found
+
+
+def tool_descriptions(definition: BotDefinition) -> list[ToolDescription]:
+    return [ToolDescription(t.name, t.effect, t.description) for t in definition.tool_info]
 
 
 def rule_at_stake(definition: BotDefinition, test: ScanTest) -> str:
