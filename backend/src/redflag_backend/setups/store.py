@@ -121,6 +121,45 @@ class SetupStore:
             )
         return int(number)
 
+    def _version_id(self, conn: Any, project_id: int, number: int) -> int:
+        row = conn.execute(
+            text("SELECT id FROM setup_versions WHERE project_id = :p AND number = :n"),
+            {"p": project_id, "n": number},
+        ).first()
+        if row is None:
+            raise NoSuchVersion(number)
+        return int(row[0])
+
+    def save_tests(self, setup_id: int, number: int, tests: list[dict[str, Any]]) -> None:
+        """Replace the tests generated for a version. All of them start selected."""
+        _, _, project_id = self.get_draft(setup_id)
+        with self._engine.begin() as conn:
+            version_id = self._version_id(conn, project_id, number)
+            conn.execute(
+                text("DELETE FROM generated_tests WHERE version_id = :v"), {"v": version_id}
+            )
+            for position, test in enumerate(tests):
+                conn.execute(
+                    text(
+                        "INSERT INTO generated_tests (version_id, position, test, selected) "
+                        "VALUES (:v, :pos, CAST(:test AS jsonb), true)"
+                    ),
+                    {"v": version_id, "pos": position, "test": json.dumps(test)},
+                )
+
+    def get_tests(self, setup_id: int, number: int) -> list[dict[str, Any]]:
+        _, _, project_id = self.get_draft(setup_id)
+        with self._engine.connect() as conn:
+            version_id = self._version_id(conn, project_id, number)
+            rows = conn.execute(
+                text(
+                    "SELECT test, selected FROM generated_tests WHERE version_id = :v "
+                    "ORDER BY position"
+                ),
+                {"v": version_id},
+            ).all()
+        return [{**row[0], "selected": bool(row[1])} for row in rows]
+
     def list_versions(self, setup_id: int) -> list[dict[str, Any]]:
         _, _, project_id = self.get_draft(setup_id)
         with self._engine.connect() as conn:

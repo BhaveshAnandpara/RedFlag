@@ -28,6 +28,7 @@ from redflag_backend.setups.models import (
     required_status,
 )
 from redflag_backend.setups.store import NoSuchSetup, NoSuchVersion, SetupStore
+from redflag_backend.setups.tests_api import add_test_routes
 from redflag_backend.targets.http_target import (
     EndpointConfig,
     HttpTarget,
@@ -262,4 +263,5 @@ def build_setup_router(
             raise HTTPException(status_code=404, detail="no such version") from missing
 
     add_chat_routes(router, settings, store, llm)
+    add_test_routes(router, store, llm)
     return router
