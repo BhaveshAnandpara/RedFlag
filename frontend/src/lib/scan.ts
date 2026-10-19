@@ -31,7 +31,13 @@ export type ScanResult = {
   model: string | null;
   provider: string | null;
   attempts: { provider: string; model: string | null; outcome: string; latency_ms: number }[];
+  // Saved with the result since M4. Results from before then have neither (null or missing),
+  // and are shown as "not rated".
+  severity?: Severity | null;
+  remediation?: string | null;
 };
+
+export type Severity = "critical" | "high" | "medium";
 
 export type RiskSummary = {
   id: string;
