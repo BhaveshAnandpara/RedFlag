@@ -239,3 +239,16 @@ export function compareScans(first: ScanDetail, second: ScanDetail): Comparison 
     secondCounts: second.summary.counts,
   };
 }
+
+/**
+ * The banner colour. Red if anything failed. Yellow if some tests were unclear or some risks
+ * have no pass or fail result. Green only when none of that is true, so an incomplete scan can
+ * never look like an all-clear.
+ */
+export function overallTone(scan: ScanDetail): Tone {
+  const counts = countByStatus(scan.results);
+  if (counts.fail > 0) return "red";
+  const incomplete =
+    counts.error + counts.inconclusive > 0 || scan.summary.risks.some((r) => r.state !== "tested");
+  return incomplete ? "yellow" : "green";
+}

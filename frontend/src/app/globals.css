@@ -24,3 +24,52 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Colours for results. Each tone has a strong colour, a soft background and readable text,
+   in light and dark mode. A colour is never the only signal: every status also has a word. */
+:root {
+  --tone-green: #15803d;
+  --tone-green-soft: #dcfce7;
+  --tone-green-ink: #14532d;
+  --tone-red: #b91c1c;
+  --tone-red-soft: #fee2e2;
+  --tone-red-ink: #7f1d1d;
+  --tone-yellow: #a16207;
+  --tone-yellow-soft: #fef3c7;
+  --tone-yellow-ink: #713f12;
+  --tone-grey: #52525b;
+  --tone-grey-soft: #f4f4f5;
+  --tone-grey-ink: #27272a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tone-green: #4ade80;
+    --tone-green-soft: #052e16;
+    --tone-green-ink: #bbf7d0;
+    --tone-red: #f87171;
+    --tone-red-soft: #450a0a;
+    --tone-red-ink: #fecaca;
+    --tone-yellow: #facc15;
+    --tone-yellow-soft: #422006;
+    --tone-yellow-ink: #fde68a;
+    --tone-grey: #a1a1aa;
+    --tone-grey-soft: #27272a;
+    --tone-grey-ink: #e4e4e7;
+  }
+}
+
+@theme inline {
+  --color-tone-green: var(--tone-green);
+  --color-tone-green-soft: var(--tone-green-soft);
+  --color-tone-green-ink: var(--tone-green-ink);
+  --color-tone-red: var(--tone-red);
+  --color-tone-red-soft: var(--tone-red-soft);
+  --color-tone-red-ink: var(--tone-red-ink);
+  --color-tone-yellow: var(--tone-yellow);
+  --color-tone-yellow-soft: var(--tone-yellow-soft);
+  --color-tone-yellow-ink: var(--tone-yellow-ink);
+  --color-tone-grey: var(--tone-grey);
+  --color-tone-grey-soft: var(--tone-grey-soft);
+  --color-tone-grey-ink: var(--tone-grey-ink);
+}

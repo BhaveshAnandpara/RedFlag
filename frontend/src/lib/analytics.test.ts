@@ -11,6 +11,7 @@ import {
   criticalFailures,
   donutSlices,
   normalRequests,
+  overallTone,
   riskBars,
 } from "./analytics";
 import { buildReport } from "./report";
@@ -313,5 +314,30 @@ describe("the Markdown report", () => {
   it("shows a result from before severity existed as not rated", () => {
     const old = makeScan([makeResult({ status: "fail", severity: undefined, remediation: undefined })]);
     expect(buildReport(old)).toContain("not rated");
+  });
+});
+
+describe("the banner colour", () => {
+  const everyRiskPassed = () =>
+    makeScan(
+      ["LLM01", "LLM02", "LLM03", "LLM04", "LLM05", "LLM06", "LLM07", "LLM08", "LLM09", "LLM10"].map(
+        (risk) => makeResult({ risk, status: "pass" }),
+      ),
+    );
+
+  it("is red when anything failed", () => {
+    expect(overallTone(makeScan([...many(1, "fail"), ...many(3, "pass")]))).toBe("red");
+  });
+
+  it("is yellow, not green, when nothing failed but some risks were not tested", () => {
+    expect(overallTone(makeScan(many(5, "pass", { risk: "LLM01" })))).toBe("yellow");
+  });
+
+  it("is yellow when tests could not be completed", () => {
+    expect(overallTone(makeScan([...everyRiskPassed().results, ...many(1, "error")]))).toBe("yellow");
+  });
+
+  it("is green only when no test failed, none was unclear and every risk had a result", () => {
+    expect(overallTone(everyRiskPassed())).toBe("green");
   });
 });
