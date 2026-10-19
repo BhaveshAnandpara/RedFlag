@@ -1,0 +1,145 @@
+/* Redflag screens: shared tokens, type, the flag motif, header and footer.
+   Page direction: One motif (seed 995984207). App style: True-black flat (seed 987485490).
+   Black and red across the site (owner's decision). Red means one thing on the product
+   screens: something failed. */
+
+@import url("https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600&display=swap");
+
+:root {
+  /* ground and ink */
+  --bg: #000000;          /* the one flat field */
+  --surface: #111111;     /* a card: one lightness step */
+  --raised: #2a2a2a;      /* a nested panel: the next step */
+  --rule: #1a1a1a;        /* structural lines on product screens only */
+  --control: #444444;
+  --ink: #ffffff;
+  --muted: #b4b4b4;       /* 10.6:1 on #000, 8.9:1 on #111 */
+  --faint: #949494;       /* 7.1:1 on #000, 4.6:1 on #2a2a2a */
+
+  /* the flag */
+  --red: #e5161f;         /* the motif, red fields, the primary button; white on it 4.7:1 */
+  --red-ink: #ff5a5f;     /* red as text on black: 6.4:1 on #000, 5.5:1 on #111 */
+
+  /* status: always paired with its word */
+  --pass: #3fc07a;     --pass-bg: #172a1d;
+  --fail: #ff5a5f;     --fail-bg: #2c1214;
+  --unclear: #f2b33d;  --unclear-bg: #2a2210;
+  --untested: #b4b4b4; --untested-bg: #1c1c1c;
+
+  /* type: one family */
+  --font: "Albert Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --step-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --step-head: clamp(2rem, 1.3rem + 3.2vw, 4rem);
+  --step-display: clamp(3rem, 1rem + 6.6vw, 7.5rem);
+
+  /* space: one pair of margins, one radius (square) */
+  --margin: clamp(1rem, 2.2vw, 2rem);
+  --gutter: clamp(1rem, 2vw, 2rem);
+  --section: clamp(7.5rem, 12vw, 15rem);
+  --radius: 0px;
+  --bar: 64px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: var(--step-body); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4, p, figure, blockquote, ul, ol, dl, dd { margin: 0; }
+ul[class], ol[class] { padding: 0; list-style: none; }
+img, svg { display: block; max-width: 100%; }
+a { color: inherit; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--red-ink); outline-offset: 3px; }
+::selection { background: var(--red); color: #fff; }
+
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.035em; line-height: 1.0; text-wrap: balance; }
+.display { font-size: var(--step-display); }
+.head { font-size: var(--step-head); }
+.lead { font-size: var(--step-lead); line-height: 1.35; max-width: 40ch; }
+.small { font-size: var(--step-small); line-height: 1.45; }
+.muted { color: var(--muted); }
+.nums { font-variant-numeric: tabular-nums; }
+p { max-width: 62ch; text-wrap: pretty; }
+.wrap { padding-inline: var(--margin); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- the motif: a swallowtail flag ----------
+   One shape, four scales: the hero's giant field, the button's notched end, the bullet,
+   the marker on a failing line. Built with one clip-path so every copy is the same flag. */
+.flag-shape { clip-path: polygon(0 0, 100% 0, 82% 50%, 100% 100%, 0 100%); background: var(--red); }
+
+.mark { display: inline-flex; align-items: flex-end; gap: 0; }
+.mark i { display: block; width: 3px; height: 1.15em; background: currentColor; }
+.mark b { display: block; width: 0.82em; height: 0.56em; margin-bottom: 0.59em;
+  clip-path: polygon(0 0, 100% 0, 82% 50%, 100% 100%, 0 100%); background: var(--red); }
+
+.bullet { display: inline-block; width: 0.8em; height: 0.55em; margin-right: 0.55em; vertical-align: 0.05em;
+  clip-path: polygon(0 0, 100% 0, 78% 50%, 100% 100%, 0 100%); background: var(--red); }
+
+/* ---------- buttons: one shape, the notched end of the flag ---------- */
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6em;
+  min-height: 3rem; padding: 0 2.2rem 0 1.4rem; font-weight: 600; text-decoration: none; white-space: nowrap;
+  background: var(--red); color: #fff;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 0.9rem) 50%, 100% 100%, 0 100%);
+}
+.button.is-ink { background: var(--ink); color: #000; }
+
+/* ---------- header (page and product screens share it) ---------- */
+.site-head {
+  display: flex; align-items: center; gap: var(--gutter);
+  height: var(--bar); padding-inline: var(--margin); background: var(--bg);
+}
+.wordmark { display: inline-flex; align-items: center; gap: 0.45em; font-weight: 600; font-size: 1.25rem;
+  letter-spacing: -0.03em; text-decoration: none; }
+.site-nav { display: flex; gap: 1.75rem; margin-left: auto; font-size: var(--step-small); }
+.site-nav a { text-decoration: none; color: var(--muted); }
+.site-nav a[aria-current="page"] { color: var(--ink); }
+.site-head .button { min-height: 2.5rem; font-size: var(--step-small); }
+.site-head.is-app { border-bottom: 1px solid var(--rule); }
+
+@media (max-width: 40em) {
+  .site-nav { display: none; }
+  .site-head .button { margin-left: auto; }
+}
+
+/* ---------- warning-tape stripe (from the hero blueprint) ---------- */
+.stripe { display: flex; height: 56px; overflow: hidden; }
+.stripe span { flex: 0 0 28px; background: var(--red); }
+.stripe span:nth-child(even) { background: var(--bg); }
+.stripe.is-thin { height: 8px; }
+
+/* ---------- footer: the mark, built large ---------- */
+.site-foot { padding: clamp(4rem, 8vw, 7rem) var(--margin) 2rem; background: var(--bg); }
+.foot-mark { display: flex; align-items: flex-end; gap: 4px; height: 34svh; min-height: 220px; max-height: 360px; }
+.foot-mark .pole { flex: 0 0 clamp(10px, 1.2vw, 18px); height: 100%; background: var(--ink); }
+.foot-mark .cloth { flex: 0 0 34%; height: 58%; align-self: flex-start;
+  clip-path: polygon(0 0, 100% 0, 84% 50%, 100% 100%, 0 100%); background: var(--red); }
+.foot-mark .word { flex: 1; align-self: flex-end; font-size: clamp(3.5rem, 13vw, 13rem); font-weight: 600;
+  letter-spacing: -0.06em; line-height: 0.78; text-align: right; }
+.foot-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gutter); margin-top: 3.5rem; }
+.foot-grid nav { grid-column: span 2; display: grid; gap: 0.5rem; font-size: 0.9375rem; align-content: start; }
+.foot-grid nav a { text-decoration: none; color: var(--muted); }
+.foot-grid nav h2 { font-size: 0.9375rem; letter-spacing: 0; color: var(--ink); margin-bottom: 0.25rem; }
+.foot-note { grid-column: 9 / span 4; font-size: 0.9375rem; color: var(--muted); }
+.foot-last { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  margin-top: 3.5rem; font-size: var(--step-small); color: var(--faint); }
+@media (max-width: 48em) {
+  .foot-grid nav { grid-column: span 6; }
+  .foot-note { grid-column: 1 / -1; }
+  .foot-mark .word { font-size: 17vw; }
+}
+
+/* ---------- status badges: colour and word, never colour alone ---------- */
+.badge { display: inline-flex; align-items: center; gap: 0.4em; flex: none; white-space: nowrap;
+  height: 22px; padding: 0 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.01em; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.pass { color: var(--pass); background: var(--pass-bg); }
+.badge.fail { color: var(--fail); background: var(--fail-bg); }
+.badge.unclear { color: var(--unclear); background: var(--unclear-bg); }
+.badge.untested { color: var(--untested); background: var(--untested-bg); }

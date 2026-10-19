@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redflag shell check</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .check { padding: 4rem var(--margin); display: grid; gap: 2rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  .swatch { width: 140px; height: 72px; padding: 10px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header class="site-head">
+  <a class="wordmark" href="index.html"><span class="mark" aria-hidden="true"><i></i><b></b></span>Redflag</a>
+  <nav class="site-nav" aria-label="Main">
+    <a href="#">How it works</a>
+    <a href="#" aria-current="page">Results</a>
+  </nav>
+  <a class="button" href="#">Run full scan</a>
+</header>
+<div class="stripe" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+<main class="check">
+  <h1 class="head">Shell check</h1>
+  <div class="row">
+    <span class="badge pass">Pass</span>
+    <span class="badge fail">Fail</span>
+    <span class="badge unclear">Unclear</span>
+    <span class="badge untested">Not tested</span>
+  </div>
+  <div class="row">
+    <div class="swatch" style="background:var(--red);color:#fff">White on red</div>
+    <div class="swatch" style="background:#000;color:var(--red-ink)">Red ink on black</div>
+    <div class="swatch" style="background:var(--surface);color:var(--muted)">Muted on card</div>
+    <div class="swatch" style="background:var(--raised);color:var(--faint)">Faint on panel</div>
+  </div>
+  <p><span class="bullet" aria-hidden="true"></span>A bullet in the flag's shape.</p>
+  <div class="row"><a class="button" href="#">Run full scan</a><a class="button is-ink" href="#">Scan the hardened bot</a></div>
+</main>
+
+<footer class="site-foot">
+  <div class="foot-mark" aria-hidden="true"><span class="pole"></span><span class="cloth"></span><span class="word">Redflag</span></div>
+  <div class="foot-grid">
+    <nav aria-labelledby="f1"><h2 id="f1">Product</h2><a href="#">Run full scan</a><a href="#">How it works</a><a href="#">Results</a></nav>
+    <nav aria-labelledby="f2"><h2 id="f2">Project</h2><a href="#">GitHub</a><a href="#">Roadmap</a></nav>
+    <p class="foot-note">This is not a guarantee of security. It only reports what these tests checked.</p>
+  </div>
+  <div class="foot-last"><span>Redflag, 2026</span><a class="button" href="#">Run full scan</a></div>
+</footer>
+</body>
+</html>
