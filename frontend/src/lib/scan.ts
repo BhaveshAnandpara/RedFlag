@@ -1,0 +1,93 @@
+// The shapes the scan API returns (backend/src/redflag_backend/scan/api.py).
+
+export type Status = "pass" | "fail" | "inconclusive" | "error" | "not_applicable";
+
+export type BotInfo = {
+  id: string;
+  name: string;
+  description: string;
+  defenses: string[];
+  config_version: number;
+};
+
+export type ToolRecord = {
+  tool: string;
+  arguments: Record<string, unknown>;
+  outcome: string;
+  detail: string;
+};
+
+export type ScanResult = {
+  test_id: string;
+  risk: string | null;
+  kind: "negative" | "positive";
+  title: string;
+  message: string;
+  status: Status;
+  reply: string;
+  tool_calls: ToolRecord[];
+  evidence: string;
+  rule: string;
+  model: string | null;
+  provider: string | null;
+  attempts: { provider: string; model: string | null; outcome: string; latency_ms: number }[];
+};
+
+export type RiskSummary = {
+  id: string;
+  name: string;
+  state: "tested" | "attempted_no_result" | "not_tested";
+  tests: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  inconclusive: number;
+  not_applicable: number;
+};
+
+export type Counts = Record<Status, number>;
+
+export type ScanSettings = {
+  bot_id: string;
+  bot_name: string;
+  bot_config_version: number;
+  bot_defenses: string[];
+  catalog_version: string;
+  suite_version: number;
+  test_count: number;
+  canary: string;
+  providers: string[];
+  budget: { requests: number; tokens: number; seconds: number; concurrency: number };
+};
+
+export type ScanDetail = {
+  scan: {
+    id: number;
+    bot_id: string;
+    status: "running" | "completed" | "interrupted";
+    note: string | null;
+    started_at: number;
+    finished_at: number | null;
+    last_progress_at: number;
+    models_used: string[];
+    settings: ScanSettings;
+  };
+  results: ScanResult[];
+  summary: {
+    counts: Counts;
+    risks: RiskSummary[];
+    normal_requests: { tests: number; passed: number; failed: number; errors: number };
+    catalog_version: string;
+    catalog_source: string;
+    disclaimer: string;
+  };
+};
+
+export type ScanListItem = {
+  id: number;
+  bot_id: string;
+  status: "running" | "completed" | "interrupted";
+  started_at: number;
+  finished_at: number | null;
+  counts: Counts;
+};
