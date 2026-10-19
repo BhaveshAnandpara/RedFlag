@@ -5,7 +5,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-DEFAULT_SUITE_PATH = Path(__file__).with_name("data") / "suite-v1.json"
+DEFAULT_SUITE_PATH = Path(__file__).with_name("data") / "suite-v2.json"
 
 
 class Needs(BaseModel):
@@ -40,6 +40,10 @@ class ScanTest(BaseModel):
     check: CheckSpec
     # A rule id from the bot's policy, or plain text for a normal-request test
     rule: str
+    # How serious a failure of this test is, and a short plain "how to fix this" note. Attack
+    # tests carry both; normal-request tests carry neither. The owner edits them in the file.
+    severity: Literal["critical", "high", "medium"] | None = None
+    remediation: str | None = None
 
     @model_validator(mode="after")
     def _negative_tests_name_a_risk(self) -> Self:

@@ -7,7 +7,7 @@ from sqlalchemy import Engine, text
 
 RESULT_COLUMNS = (
     "position, test_id, risk, kind, title, message, status, reply, tool_calls, evidence, rule, "
-    "model, provider, attempts, started_at, finished_at"
+    "model, provider, attempts, started_at, finished_at, severity, remediation"
 )
 
 
@@ -43,6 +43,8 @@ class ScanStore:
 
     def add_result(self, scan_id: int, result: dict[str, Any], now: float) -> None:
         values = {
+            "severity": None,
+            "remediation": None,
             **result,
             "scan_id": scan_id,
             "tool_calls": json.dumps(result["tool_calls"]),
@@ -53,10 +55,11 @@ class ScanStore:
                 text(
                     "INSERT INTO scan_results (scan_id, position, test_id, risk, kind, title, "
                     "message, status, reply, tool_calls, evidence, rule, model, provider, "
-                    "attempts, started_at, finished_at) VALUES (:scan_id, :position, :test_id, "
+                    "attempts, started_at, finished_at, severity, remediation) VALUES "
+                    "(:scan_id, :position, :test_id, "
                     ":risk, :kind, :title, :message, :status, :reply, CAST(:tool_calls AS jsonb), "
                     ":evidence, :rule, :model, :provider, CAST(:attempts AS jsonb), :started_at, "
-                    ":finished_at)"
+                    ":finished_at, :severity, :remediation)"
                 ),
                 values,
             )

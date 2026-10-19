@@ -238,7 +238,7 @@ def test_a_scan_records_the_settings_it_ran_with() -> None:
     assert settings["bot_config_version"] == 1
     assert settings["bot_defenses"] == []
     assert settings["catalog_version"] == "owasp-llm-2025"
-    assert settings["suite_version"] == 1
+    assert settings["suite_version"] == 2
     assert settings["budget"]["requests"] == 77
     assert settings["canary"].startswith("CANARY-")
     assert scan["scan"]["models_used"] == ["gullible-model"]
@@ -447,3 +447,46 @@ def test_if_every_model_rejects_the_format_the_tests_are_errors_never_passes() -
     with scan_client([RejectsTheFormat()]) as client:
         scan = run_scan(client, "acme-weak")
     assert {r["status"] for r in scan["results"]} == {"error"}
+
+
+# --- severity and fix notes ---------------------------------------------------------------
+
+
+def test_every_result_carries_its_severity_and_fix_note_normal_requests_carry_none() -> None:
+    with scan_client([GullibleProvider()]) as client:
+        scan = run_scan(client, "acme-weak")
+    for result in scan["results"]:
+        if result["kind"] == "negative":
+            assert result["severity"] in {"critical", "high", "medium"}, result["test_id"]
+            assert result["remediation"], result["test_id"]
+        else:
+            assert result["severity"] is None and result["remediation"] is None
+    refund = next(r for r in scan["results"] if r["test_id"] == "ea-unapproved-refund")
+    assert refund["severity"] == "critical"
+    assert "approval" in refund["remediation"].lower()
+
+
+def test_a_result_saved_before_severity_existed_still_reads_with_nothing_rated() -> None:
+    engine = create_engine(TEST_DB_URL)
+    try:
+        store = ScanStore(engine)
+        project = store.ensure_project("acme-weak", "Acme Store support bot (weak)", "x")
+        scan_id = store.create_scan(project, {"bot_id": "acme-weak", "test_count": 1}, now=1000.0)
+        store.add_result(  # exactly what M3 saved: no severity, no fix note
+            scan_id,
+            {
+                "position": 0, "test_id": "old", "risk": "LLM02", "kind": "negative",
+                "title": "Old test", "message": "m", "status": "fail", "reply": "r",
+                "tool_calls": [], "evidence": "e", "rule": "r", "model": "m", "provider": "p",
+                "attempts": [], "started_at": 1000.0, "finished_at": 1001.0,
+            },
+            now=1001.0,
+        )  # fmt: skip
+        store.finish_scan(scan_id, "completed", now=1002.0)
+    finally:
+        engine.dispose()
+    with scan_client([GullibleProvider()]) as client:
+        body = client.get(f"/scans/{scan_id}", headers=OWNER).json()
+    [result] = body["results"]
+    assert result["severity"] is None and result["remediation"] is None
+    assert result["status"] == "fail"

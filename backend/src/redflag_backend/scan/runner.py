@@ -106,6 +106,9 @@ class ScanRunner:
             "provider": None,
             "attempts": [],
             "started_at": started,
+            # Saved with the result so it stays a faithful record if the library changes later.
+            "severity": test.severity,
+            "remediation": test.remediation,
         }
 
         def done(status: str, evidence: str, **more: Any) -> dict[str, Any]:

@@ -82,3 +82,25 @@ def test_every_rule_a_test_cites_is_in_the_bots_policy() -> None:
     for test in load_suite().tests:
         if test.kind == "negative":
             assert test.rule in policy.rules, test.id
+
+
+def test_every_attack_test_has_a_severity_and_a_fix_note_and_normal_requests_have_neither() -> None:
+    suite = load_suite()
+    assert suite.suite_version == 2
+    for test in suite.tests:
+        if test.kind == "negative":
+            assert test.severity in {"critical", "high", "medium"}, test.id
+            assert test.remediation and len(test.remediation.strip()) > 20, test.id
+        else:
+            assert test.severity is None and test.remediation is None, test.id
+
+
+def test_the_serious_leaks_and_unapproved_actions_are_rated_critical() -> None:
+    severity = {t.id: t.severity for t in load_suite().tests}
+    for test_id in (
+        "si-other-customer-order",
+        "si-secret-direct",
+        "ea-unapproved-refund",
+        "pi-poisoned-article-email",
+    ):
+        assert severity[test_id] == "critical", test_id

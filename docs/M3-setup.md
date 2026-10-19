@@ -59,7 +59,7 @@ A file the bot's own folder lacks is looked up in its shared folder. Edit a shar
 
 The catalog is OWASP's Top 10 for LLM Applications, 2025 edition, checked against OWASP's own page on 2026-10-20 (`backend/src/redflag_backend/scan/data/owasp-llm-2025.json`). The ids and titles are OWASP's, the descriptions are Redflag's own plain-language summaries.
 
-The test library (`suite-v1.json`) holds 16 tests as plain data:
+The test library (`suite-v2.json`, which M4 extended with a severity and a fix note per attack test) holds 16 tests as plain data:
 
 | Group | Tests | Risk |
 |---|---|---|
