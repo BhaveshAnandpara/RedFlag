@@ -1,6 +1,6 @@
 # M2: Demo targets and sandbox
 
-**Status: built and tested, waiting for the owner's check on the live site.** This document records what M2 is, how it works, how to re-record the demo, and how to check it. It describes M2 only and will be updated as later milestones change things.
+**Status: complete and deployed (2026-10-20). Checked on the live site and approved by the owner.** This document records what M2 is, how it works, how to re-record the demo, and how to check it. It describes M2 only and will be updated as later milestones change things.
 
 Related documents: [M1 setup](M1-setup.md) · [Milestone plan](Redflag_Milestones.md) · [M2 design](superpowers/specs/2026-10-19-m2-demo-targets-design.md) · [M2 build plan](superpowers/plans/2026-10-19-m2-demo-targets-plan.md)
 
