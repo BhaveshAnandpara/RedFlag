@@ -21,3 +21,9 @@ coverage/
 .superpowers/
 .DS_Store
 .neon
+
+# design skill working files
+.taste-skill/
+
+# design check screenshots
+design/explore/png/

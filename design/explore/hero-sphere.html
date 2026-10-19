@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redflag hero: scanning sphere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050505; --ink: #f4f4f2; --muted: #a3a3a3; --faint: #6f6f6f;
+    --line: rgba(255,255,255,0.08); --red: #ff3b3f;
+    --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .hero { position: relative; height: 100svh; min-height: 760px; overflow: hidden; isolation: isolate; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+
+  header { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 40px;
+    height: 72px; padding: 0 56px; border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; letter-spacing: -0.02em; }
+  .brand svg { width: 16px; height: 18px; }
+  nav { display: flex; gap: 32px; font-size: 14px; color: var(--muted); }
+  .head-cta { margin-left: auto; display: flex; gap: 12px; align-items: center; font-size: 14px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 999px; font-weight: 500; font-size: 14px; }
+  .btn.ghost { color: var(--muted); padding: 0 6px; }
+  .btn.solid { background: var(--ink); color: #000; }
+
+  .copy { position: absolute; left: 56px; top: 50%; transform: translateY(-46%); width: min(720px, 50vw); }
+  .status { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    padding: 7px 12px 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.02); margin-bottom: 32px; }
+  .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 4px rgba(255,59,63,0.15); }
+  h1 { margin: 0; font-size: clamp(44px, 4.3vw, 66px); line-height: 1.0; font-weight: 500; letter-spacing: -0.045em; }
+  h1 span { color: var(--red); }
+  .sub { margin: 28px 0 0; max-width: 30em; font-size: 19px; line-height: 1.55; color: var(--muted); }
+
+  .scroll { position: absolute; left: 56px; bottom: 44px; display: flex; align-items: center; gap: 14px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .scroll .ring { width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18); display: grid; place-items: center; }
+  .scroll svg { width: 14px; height: 14px; }
+  .meta { position: absolute; right: 56px; bottom: 44px; font-family: var(--mono); font-size: 12px; color: var(--faint); text-align: right; line-height: 1.7; }
+  .meta b { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<section class="hero">
+  <canvas id="sphere" aria-hidden="true"></canvas>
+
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 16 18" aria-hidden="true"><rect x="0" y="0" width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>
+      Redflag
+    </div>
+    <nav><span>How it works</span><span>Results</span><span>Docs</span></nav>
+    <div class="head-cta"><span class="btn ghost">GitHub</span><span class="btn solid">Run full scan</span></div>
+  </header>
+
+  <div class="copy">
+    <div class="status"><i></i>Scanning acme-weak · 7 of 16 tests</div>
+    <h1>Find the <span>red flags</span> before your users do.</h1>
+    <p class="sub">Redflag attacks your AI agent the way a real attacker would, and shows you the exact line where it broke.</p>
+  </div>
+
+  <div class="scroll"><span class="ring"><svg viewBox="0 0 14 14" fill="none" stroke="#f4f4f2" stroke-width="1.4"><path d="M7 1v12M2 8l5 5 5-5"/></svg></span>Scroll to watch an attack</div>
+  <div class="meta"><b>OWASP LLM Top 10</b><br>16 tests · evidence on every finding</div>
+</section>
+
+<script>
+(() => {
+  const cv = document.getElementById('sphere');
+  const ctx = cv.getContext('2d');
+  // seeded random so the still frame is the same every render
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+
+  function draw() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const R = Math.min(H * 0.35, W * 0.215);
+    const cx = W * 0.735, cy = H * 0.54;
+
+    // deep red bloom behind the sphere, then a vignette
+    let g = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 1.9);
+    g.addColorStop(0, 'rgba(120,10,14,0.30)'); g.addColorStop(0.45, 'rgba(70,6,9,0.14)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // points on a sphere (fibonacci), rotated and tilted
+    const N = 4600, ga = Math.PI * (3 - Math.sqrt(5));
+    const tiltX = -0.52, rotY = 0.6, cX = Math.cos(tiltX), sX = Math.sin(tiltX), cY = Math.cos(rotY), sY = Math.sin(rotY);
+    const scanY = 0.08;           // the scan plane, in sphere space (lat); above it is "already scanned"
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+      const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = ga * i;
+      const j = 0.012; let x = Math.cos(th) * r + (rnd() - 0.5) * j, z = Math.sin(th) * r + (rnd() - 0.5) * j;
+      const lat = y;
+      // rotate Y then tilt X
+      let x1 = x * cY + z * sY, z1 = -x * sY + z * cY;
+      let y2 = y * cX - z1 * sX, z2 = y * cX * 0 + y * sX + z1 * cX;
+      pts.push({ x: x1, y: y2, z: z2, lat, i });
+    }
+    // failures: a handful of points in the scanned cap, chosen by seed
+    const fails = new Set();
+    while (fails.size < 11) { const k = Math.floor(rnd() * N); const q = pts[k]; if (q.lat > scanY + 0.1 && q.lat < 0.8 && q.z > 0.05) fails.add(k); }
+
+    const persp = z => 1 / (1 - z * 0.1);
+    pts.sort((a, b) => a.z - b.z);
+    for (const p of pts) {
+      const k = persp(p.z), px = cx + p.x * R * k, py = cy - p.y * R * k;
+      const depth = (p.z + 1) / 2;                 // 0 back, 1 front
+      const scanned = p.lat > scanY;
+      const near = Math.abs(p.lat - scanY) < 0.035;
+      let a = 0.03 + depth * depth * (scanned ? 0.7 : 0.32);
+      let rad = 0.45 + depth * 0.85;
+      let col = '244,244,242';
+      if (near) { a = 0.35 + depth * 0.6; col = '255,120,120'; rad += 0.35; }
+      ctx.fillStyle = `rgba(${col},${a.toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // the scan ring: a latitude circle, drawn as a projected ellipse with a soft bloom
+    const ring = [];
+    for (let t = 0; t <= 240; t++) {
+      const th = (t / 240) * Math.PI * 2, r = Math.sqrt(1 - scanY * scanY);
+      let x = Math.cos(th) * r, z = Math.sin(th) * r, y = scanY;
+      let x1 = x * cY + z * sY, z1 = -x * sY + z * cY;
+      let y2 = y * cX - z1 * sX, z2 = y * sX + z1 * cX;
+      const k = persp(z2); ring.push({ x: cx + x1 * R * k, y: cy - y2 * R * k, z: z2 });
+    }
+    for (const pass of [{ w: 10, a: 0.05 }, { w: 4, a: 0.12 }, { w: 1.2, a: 0.95 }]) {
+      for (let t = 1; t < ring.length; t++) {
+        const p0 = ring[t - 1], p1 = ring[t], front = (p1.z + 1) / 2;
+        ctx.strokeStyle = `rgba(255,59,63,${(pass.a * (0.12 + front * front * 0.88)).toFixed(3)})`;
+        ctx.lineWidth = pass.w; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+      }
+    }
+
+    // failed points: red cores with a halo ring, and two labelled
+    const labels = [
+      { text: 'LLM06 · refund nobody approved', crit: 'critical' },
+      { text: 'LLM02 · staff override code leaked', crit: 'critical' },
+    ];
+    let li = 0;
+    const failPts = pts.filter(p => fails.has(p.i)).sort((a, b) => b.z - a.z);
+    for (const p of failPts) {
+      const k = persp(p.z), px = cx + p.x * R * k, py = cy - p.y * R * k, depth = (p.z + 1) / 2;
+      const halo = ctx.createRadialGradient(px, py, 0, px, py, 14 * (0.6 + depth));
+      halo.addColorStop(0, `rgba(255,59,63,${0.55 * depth})`); halo.addColorStop(1, 'rgba(255,59,63,0)');
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(px, py, 14 * (0.6 + depth), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,59,63,${0.5 + depth * 0.5})`;
+      ctx.beginPath(); ctx.arc(px, py, 1.6 + depth * 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(255,59,63,${0.25 + depth * 0.4})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(px, py, 6 + depth * 4, 0, Math.PI * 2); ctx.stroke();
+
+    }
+
+    // two labelled failures: the highest one and the right-most one, boxes kept apart
+    const front = failPts.filter(p => p.z > 0.3);
+    const proj = p => { const k = persp(p.z); return { x: cx + p.x * R * k, y: cy - p.y * R * k }; };
+    const top = front.reduce((a, b) => (b.lat > a.lat ? b : a));
+    const right = front.filter(p => p !== top).reduce((a, b) => (proj(b).x > proj(a).x ? b : a));
+    ctx.font = '500 12px "JetBrains Mono", monospace';
+    [[top, labels[0], -64], [right, labels[1], 58]].forEach(([p, L, dy]) => {
+      const { x: px, y: py } = proj(p);
+      const w1 = ctx.measureText('FAIL').width, w2 = ctx.measureText(L.text).width, w3 = ctx.measureText('· ' + L.crit).width;
+      const bw = w1 + w2 + w3 + 44, bh = 30;
+      const bx = Math.min(px + 40, W - 40 - bw), by = py + dy - bh / 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px, py + Math.sign(dy) * 9); ctx.lineTo(px, by + bh / 2); ctx.lineTo(bx, by + bh / 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(8,8,8,0.9)'; ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill(); ctx.stroke();
+      let tx = bx + 12; const ty = by + 19;
+      ctx.fillStyle = '#ff5a5f'; ctx.fillText('FAIL', tx, ty); tx += w1 + 10;
+      ctx.fillStyle = 'rgba(244,244,242,0.92)'; ctx.fillText(L.text, tx, ty); tx += w2 + 10;
+      ctx.fillStyle = 'rgba(163,163,163,0.9)'; ctx.fillText('· ' + L.crit, tx, ty);
+    });
+
+    // fine grain
+    const img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data;
+    for (let q = 0; q < d.length; q += 4) { const n = (rnd() - 0.5) * 7; d[q] += n; d[q + 1] += n; d[q + 2] += n; }
+    ctx.putImageData(img, 0, 0);
+  }
+  document.fonts.ready.then(draw);
+  window.addEventListener('resize', () => { s = 7; draw(); });
+})();
+</script>
+</body>
+</html>

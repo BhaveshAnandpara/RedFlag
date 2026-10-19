@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redflag hero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #050505; --ink: #f4f4f2; --muted: #a3a3a3; --faint: #6f6f6f; --line: rgba(255,255,255,0.08); --red: #ff3b3f; --red-ink: #ff5a5f;
+    --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .hero { position: relative; height: 100svh; min-height: 720px; overflow: hidden; isolation: isolate; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; }
+  .veil { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%, rgba(5,5,5,0) 35%, rgba(5,5,5,0.75) 100%); }
+  .grain { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.06; mix-blend-mode: screen; background-size: 256px 256px; }
+
+  header { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 40px; height: 72px; padding: 0 56px; z-index: 3; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; letter-spacing: -0.02em; text-decoration: none; color: inherit; }
+  .brand svg { width: 16px; height: 18px; }
+  nav { display: flex; gap: 32px; font-size: 14px; }
+  nav a, .head-cta a.text { color: var(--muted); text-decoration: none; transition: color 160ms ease; }
+  nav a:hover, .head-cta a.text:hover { color: var(--ink); }
+  .head-cta { margin-left: auto; display: flex; gap: 22px; align-items: center; font-size: 14px; }
+  .btn { display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 999px; font-weight: 500; font-size: 14px;
+    background: var(--ink); color: #000; text-decoration: none; transition: transform 140ms var(--ease), background-color 160ms ease; }
+  .btn:hover { background: #fff; transform: translateY(-1px); } .btn:active { transform: scale(0.97); }
+
+  .copy { position: absolute; left: 0; right: 0; top: 17%; display: grid; justify-items: center; text-align: center; padding: 0 24px; z-index: 2; }
+  .status { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    padding: 7px 14px 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: rgba(0,0,0,0.45); margin-bottom: 28px; min-width: 300px; justify-content: center; }
+  .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: blink 1.6s ease-in-out infinite; }
+  .status b { color: var(--ink); font-weight: 500; }
+  .status.done i { animation: none; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  h1 { margin: 0; font-size: clamp(44px, 5.6vw, 88px); font-weight: 500; letter-spacing: -0.045em; line-height: 1.0; max-width: 11em; }
+  .sub { margin: 24px 0 0; font-size: clamp(17px, 1.3vw, 19px); line-height: 1.55; color: var(--muted); max-width: 32em; }
+
+  .scroll { position: absolute; left: 0; right: 0; margin: 0 auto; width: max-content; bottom: 36px; display: grid; justify-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted); text-decoration: none; z-index: 2; }
+  .scroll .ring { width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); display: grid; place-items: center;
+    background: rgba(0,0,0,0.4); transition: border-color 160ms ease, transform 160ms var(--ease); }
+  .scroll:hover .ring { border-color: rgba(255,255,255,0.5); transform: translateY(2px); }
+  .scroll svg { width: 14px; height: 14px; animation: nudge 2.2s var(--ease) infinite; }
+  @keyframes nudge { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(3px); } }
+
+  /* finding labels, positioned by the script on top of the canvas */
+  .note { position: absolute; left: 0; top: 0; z-index: 1; display: flex; gap: 10px; align-items: center; white-space: nowrap;
+    height: 30px; padding: 0 12px; border-radius: 6px; background: rgba(8,8,8,0.92); border: 1px solid rgba(255,255,255,0.14);
+    font-family: var(--mono); font-size: 12px; font-weight: 500; color: rgba(244,244,242,0.94);
+    opacity: 0; will-change: transform, opacity; pointer-events: none; }
+  .note .f { color: var(--red-ink); } .note .r, .note .s { color: var(--muted); }
+
+  /* entrance */
+  @media (prefers-reduced-motion: no-preference) {
+    .rise { opacity: 0; transform: translateY(18px); animation: rise 900ms var(--ease) forwards; animation-delay: calc(var(--i) * 90ms + 150ms); }
+    @keyframes rise { to { opacity: 1; transform: none; } }
+    #cv { opacity: 0; animation: fade 1600ms ease 300ms forwards; }
+    @keyframes fade { to { opacity: 1; } }
+  }
+  @media (max-width: 720px) {
+    header { padding: 0 20px; gap: 16px; } nav, .head-cta a.text { display: none; }
+    .copy { top: 15%; } .status { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<section class="hero" id="hero">
+  <canvas id="cv" aria-hidden="true"></canvas>
+  <div class="veil"></div>
+  <div class="grain" id="grain" aria-hidden="true"></div>
+
+  <header>
+    <a class="brand" href="#"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</a>
+    <nav aria-label="Main"><a href="#">How it works</a><a href="#">Results</a><a href="#">Docs</a></nav>
+    <div class="head-cta"><a class="text" href="#">GitHub</a><a class="btn" href="#">Run full scan</a></div>
+  </header>
+
+  <div class="copy">
+    <div class="status rise" style="--i:0" id="status" role="status"><i></i><span id="statusText">Scanning acme-weak · <b>0</b> of 16 tests</span></div>
+    <h1 class="rise" style="--i:1">Find the red flags before your users do.</h1>
+    <p class="sub rise" style="--i:2">Redflag attacks your AI agent the way a real attacker would, and shows you the exact line where it broke.</p>
+  </div>
+
+  <a class="scroll rise" style="--i:3" href="#next"><span class="ring"><svg viewBox="0 0 14 14" fill="none" stroke="#f4f4f2" stroke-width="1.4"><path d="M7 1v12M2 8l5 5 5-5"/></svg></span>Scroll to watch an attack</a>
+</section>
+<div id="next" style="height:40vh"></div>
+
+<script>
+(() => {
+  const hero = document.getElementById('hero'), cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const statusEl = document.getElementById('status'), statusText = document.getElementById('statusText');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- grain: drawn once, drifted with CSS-free transforms ----
+  (() => {
+    const g = document.createElement('canvas'), gx = g.getContext('2d'); g.width = 256; g.height = 256;
+    const im = gx.createImageData(256, 256);
+    for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    gx.putImageData(im, 0, 0);
+    document.getElementById('grain').style.backgroundImage = `url(${g.toDataURL()})`;
+  })();
+
+  // ---- the sphere: points on a unit sphere, fixed in its own frame ----
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const N = 9000, ga = Math.PI * (3 - Math.sqrt(5));
+  const PX = new Float32Array(N), PY = new Float32Array(N), PZ = new Float32Array(N);
+  for (let i = 0; i < N; i++) { const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = ga * i; PX[i] = Math.cos(th) * r; PY[i] = y; PZ[i] = Math.sin(th) * r; }
+  const TILT = -0.12, cT = Math.cos(TILT), sT = Math.sin(TILT);
+  const LIGHT = (() => { const v = [-0.45, 0.55, 0.7], m = Math.hypot(...v); return v.map(c => c / m); })();
+
+  // the cycle: sweep, hold on the result, clear
+  const SWEEP = 8.5, HOLD = 3.2, CLEAR = 1.0, CYCLE = SWEEP + HOLD + CLEAR;
+  const LAT_TOP = 1.0, LAT_BOTTOM = 0.6;
+  const SPIN = 0.035; // radians per second
+
+  let W, H, cx, cy, R, dpr;
+  function size() {
+    dpr = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx = W / 2; R = Math.max(W * 0.62, H * 1.0); cy = H * 1.62;
+    if (W < 720) { R = H * 0.9; cy = H * 1.5; }
+  }
+
+  // project point i at spin angle a -> {x, y, z}
+  function proj(i, a) {
+    const c = Math.cos(a), s = Math.sin(a);
+    const x1 = PX[i] * c + PZ[i] * s, z1 = -PX[i] * s + PZ[i] * c, y = PY[i];
+    const y2 = y * cT - z1 * sT, z2 = y * sT + z1 * cT;
+    return { x: cx + x1 * R, y: cy - y2 * R, z: z2, nx: x1, ny: y2 };
+  }
+
+  // ---- failures: real findings from scan #4 (acme-weak), placed on the visible face ----
+  const FINDINGS = [
+    { at: [0.25, 0.75], side: -1, risk: 'LLM06', text: 'refund nobody approved' },
+    { at: [0.71, 0.705], side: 1, risk: 'LLM02', text: 'staff override code leaked' },
+    { at: [0.86, 0.86], side: -1, risk: 'LLM06', text: 'customer details emailed to a stranger' },
+  ];
+  const QUIET = [[0.36, 0.72], [0.58, 0.69], [0.47, 0.86], [0.13, 0.9], [0.79, 0.8], [0.64, 0.9]];
+  const PHONE_FINDINGS = [{ at: [0.22, 0.8], side: 1, risk: 'LLM06', text: 'refund nobody approved' }];
+  const PHONE_QUIET = [[0.2, 0.78], [0.4, 0.88], [0.82, 0.84], [0.5, 0.7], [0.3, 0.68]];
+  let fails = [];
+  function pickFails(a0 = 0, keep = false) {
+    const vis = [];
+    for (let i = 0; i < N; i++) { const p = proj(i, a0); if (p.z > 0.25 && p.y > H * 0.64 && p.y < H * 0.93) vis.push({ i, ...p }); }
+    const near = (fx, fy) => vis.reduce((a, b) => (Math.hypot(b.x - W * fx, b.y - H * fy) < Math.hypot(a.x - W * fx, a.y - H * fy) ? b : a)).i;
+    if (keep) {
+      const F = W < 720 ? PHONE_FINDINGS : FINDINGS, Q = W < 720 ? PHONE_QUIET : QUIET;
+      fails.forEach((f, k) => { f.i = k < F.length ? near(...F[k].at) : near(...Q[k - F.length]); f.lat = PY[f.i]; });
+      return;
+    }
+    document.querySelectorAll('.note').forEach(n => n.remove());
+    fails = [
+      ...(W < 720 ? PHONE_FINDINGS : FINDINGS).map(f => {
+        const el = document.createElement('div'); el.className = 'note';
+        el.innerHTML = `<span class="f">FAIL</span><span class="r">${f.risk}</span><span>${f.text}</span><span class="s">· critical</span>`;
+        hero.appendChild(el); return { i: near(...f.at), side: f.side, el, w: 0 };
+      }),
+      ...(W < 720 ? PHONE_QUIET : QUIET).map(q => ({ i: near(...q) })),
+    ];
+    fails.forEach(f => { f.lat = PY[f.i]; if (f.el) f.w = f.el.offsetWidth; });
+  }
+
+  const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+
+  let lastCycle = -1;
+  function frame(now) {
+    const t = now / 1000, a = t * SPIN, ct = reduce ? SWEEP + 1 : t % CYCLE;
+    const cyc = Math.floor(t / CYCLE);
+    if (cyc !== lastCycle) { if (lastCycle !== -1) pickFails(a, true); lastCycle = cyc; }
+    const sweepT = Math.min(1, ct / SWEEP);
+    const scan = LAT_TOP - (LAT_TOP - LAT_BOTTOM) * (1 - Math.pow(1 - sweepT, 1.6));
+    const clearK = ct > SWEEP + HOLD ? 1 - (ct - SWEEP - HOLD) / CLEAR : 1;
+    const band = 0.011;
+
+    ctx.clearRect(0, 0, W, H);
+    // a low red bloom that rides with the scan
+    const by = cy - scan * R * cT;
+    const g = ctx.createRadialGradient(cx, by, 0, cx, by, R * 0.7);
+    g.addColorStop(0, `rgba(255,59,63,${0.13 * (ct < SWEEP ? 1 : clearK * 0.6)})`); g.addColorStop(1, 'rgba(255,59,63,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // dots, in three colour passes to keep fillStyle changes rare
+    const c = Math.cos(a), s = Math.sin(a);
+    const passes = [[], [], []]; // 0 plain, 1 red wake, 2 the band
+    for (let i = 0; i < N; i++) {
+      const x1 = PX[i] * c + PZ[i] * s, z1 = -PX[i] * s + PZ[i] * c, y = PY[i];
+      const y2 = y * cT - z1 * sT, z2 = y * sT + z1 * cT;
+      if (z2 < -0.05) continue;
+      const sx = cx + x1 * R, sy = cy - y2 * R;
+      if (sy < -4 || sy > H + 4 || sx < -4 || sx > W + 4) continue;
+      const lit = Math.max(0, x1 * LIGHT[0] + y2 * LIGHT[1] + z2 * LIGHT[2]);
+      const rim = Math.pow(1 - z2, 3) * 0.5;
+      const d = y - scan, scanned = ct < SWEEP ? d > 0 : clearK > 0.01;
+      let al = (0.06 + lit * 0.55 + rim) * (scanned ? 1 : 0.45), rad = 0.5 + lit * 0.9, pass = 0;
+      if (ct < SWEEP && Math.abs(d) < band) { pass = 2; al = Math.min(1, 0.55 + lit * 0.45 + (1 - Math.abs(d) / band) * 0.4); rad += 0.5; }
+      else if (ct < SWEEP && Math.abs(d) < band * 4) { pass = 1; al *= 1.6; }
+      passes[pass].push(sx, sy, rad, Math.min(1, al));
+    }
+    const cols = ['#f4f4f2', '#ff5a5f', '#ffecec'];
+    // round dots, batched: one path per colour and alpha step
+    const STEPS = 14;
+    for (let p = 0; p < 3; p++) {
+      ctx.fillStyle = cols[p]; const arr = passes[p], buckets = Array.from({ length: STEPS }, () => new Path2D());
+      for (let k = 0; k < arr.length; k += 4) {
+        const b = Math.min(STEPS - 1, Math.floor(arr[k + 3] * STEPS)), r = arr[k + 2];
+        buckets[b].moveTo(arr[k] + r, arr[k + 1]); buckets[b].arc(arr[k], arr[k + 1], r, 0, Math.PI * 2);
+      }
+      buckets.forEach((path, b) => { ctx.globalAlpha = (b + 0.5) / STEPS; ctx.fill(path); });
+    }
+    ctx.globalAlpha = 1;
+
+    // failures flare when the scan passes them, then hold until the clear
+    let found = 0;
+    for (const f of fails) {
+      const fired = reduce ? 10 : (ct < SWEEP ? (f.lat > scan ? ct - firedAt(f.lat) : -1) : ct - firedAt(f.lat));
+      if (fired < 0) { if (f.el) f.el.style.opacity = 0; continue; }
+      found++;
+      const p = proj(f.i, a); if (p.z < 0) continue;
+      const k = clearK, big = !!f.el;
+      // expanding ring on the hit
+      if (fired < 1.1 && !reduce) {
+        const e = ease(fired / 1.1);
+        ctx.strokeStyle = `rgba(255,59,63,${(1 - e) * 0.8})`; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4 + e * 30, 0, Math.PI * 2); ctx.stroke();
+      }
+      const grow = reduce ? 1 : ease(fired / 0.35);
+      const hr = (big ? 18 : 12) * grow, h = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, hr);
+      h.addColorStop(0, `rgba(255,59,63,${(big ? 0.6 : 0.4) * k})`); h.addColorStop(1, 'rgba(255,59,63,0)');
+      ctx.fillStyle = h; ctx.beginPath(); ctx.arc(p.x, p.y, hr, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,59,63,${k})`; ctx.beginPath(); ctx.arc(p.x, p.y, (big ? 3 : 2.2) * grow, 0, Math.PI * 2); ctx.fill();
+      if (big) {
+        ctx.strokeStyle = `rgba(255,59,63,${0.55 * k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 9 * grow, 0, Math.PI * 2); ctx.stroke();
+        // the label and its leader
+        const show = reduce ? 1 : ease((fired - 0.25) / 0.5) * k;
+        const bw = f.w, bh = 30;
+        let bx = f.side > 0 ? p.x + 34 : p.x - 34 - bw; bx = Math.max(24, Math.min(bx, W - 24 - bw));
+        const byy = p.y - 58, ax = f.side > 0 ? bx : bx + bw;
+        if (show > 0.01) {
+          ctx.strokeStyle = `rgba(255,255,255,${0.3 * show})`; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(p.x, p.y - 10); ctx.lineTo(p.x, byy + bh / 2); ctx.lineTo(ax, byy + bh / 2); ctx.stroke();
+        }
+        f.el.style.opacity = show.toFixed(3);
+        f.el.style.transform = `translate3d(${bx}px, ${byy + (1 - show) * 6}px, 0)`;
+      }
+    }
+
+    // the status line follows the sweep
+    if (ct < SWEEP) {
+      statusEl.classList.remove('done');
+      statusText.innerHTML = `${W < 720 ? 'Scanning' : 'Scanning acme-weak'} · <b>${Math.max(1, Math.round(sweepT * 16))}</b> of 16 tests`;
+    } else {
+      statusEl.classList.add('done');
+      statusText.innerHTML = W < 720 ? `Done · <b style="color:var(--red-ink)">5 of 13</b> attacks got through` : `Scan complete · <b style="color:var(--red-ink)">5 of 13</b> attacks got through`;
+    }
+
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  // the moment the band reaches latitude lat, on the same easing as the sweep
+  function firedAt(lat) {
+    const u = (LAT_TOP - lat) / (LAT_TOP - LAT_BOTTOM); // 0..1 along the eased sweep
+    return SWEEP * (1 - Math.pow(1 - Math.min(0.999, Math.max(0, u)), 1 / 1.6));
+  }
+
+  function start() { size(); pickFails(performance.now() / 1000 * SPIN); requestAnimationFrame(frame); }
+  document.fonts.ready.then(start);
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { size(); pickFails(performance.now() / 1000 * SPIN); }, 120); });
+})();
+</script>
+</body>
+</html>
