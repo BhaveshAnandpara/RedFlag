@@ -5,7 +5,7 @@
 Redflag tests whether LLM apps, RAG systems, agents and MCP tools obey their intended rules, and shows the evidence behind every finding. It is built to be honest: it never claims an app is "completely secure", and every report must separate what was **tested** from what was **not tested** or **inconclusive**.
 
 > **Status: Milestones 0 and 1 of 11 are deployed and checked: the foundation and the model router.**
-> The public site has a status check (is the backend and its database healthy) and a page called **How Redflag tests your AI**, which replays recorded attacks on a weak and a hardened demo bot. M1 added an owner-only model router and test page, and M3 an owner-only Scan page that runs a 16-test suite on a demo bot and shows the evidence. Scanning your own app arrives in later milestones. See the [roadmap](#roadmap).
+> The public site has a status check (is the backend and its database healthy), a page called **How Redflag tests your AI** that replays recorded attacks, and a **saved scan results** page with a full dashboard of a weak and a hardened demo bot. M1 added an owner-only model router and test page, and M3 an owner-only Scan page that runs a 16-test suite on a demo bot; M4 turned its results into a dashboard with charts, a comparison and a report. Scanning your own app arrives in later milestones. See the [roadmap](#roadmap).
 
 - Live backend health check: <https://redflag-8dcv.onrender.com/health>
 - Live frontend: <https://red-flag-gules.vercel.app/>
@@ -63,6 +63,10 @@ Redflag needs something safe to attack. M2 adds two pretend support bots for a m
 ### The scan engine (M3)
 
 An owner presses **Run scan** on the owner-only `/scan` page, and Redflag runs a 16-test suite on one demo bot: prompt injection (including hidden instructions in help articles), information leaks, system-prompt leakage, unsafe output, excessive agency, and normal requests that must keep working. Each verdict comes from what the bot did (its tool log, a fresh canary secret, the shop's rules), never from what it says, and every result keeps its evidence and the settings it ran with. A model failure is an error, never a pass. Every scan ends with the full list of ten OWASP LLM risks, saying which were tested and which were not. The demo bots live in `backend/bots/`, one folder each, with their own model keys and quota. Full detail: [docs/M3-setup.md](docs/M3-setup.md).
+
+### The dashboard (M4)
+
+A finished scan opens on a dashboard with five tabs: an **Overview** (a conclusion, a donut chart, a bar for each of the ten OWASP risks, the critical failures), a **Tests** table you can filter, the full **Conversations**, a **Compare** tab, and a **History**. Every status is shown in a colour and a word (green pass, red fail, yellow unclear, grey not tested), and an untested risk is never green. The conclusion states counts first, never calls a bot safe, and always says it is not a guarantee. Compare says whether the same AI model answered both scans, so a comparison is not mistaken for proof about the defenses. A **Download report** button saves a Markdown report that separates what was tested, what was not and what could not be decided. The public page `/results` shows two saved real scans (a weak and a hardened bot) in the same dashboard, read-only and with no network request. Full detail: [docs/M4-setup.md](docs/M4-setup.md).
 
 ### A visit when the backend is asleep
 
@@ -194,9 +198,13 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Explainer page and the real recordings file | cards, side-by-side runs, tool logs, evidence, no network request, file shape | 11 |
 | Bots folder loading | a bot loads from its folder, config drives defenses, a copied folder is a new bot, a broken folder fails clearly | 6 |
 | Scan verdict checks | every check pass and fail, the tool log beating words, normal requests, inconclusive, not applicable | 27 |
-| Risk catalog and test library | all ten risks, every attack test maps to a risk, size and coverage | 7 |
-| Scan API over HTTP, real Postgres, stand-in model | owner lock, background scans, errors never pass, budgets, waiting out rate limits, tested / not tested summary, recorded settings, the bots' keys apart from Redflag's, interrupted scans | 27 |
-| Scan page, network faked | locked, run and progress, five distinct result labels, evidence, summary box, settings, plain errors | 11 |
+| Risk catalog and test library | all ten risks, every attack test maps to a risk, size and coverage, a severity and fix note on every attack test | 9 |
+| Scan API over HTTP, real Postgres, stand-in model | owner lock, background scans, errors never pass, budgets, waiting out rate limits, tested / not tested summary, recorded settings, the bots' keys apart from Redflag's, interrupted scans, severity and fix notes | 29 |
+| Scan page (owner), network faked | locked, run and progress, the free-tier wait note, opens the dashboard, interrupted scans, plain errors, earlier scans | 9 |
+| Dashboard, network faked | conclusion and banner colour, chart text versions, grey for untested, tabs, table filters, conversations, Compare, History, report download | 23 |
+| Analytics, comparison and report functions | counts, risk bars, success rate and range, the conclusion and its banned words, comparison wording, the Markdown report | 30 |
+| Saved sample file rules | completed scans, one weak and one hardened, evidence, nothing key-shaped | 9 |
+| Public results page | saved-not-live label, no run button, Compare ready, no network request | 6 |
 
 No test in CI calls a live model provider.
 
@@ -283,8 +291,8 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | M1 | Model router: provider fallback, caching, budgets | ✅ Done |
 | M2 | Demo targets and sandbox: vulnerable and hardened bots | ✅ Done |
 | M3 | Scan engine with deterministic verdicts | ✅ Done |
-| M4 | Dashboard and reports | Next |
-| M5 | LLM judge with measured accuracy | Planned |
+| M4 | Dashboard and reports | Built, awaiting check |
+| M5 | LLM judge with measured accuracy | Next |
 | M6 | Policy builder | Planned |
 | M7 | Adaptive and multi-turn attacks | Planned |
 | M8 | External targets (HTTP and MCP) | Planned |
@@ -313,9 +321,11 @@ Redflag/
 - [M1 model router: how it works and how to check it](docs/M1-setup.md)
 - [M2 demo targets and sandbox: how it works and how to check it](docs/M2-setup.md)
 - [M3 scan engine: how it works, how to add a bot, how to check it](docs/M3-setup.md)
+- [M4 dashboard and reports: how it works, how to save the public samples, how to check it](docs/M4-setup.md)
 - [Milestone plan](docs/Redflag_Milestones.md)
 - [Requirements specification](docs/Redflag_Requirements_Specification.docx)
 - [M0 design](docs/superpowers/specs/2026-10-18-m0-foundation-design.md) and [build plan](docs/superpowers/plans/2026-10-18-m0-foundation-plan.md)
 - [M1 design](docs/superpowers/specs/2026-10-19-m1-model-router-design.md) and [build plan](docs/superpowers/plans/2026-10-19-m1-model-router-plan.md)
 - [M2 design](docs/superpowers/specs/2026-10-19-m2-demo-targets-design.md) and [build plan](docs/superpowers/plans/2026-10-19-m2-demo-targets-plan.md)
 - [M3 design](docs/superpowers/specs/2026-10-20-m3-scan-engine-design.md) and [build plan](docs/superpowers/plans/2026-10-20-m3-scan-engine-plan.md)
+- [M4 design](docs/superpowers/specs/2026-10-20-m4-dashboard-design.md) and [build plan](docs/superpowers/plans/2026-10-20-m4-dashboard-plan.md)
