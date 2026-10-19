@@ -27,3 +27,6 @@ coverage/
 
 # design check screenshots
 design/explore/png/
+
+# design pages copied in at build
+frontend/public/design/

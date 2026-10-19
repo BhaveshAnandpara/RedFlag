@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/copy-design.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "check:bundle": "node scripts/check-bundle.mjs",
+    "sync:design": "node scripts/copy-design.mjs",
     "export:samples": "node scripts/export-samples.mjs"
   },
   "dependencies": {
