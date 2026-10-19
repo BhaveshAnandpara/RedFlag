@@ -1,6 +1,8 @@
 # Redflag frontend specification (as built, after M5)
 
-This document describes the frontend **as it is today**: every page, what it shows, what it can do, how it gets its data, and the rules it keeps. It is the starting point for the UI work. It describes what exists, not what is planned. Part 9 lists the gaps I noticed in the current UI, as observations, not decisions.
+> **Update (2026-10-20):** the home page is now the animated design page from `design/explore/home.html`, served at `/` together with `/scan.html` (a demo scan shown as a chat) and `/results.html` (the report), all copied into `public/design` at build and linked to each other. Part 4.1 below describes the old Next.js home page, which was removed; the health card component still exists but is no longer shown. The Next.js pages `/how-it-works`, `/results`, `/scan` (owner) and `/router` (owner) still exist and are no longer linked from the home page.
+
+This document describes the frontend **as it was after M5**: every page, what it shows, what it can do, how it gets its data, and the rules it keeps. It is the starting point for the UI work. It describes what exists, not what is planned. Part 9 lists the gaps I noticed in the current UI, as observations, not decisions.
 
 Related: [README](../README.md) · [Milestone plan](Redflag_Milestones.md) · [M4 setup (dashboard)](M4-setup.md) · [M5 setup (AI judge)](M5-setup.md)
 
