@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   attackStats,
@@ -41,9 +41,11 @@ export type DashboardProps = {
   history: ScanListItem[];
   onOpen: (scanId: number) => void;
   loadScan: (scanId: number) => Promise<ScanDetail>;
+  // A scan the Compare tab opens already compared with (the public page uses it).
+  defaultCompareId?: number;
 };
 
-export function Dashboard({ detail, history, onOpen, loadScan }: DashboardProps) {
+export function Dashboard({ detail, history, onOpen, loadScan, defaultCompareId }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("Overview");
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -118,7 +120,14 @@ export function Dashboard({ detail, history, onOpen, loadScan }: DashboardProps)
         {tab === "Overview" && <Overview detail={detail} />}
         {tab === "Tests" && <TestsTable results={detail.results} risks={detail.summary.risks} />}
         {tab === "Conversations" && <Conversations results={detail.results} />}
-        {tab === "Compare" && <Compare detail={detail} history={history} loadScan={loadScan} />}
+        {tab === "Compare" && (
+          <Compare
+            detail={detail}
+            history={history}
+            loadScan={loadScan}
+            defaultId={defaultCompareId}
+          />
+        )}
         {tab === "History" && <History current={scan.id} history={history} onOpen={onOpen} />}
       </div>
     </div>
@@ -402,15 +411,35 @@ function Compare({
   detail,
   history,
   loadScan,
+  defaultId,
 }: {
   detail: ScanDetail;
   history: ScanListItem[];
   loadScan: DashboardProps["loadScan"];
+  defaultId?: number;
 }) {
   const [other, setOther] = useState<ScanDetail | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [selected, setSelected] = useState(defaultId === undefined ? "" : String(defaultId));
+
+  // When the tab opens already pointed at a scan, load it.
+  useEffect(() => {
+    if (defaultId === undefined) return;
+    let cancelled = false;
+    loadScan(defaultId)
+      .then((scan) => {
+        if (!cancelled) setOther(scan);
+      })
+      .catch(() => {
+        if (!cancelled) setProblem("Could not load that scan.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultId, loadScan]);
 
   async function choose(value: string) {
+    setSelected(value);
     setProblem(null);
     if (!value) {
       setOther(null);
@@ -430,7 +459,7 @@ function Compare({
       <label className="block space-y-1 text-sm">
         <span className="block font-medium">Compare with</span>
         <select
-          defaultValue=""
+          value={selected}
           onChange={(event) => choose(event.target.value)}
           className="rounded border-2 border-zinc-500 bg-white p-1 text-black"
         >

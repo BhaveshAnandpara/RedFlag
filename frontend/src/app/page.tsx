@@ -14,9 +14,12 @@ export default function Home() {
           A final security check for AI apps before you release them.
         </p>
       </header>
-      <p>
+      <p className="space-x-6">
         <Link href="/how-it-works" className="font-medium underline underline-offset-4">
           See how Redflag tests an AI
+        </Link>
+        <Link href="/results" className="font-medium underline underline-offset-4">
+          See saved scan results
         </Link>
       </p>
       <HealthStatus apiUrl={apiUrl} />

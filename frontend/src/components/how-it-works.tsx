@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { AttackRecord, Recordings, Run } from "@/lib/recordings";
 
 const VERDICT_LABEL = { pass: "PASS", fail: "FAIL", inconclusive: "INCONCLUSIVE" } as const;
@@ -108,6 +110,11 @@ export function HowItWorks({ recordings }: { recordings: Recordings }) {
       {recordings.attacks.map((attack) => (
         <AttackCard key={attack.id} attack={attack} />
       ))}
+      <p>
+        <Link href="/results" className="font-medium underline underline-offset-4">
+          See a full scan of both bots, with charts and a comparison
+        </Link>
+      </p>
     </div>
   );
 }
