@@ -282,7 +282,7 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | M0 | Foundation and first deploy | ✅ Done |
 | M1 | Model router: provider fallback, caching, budgets | ✅ Done |
 | M2 | Demo targets and sandbox: vulnerable and hardened bots | ✅ Done |
-| M3 | Scan engine with deterministic verdicts | Built, awaiting check |
+| M3 | Scan engine with deterministic verdicts | ✅ Done |
 | M4 | Dashboard and reports | Next |
 | M5 | LLM judge with measured accuracy | Planned |
 | M6 | Policy builder | Planned |

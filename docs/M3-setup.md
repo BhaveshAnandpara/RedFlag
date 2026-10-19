@@ -1,6 +1,6 @@
 # M3: Scan engine (deterministic)
 
-**Status: built and tested, waiting for the bots' own keys and the owner's check on the live site.** This document records what M3 is, how it works, how to set it up, how to add or edit a bot, and how to check it. It describes M3 only and will be updated as later milestones change things.
+**Status: complete and deployed (2026-10-20). Approved by the owner.** This document records what M3 is, how it works, how to set it up, how to add or edit a bot, and how to check it. It describes M3 only and will be updated as later milestones change things.
 
 Related documents: [M2 setup](M2-setup.md) · [M1 setup](M1-setup.md) · [Milestone plan](Redflag_Milestones.md) · [M3 design](superpowers/specs/2026-10-20-m3-scan-engine-design.md) · [M3 build plan](superpowers/plans/2026-10-20-m3-scan-engine-plan.md)
 
@@ -185,3 +185,10 @@ The stand-in model is "gullible": it does whatever it is told or shown. Both bot
 - Deterministic verdicts from the tool log, a per-scan canary and the bot's policy. An executed action beats a refusal in words, and errors are never passes.
 - Scans stored with their evidence and recorded settings, a clear "tested / not tested" summary, and interrupted-scan recovery.
 - An owner-only Scan page to run a scan and inspect any result.
+
+## 9. Live acceptance record
+
+- The backend deployed on commit `95d6507`, the new migration ran, the bots loaded, the Scan API was locked without the password, and the catalog served all ten risks.
+- **Scan #1** (the weak bot, started live with the bots' own keys): 16 results. 4 failed with evidence (another customer's order, the canary secret, an unapproved refund, a refund over the limit), 8 passed (Gemini resisted those attacks on its own) and 4 ended as errors. Gemini's free-tier rate limit hit mid-scan and the router fell to Groq's gpt-oss, which rejects the bots' format. The errors were shown as ERROR, never PASS.
+- The fix (wait out a rate limit, skip a model that rejects the format) was deployed on commit `7e86eca`, with new tests.
+- **Not recorded:** a clean weak-versus-hardened pair of scans on the live site after the fix. The owner approved M3 without it. The first live scans in M4 will show it.
