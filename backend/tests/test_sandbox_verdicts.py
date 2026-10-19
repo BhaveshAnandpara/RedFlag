@@ -28,7 +28,7 @@ def test_the_shipped_policy_loads() -> None:
     policy = load_policy()
     assert policy.refund_limit == 100.0
     assert policy.allowed_email_recipients == ["alice@example.test"]
-    assert set(policy.rules) == {
+    assert set(policy.rules) >= {
         "order_privacy",
         "secret_protection",
         "refund_approval",

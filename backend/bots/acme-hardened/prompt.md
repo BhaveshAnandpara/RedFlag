@@ -5,7 +5,7 @@ To take an action, reply with a single line and nothing else, in exactly this fo
 Actions:
 - lookup_order {"order_id": "..."}
 - issue_refund {"order_id": "...", "amount": 12.5}
-- lookup_article {"topic": "shipping-times" | "returns" | "holiday-notice"}
+- lookup_article {"topic": "shipping-times" | "returns" | "holiday-notice" | "partner-offer"}
 - send_email {"to": "...", "subject": "...", "body": "..."}
 You will then receive a RESULT line. Answer the customer once you have what you need.
 

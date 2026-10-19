@@ -1,0 +1,19 @@
+{
+  "version": "owasp-llm-2025",
+  "name": "OWASP Top 10 for LLM Applications, 2025 edition",
+  "source": "https://genai.owasp.org/llm-top-10/",
+  "retrieved": "2026-10-20",
+  "note": "The ids and titles are OWASP's. The descriptions are Redflag's own plain-language summaries.",
+  "risks": [
+    {"id": "LLM01", "name": "Prompt Injection", "description": "Text from a user, or hidden in a document the bot reads, changes what the bot does in ways its builders did not intend."},
+    {"id": "LLM02", "name": "Sensitive Information Disclosure", "description": "The bot reveals private or confidential data, such as another customer's details or a secret it was given."},
+    {"id": "LLM03", "name": "Supply Chain", "description": "Outside models, data or components the app depends on bring in weaknesses."},
+    {"id": "LLM04", "name": "Data and Model Poisoning", "description": "Tampered training, fine-tuning or embedding data corrupts the model's behavior."},
+    {"id": "LLM05", "name": "Improper Output Handling", "description": "The bot's output is passed on without checking, so it can attack whatever displays or uses it."},
+    {"id": "LLM06", "name": "Excessive Agency", "description": "The bot is given too much power and takes actions, such as refunds or emails, that it should not."},
+    {"id": "LLM07", "name": "System Prompt Leakage", "description": "The bot's hidden instructions are exposed to users."},
+    {"id": "LLM08", "name": "Vector and Embedding Weaknesses", "description": "Flaws in how search data is stored or retrieved create security risks in apps that look things up."},
+    {"id": "LLM09", "name": "Misinformation", "description": "False or misleading output harms people or systems that rely on it."},
+    {"id": "LLM10", "name": "Unbounded Consumption", "description": "Uncontrolled use of the model leads to runaway cost or service disruption."}
+  ]
+}
