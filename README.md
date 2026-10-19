@@ -299,7 +299,7 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | M2 | Demo targets and sandbox: vulnerable and hardened bots | ✅ Done |
 | M3 | Scan engine with deterministic verdicts | ✅ Done |
 | M4 | Dashboard and reports | ✅ Done |
-| M5 | AI judge on every test (accuracy checking comes later) | Built, awaiting live check |
+| M5 | AI judge on every test (accuracy checking comes later) | ✅ Done |
 | M6 | Policy builder | Planned |
 | M7 | Adaptive and multi-turn attacks | Planned |
 | M8 | External targets (HTTP and MCP) | Planned |
