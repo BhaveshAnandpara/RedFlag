@@ -50,6 +50,27 @@ class Settings(BaseSettings):
     # Used only when paid models are switched on and there is room under the spending cap.
     openrouter_paid_model: str | None = None
     provider_timeout_seconds: float = 30.0
+    # The demo bots' own model keys, kept apart from the router's keys above so the bots'
+    # free-tier quota and Redflag's never compete. Keys from the same account would share one
+    # quota, so these should come from other accounts or projects.
+    bot_groq_api_key: str | None = Field(default=None, repr=False)
+    bot_gemini_api_key: str | None = Field(default=None, repr=False)
+    bot_openrouter_api_key: str | None = Field(default=None, repr=False)
+    bot_groq_model: str = "openai/gpt-oss-20b"
+    bot_gemini_model: str = "gemini-3.5-flash-lite"
+    bot_openrouter_free_models: str = (
+        "google/gemma-4-31b-it:free,nvidia/nemotron-3-super-120b-a12b:free"
+    )
+    # The order the bots' models are tried in. Gemini first: Groq's gpt-oss mistakes the bots'
+    # tool format for its own tool calling, and OpenRouter's free models are rate-limited.
+    bot_provider_order: str = "gemini,groq,openrouter"
+    # Hard limits for one scan, so a scan cannot run away with the bots' quota.
+    bot_budget_max_requests: int = 150
+    bot_budget_max_tokens: int = 300_000
+    bot_budget_max_seconds: float = 1800.0
+    bot_budget_max_concurrency: int = 1
+    # A running scan with no progress for this long is treated as interrupted.
+    scan_stale_seconds: float = 300.0
     # Unlocks the model-router endpoints. When unset, those endpoints stay locked for everyone.
     owner_token: str | None = Field(default=None, repr=False)
     # Neon can take several seconds to wake from idle; allow for that before saying "degraded".

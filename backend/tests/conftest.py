@@ -1,4 +1,4 @@
-"""Test database setup: migrate once per run, and start every test with empty router tables."""
+"""Test database setup: migrate once per run, and start each test with empty tables."""
 
 import os
 from collections.abc import Iterator
@@ -35,5 +35,10 @@ def migrated_database() -> Iterator[None]:
 def empty_router_tables(migrated_database: None) -> None:
     engine = create_engine(TEST_DB_URL)
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE llm_cache, llm_calls, llm_spend"))
+        conn.execute(
+            text(
+                "TRUNCATE llm_cache, llm_calls, llm_spend, scan_results, scans, projects "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
     engine.dispose()

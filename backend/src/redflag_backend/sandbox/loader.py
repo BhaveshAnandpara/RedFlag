@@ -54,13 +54,20 @@ class BotDefinition:
     def defenses(self) -> frozenset[str]:
         return frozenset(self.config.defenses)
 
-    def create(self, model: Model, defenses: frozenset[str] | None = None) -> Bot:
-        """A runnable bot. `defenses` overrides the config's switches (used by tests)."""
+    def create(
+        self,
+        model: Model,
+        defenses: frozenset[str] | None = None,
+        secret: str | None = None,
+    ) -> Bot:
+        """A runnable bot. `defenses` overrides the config's switches (used by tests), and
+        `secret` replaces the bot's secret (a scan plants a fresh canary this way)."""
+        data = self.data if secret is None else {**self.data, "secret": secret}
         return Bot(
             model=model,
             defenses=self.defenses if defenses is None else defenses,
             prompt=self.prompt,
-            data=self.data,
+            data=data,
             policy=self.policy,
             tools=self.tools,
         )
