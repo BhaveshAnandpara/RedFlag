@@ -62,12 +62,32 @@ export function buildReport(detail: ScanDetail): string {
   lines.push(
     `- Models that answered: ${scan.models_used.length > 0 ? scan.models_used.join(", ") : "none"}`,
   );
-  lines.push(`- Suite version: ${settings.suite_version} (${settings.test_count} tests)`);
+  if (settings.setup) {
+    lines.push(`- Setup version ${settings.setup.version} (setup ${settings.setup.setup_id})`);
+    lines.push(`- Target: ${settings.setup.target_host}`);
+    lines.push(`- Tests run: ${settings.test_count}, chosen by the owner from the generated tests`);
+  } else {
+    lines.push(`- Suite version: ${settings.suite_version} (${settings.test_count} tests)`);
+  }
   lines.push(`- Risk list: ${summary.catalog_version}`);
   lines.push(
     `- Budget: up to ${settings.budget.requests} requests and ${settings.budget.tokens} tokens`,
   );
-  lines.push(`- Secret planted for this scan: ${settings.canary}`, "");
+  if (settings.canary) lines.push(`- Secret planted for this scan: ${settings.canary}`);
+  lines.push("");
+
+  if (settings.setup) {
+    lines.push("## Rules in force", "");
+    lines.push(
+      "These are the rules this bot was tested against. The tool log is not available for this kind of target, so only the bot's replies were judged.",
+      "",
+    );
+    if (settings.setup.rules.length === 0) lines.push("No rules were recorded.");
+    for (const rule of settings.setup.rules) {
+      lines.push(`- ${rule.text} (${rule.kind}, ${rule.status})`);
+    }
+    lines.push("");
+  }
 
   const judge = judgeSummary(results);
   lines.push("## The AI judge", "");

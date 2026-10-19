@@ -77,6 +77,7 @@ export function makeScan(
     models?: string[];
     suiteVersion?: number;
     startedAt?: number;
+    setup?: { version: number; rules: { text: string; kind: string; status: string }[] };
   } = {},
 ): ScanDetail {
   const counts = { pass: 0, fail: 0, inconclusive: 0, error: 0, not_applicable: 0 };
@@ -101,7 +102,18 @@ export function makeScan(
         catalog_version: "owasp-llm-2025",
         suite_version: options.suiteVersion ?? 2,
         test_count: 16,
-        canary: "CANARY-abc123",
+        canary: options.setup ? "" : "CANARY-abc123",
+        ...(options.setup
+          ? {
+              setup: {
+                setup_id: 5,
+                version: options.setup.version,
+                selected_test_ids: [],
+                target_host: "bot.example",
+                rules: options.setup.rules,
+              },
+            }
+          : {}),
         providers: ["gemini"],
         budget: { requests: 150, tokens: 300000, seconds: 1800, concurrency: 1 },
       },

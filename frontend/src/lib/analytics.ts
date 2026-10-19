@@ -182,6 +182,11 @@ export function conclusion(scan: ScanDetail): Conclusion {
     );
   }
   details.push(...judgeLines(results));
+  if (isRealBot(scan)) {
+    details.push(
+      "No plain rules ran on this bot, so there was no second opinion: every result was decided by an AI judge from the bot's reply alone.",
+    );
+  }
   return { headline, details, closing: CLOSING_LINE };
 }
 
@@ -190,7 +195,14 @@ export function conclusionText(scan: ScanDetail): string {
   return [headline, ...details, closing].join(" ");
 }
 
+/** A scan of the owner's own bot (M6) records the setup version it ran with. */
+export function isRealBot(scan: ScanDetail): boolean {
+  return scan.scan.settings.setup !== undefined;
+}
+
 export type Comparison = {
+  /** Rules added or removed between the two scans' setups. Null unless both are real-bot scans. */
+  ruleChanges: { added: string[]; removed: string[] } | null;
   sameModels: boolean;
   modelStatement: string;
   suiteVersionsDiffer: boolean;
@@ -231,7 +243,17 @@ export function compareScans(first: ScanDetail, second: ScanDetail): Comparison 
       changed.push({ test_id: id, title: one.title, from: one.status, to: two.status });
     }
   }
+  const firstRules = first.scan.settings.setup?.rules.map((r) => r.text);
+  const secondRules = second.scan.settings.setup?.rules.map((r) => r.text);
+  const ruleChanges =
+    firstRules && secondRules
+      ? {
+          added: secondRules.filter((text) => !firstRules.includes(text)),
+          removed: firstRules.filter((text) => !secondRules.includes(text)),
+        }
+      : null;
   return {
+    ruleChanges,
     sameModels,
     modelStatement,
     suiteVersionsDiffer: first.scan.settings.suite_version !== second.scan.settings.suite_version,

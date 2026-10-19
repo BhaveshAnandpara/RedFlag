@@ -8,7 +8,9 @@ import {
   conclusion,
   criticalFailures,
   countByStatus,
+  isRealBot,
   judgeState,
+  type JudgeState,
   judgeSummary,
   NO_JUDGE_LINE,
   overallTone,
@@ -124,7 +126,9 @@ export function Dashboard({ detail, history, onOpen, loadScan, defaultCompareId 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === "Overview" && <Overview detail={detail} />}
         {tab === "Tests" && <TestsTable results={detail.results} risks={detail.summary.risks} />}
-        {tab === "Conversations" && <Conversations results={detail.results} />}
+        {tab === "Conversations" && (
+          <Conversations results={detail.results} realBot={isRealBot(detail)} />
+        )}
         {tab === "Compare" && (
           <Compare
             detail={detail}
@@ -211,15 +215,22 @@ function Overview({ detail }: { detail: ScanDetail }) {
         <p>
           Models that answered: {scan.models_used.length > 0 ? scan.models_used.join(", ") : "none"}
         </p>
-        <p>
-          Suite version: {settings.suite_version} · Tests: {settings.test_count} · Risk list:{" "}
-          {detail.summary.catalog_version}
-        </p>
+        {settings.setup ? (
+          <p>
+            Setup version {settings.setup.version} · Target: {settings.setup.target_host} · Tests run:{" "}
+            {settings.test_count} · Risk list: {detail.summary.catalog_version}
+          </p>
+        ) : (
+          <p>
+            Suite version: {settings.suite_version} · Tests: {settings.test_count} · Risk list:{" "}
+            {detail.summary.catalog_version}
+          </p>
+        )}
         <p>
           Budget: up to {settings.budget.requests} requests and{" "}
           {settings.budget.tokens.toLocaleString("en-US")} tokens
         </p>
-        <p>Secret planted for this scan: {settings.canary}</p>
+        {settings.canary && <p>Secret planted for this scan: {settings.canary}</p>}
       </section>
     </div>
   );
@@ -345,7 +356,7 @@ function TestsTable({
   );
 }
 
-function ConversationItem({ result }: { result: ScanResult }) {
+function ConversationItem({ result, realBot }: { result: ScanResult; realBot: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <li aria-label={`Test result: ${result.title}`} className="space-y-2 rounded border-2 p-3">
@@ -375,7 +386,9 @@ function ConversationItem({ result }: { result: ScanResult }) {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase">What the bot did (tool-call log)</p>
-            {result.tool_calls.length === 0 ? (
+            {realBot ? (
+              <p>The tool log is not available for this kind of target.</p>
+            ) : result.tool_calls.length === 0 ? (
               <p>No tools were called.</p>
             ) : (
               <ul aria-label="Tool calls" className="space-y-1">
@@ -418,6 +431,18 @@ function JudgeBlocks({ result }: { result: ScanResult }) {
   if (state === "not_run") {
     return <p>The AI judge did not run on this test. Only the plain rules decided it.</p>;
   }
+  // A real bot has no plain rules: the judge decided alone, so there is nothing to compare.
+  if (result.rule_status == null) {
+    return (
+      <div className="space-y-2">
+        <div role="group" aria-label="Plain rules" className="space-y-1 rounded border-2 p-2">
+          <p className="text-xs font-semibold uppercase">Plain rules</p>
+          <p>No plain rule applied to this bot. The AI judge decided alone.</p>
+        </div>
+        <JudgeBlock result={result} state={state} />
+      </div>
+    );
+  }
   const rules = ruleOutput(result);
   const disagreed =
     (rules.status === "pass" || rules.status === "fail") &&
@@ -431,21 +456,7 @@ function JudgeBlocks({ result }: { result: ScanResult }) {
           <StatusBadge status={rules.status} />
           <p>{rules.evidence}</p>
         </div>
-        <div role="group" aria-label="AI judge" className="space-y-1 rounded border-2 p-2">
-          <p className="text-xs font-semibold uppercase">AI judge</p>
-          <span
-            data-tone={state === "unavailable" ? "yellow" : state === "fail" ? "red" : "green"}
-            className="inline-block text-xs font-semibold"
-          >
-            {JUDGE_WORD[state]}
-          </span>
-          <p>{result.judge_reason ?? "No reason was recorded."}</p>
-          {result.judge_model && (
-            <p className="text-xs">
-              Answered by {result.judge_provider} ({result.judge_model})
-            </p>
-          )}
-        </div>
+        <JudgeBlock result={result} state={state} />
       </div>
       {disagreed && (
         <p className="font-semibold">
@@ -456,11 +467,31 @@ function JudgeBlocks({ result }: { result: ScanResult }) {
   );
 }
 
-function Conversations({ results }: { results: ScanResult[] }) {
+function JudgeBlock({ result, state }: { result: ScanResult; state: JudgeState }) {
+  return (
+    <div role="group" aria-label="AI judge" className="space-y-1 rounded border-2 p-2">
+      <p className="text-xs font-semibold uppercase">AI judge</p>
+      <span
+        data-tone={state === "unavailable" ? "yellow" : state === "fail" ? "red" : "green"}
+        className="inline-block text-xs font-semibold"
+      >
+        {JUDGE_WORD[state]}
+      </span>
+      <p>{result.judge_reason ?? "No reason was recorded."}</p>
+      {result.judge_model && (
+        <p className="text-xs">
+          Answered by {result.judge_provider} ({result.judge_model})
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Conversations({ results, realBot }: { results: ScanResult[]; realBot: boolean }) {
   return (
     <ul aria-label="Conversations" className="space-y-3">
       {results.map((result) => (
-        <ConversationItem key={result.test_id} result={result} />
+        <ConversationItem key={result.test_id} result={result} realBot={realBot} />
       ))}
     </ul>
   );
@@ -546,6 +577,24 @@ function Compare({
             {comparison.modelStatement}
           </p>
           {comparison.judgeStatement && <p>{comparison.judgeStatement}</p>}
+          {comparison.ruleChanges && (
+            <div>
+              <h4 className="font-semibold">Rules that changed between the two setup versions</h4>
+              {comparison.ruleChanges.added.length === 0 &&
+              comparison.ruleChanges.removed.length === 0 ? (
+                <p>No rule changed.</p>
+              ) : (
+                <ul aria-label="Rules that changed" className="list-disc pl-5">
+                  {comparison.ruleChanges.added.map((text) => (
+                    <li key={`added-${text}`}>Added in the second scan: {text}</li>
+                  ))}
+                  {comparison.ruleChanges.removed.map((text) => (
+                    <li key={`removed-${text}`}>Missing from the second scan: {text}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {comparison.suiteVersionsDiffer && (
             <p>
               These scans ran different versions of the test library (version{" "}

@@ -73,6 +73,14 @@ export type ScanSettings = {
   providers: string[];
   // Recorded since M5: which prompt version and which providers the AI judge ran with.
   judge_prompt_version?: number;
+  // Present only for a scan of the owner's own bot (M6): which setup version it ran with.
+  setup?: {
+    setup_id: number;
+    version: number;
+    selected_test_ids: string[];
+    target_host: string;
+    rules: { text: string; kind: string; status: string }[];
+  };
   judge_providers?: string[];
   budget: { requests: number; tokens: number; seconds: number; concurrency: number };
 };
