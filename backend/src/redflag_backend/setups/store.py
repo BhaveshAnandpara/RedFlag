@@ -147,6 +147,28 @@ class SetupStore:
                     {"v": version_id, "pos": position, "test": json.dumps(test)},
                 )
 
+    def version_ref(self, setup_id: int, number: int) -> dict[str, Any]:
+        """The ids a scan needs to point at a version: its project, itself, and the project slug."""
+        _, slug, project_id = self.get_draft(setup_id)
+        with self._engine.connect() as conn:
+            version_id = self._version_id(conn, project_id, number)
+        return {"project_id": project_id, "version_id": version_id, "slug": slug}
+
+    def set_selection(self, setup_id: int, number: int, ids: list[str]) -> None:
+        """Remember which tests are ticked. Ids look like g-1, g-2 (the test's position + 1)."""
+        _, _, project_id = self.get_draft(setup_id)
+        with self._engine.begin() as conn:
+            version_id = self._version_id(conn, project_id, number)
+            rows = conn.execute(
+                text("SELECT id, test->>'id' FROM generated_tests WHERE version_id = :v"),
+                {"v": version_id},
+            ).all()
+            for row_id, test_id in rows:
+                conn.execute(
+                    text("UPDATE generated_tests SET selected = :s WHERE id = :id"),
+                    {"s": test_id in ids, "id": row_id},
+                )
+
     def get_tests(self, setup_id: int, number: int) -> list[dict[str, Any]]:
         _, _, project_id = self.get_draft(setup_id)
         with self._engine.connect() as conn:

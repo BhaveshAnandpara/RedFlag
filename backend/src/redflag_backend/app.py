@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from redflag_backend.judge.judge import Judge
+from redflag_backend.judge.judge import PROMPT_VERSION, Judge
 from redflag_backend.llm.api import build_llm_router
 from redflag_backend.llm.budget import BudgetBook, BudgetCaps
 from redflag_backend.llm.provider import Provider
@@ -21,14 +21,22 @@ from redflag_backend.sandbox.loader import BOTS_DIR, load_bots
 from redflag_backend.scan.api import build_scan_router
 from redflag_backend.scan.bot_models import bot_budget_caps, build_bot_providers, build_bot_router
 from redflag_backend.scan.catalog import load_catalog
+from redflag_backend.scan.gate import ScanGate
 from redflag_backend.scan.runner import ScanRunner
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.suite import load_suite
+from redflag_backend.scan.target_runner import TargetScanRunner
 from redflag_backend.settings import Settings
 from redflag_backend.setups.api import build_setup_router
 from redflag_backend.setups.llm import SetupLLM
+from redflag_backend.setups.run_api import RunDeps
 from redflag_backend.setups.store import SetupStore
-from redflag_backend.targets.http_target import Resolver
+from redflag_backend.targets.http_target import (
+    EndpointConfig,
+    HttpTarget,
+    Resolver,
+    system_resolver,
+)
 
 
 def create_app(
@@ -99,6 +107,7 @@ def create_app(
         rate_wait_max=settings.scan_rate_limit_max_wait_seconds,
         rate_retries=settings.scan_rate_limit_retries,
     )
+    gate = ScanGate()  # one scan at a time, whether it is a demo bot or a real one
     app.include_router(
         build_scan_router(
             settings,
@@ -107,6 +116,7 @@ def create_app(
             runner,
             active_bot_providers,
             catalog,
+            gate,
         )
     )
 
@@ -123,12 +133,45 @@ def create_app(
             now,
         ),
     )
+    judge_caps = BudgetCaps(
+        requests=settings.judge_budget_max_requests,
+        tokens=settings.judge_budget_max_tokens,
+        seconds=settings.judge_budget_max_seconds,
+        concurrency=1,
+    )
     own_hosts = [settings.public_backend_host] if settings.public_backend_host else []
+
+    def make_target(config: EndpointConfig) -> HttpTarget:
+        return HttpTarget(
+            config,
+            resolver=target_resolver or system_resolver,
+            transport=target_transport,
+            blocked_hosts=own_hosts,
+        )
+
+    run_deps = RunDeps(
+        scan_store=scan_store,
+        runner=TargetScanRunner(
+            store=scan_store,
+            judge=judge,
+            judge_caps=judge_caps,
+            clock=now,
+            max_requests=settings.run_max_endpoint_requests,
+        ),
+        gate=gate,
+        clock=now,
+        catalog=catalog,
+        make_target=make_target,
+        judge_caps=judge_caps,
+        judge_providers=[p.name for p in active_providers if p.configured],
+        judge_prompt_version=PROMPT_VERSION,
+    )
     app.include_router(
         build_setup_router(
             settings,
             SetupStore(engine, clock=now),
             setup_llm,
+            run_deps,
             transport=target_transport,
             resolver=target_resolver,
             blocked_hosts=own_hosts,

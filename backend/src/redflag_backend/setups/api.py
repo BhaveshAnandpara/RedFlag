@@ -27,6 +27,7 @@ from redflag_backend.setups.models import (
     Severity,
     required_status,
 )
+from redflag_backend.setups.run_api import RunDeps, add_run_routes
 from redflag_backend.setups.store import NoSuchSetup, NoSuchVersion, SetupStore
 from redflag_backend.setups.tests_api import add_test_routes
 from redflag_backend.targets.http_target import (
@@ -67,6 +68,7 @@ def build_setup_router(
     settings: Settings,
     store: SetupStore,
     llm: SetupLLM,
+    runs: RunDeps,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     resolver: Resolver | None = None,
@@ -264,4 +266,5 @@ def build_setup_router(
 
     add_chat_routes(router, settings, store, llm)
     add_test_routes(router, store, llm)
+    add_run_routes(router, store, runs)
     return router

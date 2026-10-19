@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from redflag_backend.llm.provider import Provider
 from redflag_backend.sandbox.loader import BotRegistry
 from redflag_backend.scan.catalog import Catalog
+from redflag_backend.scan.gate import ScanGate
 from redflag_backend.scan.runner import ScanRunner, new_canary
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.summary import summarize, zero_counts
@@ -33,6 +34,7 @@ def build_scan_router(
     runner: ScanRunner,
     providers: Sequence[Provider],
     catalog: Catalog,
+    gate: ScanGate,
 ) -> APIRouter:
     def require_owner(x_owner_token: str | None = Header(default=None)) -> None:
         expected = settings.owner_token
@@ -40,8 +42,6 @@ def build_scan_router(
             raise HTTPException(status_code=401, detail="owner token required")
 
     router = APIRouter(dependencies=[Depends(require_owner)])
-    running: dict[str, asyncio.Task[None] | None] = {"task": None}
-    background: set[asyncio.Task[None]] = set()  # keeps a reference so a task is not collected
 
     async def interrupt_stale() -> None:
         await asyncio.to_thread(store.interrupt_stale, runner.clock(), settings.scan_stale_seconds)
@@ -81,8 +81,7 @@ def build_scan_router(
             return _error(404, "unknown_bot")
         if not any(p.configured for p in providers):
             return _error(503, "no_provider_configured")
-        task = running["task"]
-        if task is not None and not task.done():
+        if gate.busy():
             return _error(409, "scan_running")
         canary = new_canary()
         project_id = await asyncio.to_thread(
@@ -97,10 +96,7 @@ def build_scan_router(
             runner.scan_settings(definition, canary, [p.name for p in providers]),
             runner.clock(),
         )
-        task = asyncio.create_task(runner.run(scan_id, definition, canary))
-        running["task"] = task
-        background.add(task)
-        task.add_done_callback(background.discard)
+        gate.start(runner.run(scan_id, definition, canary))
         return {"scan_id": scan_id}
 
     @router.get("/scans")

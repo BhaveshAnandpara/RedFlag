@@ -7,14 +7,18 @@ with a size cap, so a long pasted example cannot swamp the judge's prompt.
 """
 
 import json
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from redflag_backend.setups.models import (
     Contexts,
+    Example,
     JudgeContext,
     SetupData,
+    Tagged,
     TesterContext,
+    ToolSpec,
 )
 from redflag_backend.setups.prompts import fence
 
@@ -95,6 +99,25 @@ def build_contexts(data: SetupData, answer: SupervisorAnswer) -> Contexts:
             kept = getattr(getattr(previous, which), name)
             setattr(getattr(contexts, which), name, kept)
     return contexts
+
+
+def judge_context_for_version(version: dict[str, Any]) -> JudgeContext:
+    """The judge's context for a confirmed version: the supervisor's, or if none was made, one put
+    together plainly from the fields (no model involved)."""
+    contexts = version.get("contexts")
+    if contexts and contexts.get("judge"):
+        return JudgeContext.model_validate(contexts["judge"])
+    fields = version["fields"]
+    return JudgeContext(
+        purpose=fields["purpose"]["value"],
+        rules=[Tagged(text=r["text"], source="user") for r in fields["rules"]],
+        limits=[Tagged(text=i["text"]) for i in fields["limits"]],
+        protected_data=[Tagged(text=i["text"]) for i in fields["protected_data"]],
+        tools=[ToolSpec.model_validate(t) for t in fields["tools"]],
+        examples=[Example.model_validate(e) for e in fields["examples"]],
+        unclear=list(fields["unclear"]),
+        notes=fields["notes"]["value"],
+    )
 
 
 def render_judge_context(context: JudgeContext, cap: int = JUDGE_CONTEXT_CAP) -> str:

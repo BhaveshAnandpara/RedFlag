@@ -29,16 +29,27 @@ class ScanStore:
             ).one()
         return int(row[0])
 
-    def create_scan(self, project_id: int, settings: dict[str, Any], now: float) -> int:
+    def create_scan(
+        self,
+        project_id: int,
+        settings: dict[str, Any],
+        now: float,
+        setup_version_id: int | None = None,
+    ) -> int:
         with self._engine.begin() as conn:
             row = conn.execute(
                 text(
                     "INSERT INTO scans (project_id, status, settings, started_at, "
-                    "last_progress_at) "
-                    "VALUES (:project_id, 'running', CAST(:settings AS jsonb), :now, :now) "
-                    "RETURNING id"
+                    "last_progress_at, setup_version_id) "
+                    "VALUES (:project_id, 'running', CAST(:settings AS jsonb), :now, :now, "
+                    ":version_id) RETURNING id"
                 ),
-                {"project_id": project_id, "settings": json.dumps(settings), "now": now},
+                {
+                    "project_id": project_id,
+                    "settings": json.dumps(settings),
+                    "now": now,
+                    "version_id": setup_version_id,
+                },
             ).one()
         return int(row[0])
 
