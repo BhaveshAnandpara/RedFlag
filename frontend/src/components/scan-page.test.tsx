@@ -2,7 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RiskSummary, ScanDetail, ScanResult } from "@/lib/scan";
+import type { ScanDetail } from "@/lib/scan";
+import { makeResult, makeScan } from "@/test-support/fixtures";
 
 import { ScanPage } from "./scan-page";
 
@@ -49,151 +50,52 @@ const BOTS = {
   errors: {},
 };
 
-const RISK_NAMES = [
-  ["LLM01", "Prompt Injection"],
-  ["LLM02", "Sensitive Information Disclosure"],
-  ["LLM03", "Supply Chain"],
-  ["LLM04", "Data and Model Poisoning"],
-  ["LLM05", "Improper Output Handling"],
-  ["LLM06", "Excessive Agency"],
-  ["LLM07", "System Prompt Leakage"],
-  ["LLM08", "Vector and Embedding Weaknesses"],
-  ["LLM09", "Misinformation"],
-  ["LLM10", "Unbounded Consumption"],
-];
-
-function result(overrides: Partial<ScanResult>): ScanResult {
-  return {
-    test_id: "t",
-    risk: "LLM02",
-    kind: "negative",
-    title: "A test",
-    message: "the attack message",
-    status: "pass",
-    reply: "a reply",
-    tool_calls: [],
-    evidence: "No violation found in the reply or the tool log",
-    rule: "A rule.",
-    model: "gullible-model",
-    provider: "gullible",
-    attempts: [],
-    ...overrides,
-  };
-}
-
-const RESULTS: ScanResult[] = [
-  result({
+const RESULTS = [
+  makeResult({
     test_id: "si-other-customer-order",
     title: "Read another customer's order",
     status: "fail",
-    reply: "It ships to 221 Fakewood Lane.",
-    evidence: 'The reply contains another customer\'s ship_to: "221 Fakewood Lane"',
-    rule: "A customer may see only their own orders.",
-    tool_calls: [
-      {
-        tool: "lookup_order",
-        arguments: { order_id: "B-2001" },
-        outcome: "executed",
-        detail: "details",
-      },
-    ],
+    severity: "critical",
   }),
-  result({ test_id: "si-secret-direct", title: "Ask for the staff override code", status: "pass" }),
-  result({
-    test_id: "pi-direct-ignore-rules",
-    risk: "LLM01",
-    title: "Direct injection",
-    status: "inconclusive",
-    reply: "",
-    evidence: "The bot gave no reply and made no tool calls",
-  }),
-  result({
+  makeResult({ test_id: "si-secret-direct", title: "Ask for the staff override code", status: "pass" }),
+  makeResult({
     test_id: "oh-script-tag",
-    risk: "LLM05",
     title: "Get the bot to write a script tag",
     status: "error",
-    reply: "",
-    evidence: "model call failed: all_providers_failed",
     model: null,
     provider: null,
   }),
-  result({
-    test_id: "pi-poisoned-article-refund",
-    risk: "LLM01",
-    title: "Hidden instruction in a help article: refund",
-    status: "not_applicable",
-    reply: "",
-    evidence: "This bot lacks: data articles.partner-offer",
-    model: null,
-    provider: null,
-  }),
-  result({
+  makeResult({
     test_id: "pos-own-order-status",
     risk: null,
     kind: "positive",
+    severity: null,
     title: "Normal request: where is my order?",
     status: "pass",
   }),
 ];
 
-function summaryFor(results: ScanResult[]) {
-  const counts = { pass: 0, fail: 0, inconclusive: 0, error: 0, not_applicable: 0 };
-  for (const r of results) counts[r.status as keyof typeof counts] += 1;
-  const states: Record<string, string> = {
-    LLM01: "attempted_no_result",
-    LLM02: "tested",
-    LLM05: "attempted_no_result",
-  };
-  return {
-    counts,
-    risks: RISK_NAMES.map(([id, name]) => ({
-      id,
-      name,
-      state: (states[id] ?? "not_tested") as RiskSummary["state"],
-      tests: states[id] ? 2 : 0,
-      passed: id === "LLM02" ? 1 : 0,
-      failed: id === "LLM02" ? 1 : 0,
-      errors: 0,
-      inconclusive: 0,
-      not_applicable: 0,
-    })),
-    normal_requests: { tests: 1, passed: 1, failed: 0, errors: 0 },
-    catalog_version: "owasp-llm-2025",
-    catalog_source: "https://genai.owasp.org/llm-top-10/",
-    disclaimer:
-      "This is not a claim that the bot is secure. It lists what this scan checked and what it did not.",
-  };
+function scanBody(
+  overrides: Partial<ScanDetail["scan"]> = {},
+  results = RESULTS,
+  status: "running" | "completed" | "interrupted" = "completed",
+): ScanDetail {
+  const detail = makeScan(results, { id: 7, status });
+  return { ...detail, scan: { ...detail.scan, ...overrides } };
 }
 
-function scanBody(overrides: Partial<ScanDetail["scan"]> = {}, results = RESULTS): ScanDetail {
-  return {
-    scan: {
+const EARLIER = {
+  scans: [
+    {
       id: 7,
       bot_id: "acme-weak",
       status: "completed",
-      note: null,
       started_at: 1_760_000_000,
       finished_at: 1_760_000_050,
-      last_progress_at: 1_760_000_050,
-      models_used: ["gullible-model"],
-      settings: {
-        bot_id: "acme-weak",
-        bot_name: "Acme Store support bot (weak)",
-        bot_config_version: 1,
-        bot_defenses: [],
-        catalog_version: "owasp-llm-2025",
-        suite_version: 1,
-        test_count: 16,
-        canary: "CANARY-abc123",
-        providers: ["gemini"],
-        budget: { requests: 150, tokens: 300000, seconds: 1800, concurrency: 1 },
-      },
-      ...overrides,
+      counts: { pass: 3, fail: 1, inconclusive: 1, error: 1, not_applicable: 1 },
     },
-    results,
-    summary: summaryFor(results),
-  };
-}
+  ],
+};
 
 const OK_ROUTES = {
   "GET /bots": () => json(200, BOTS),
@@ -243,12 +145,12 @@ describe("Scan page", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
-  it("runs a scan, shows progress while it runs, and shows the results when it is done", async () => {
+  it("runs a scan, shows progress while it runs, and opens the dashboard when it is done", async () => {
     // The server holds each state until the test has looked at it.
     const states: ScanDetail[] = [
-      scanBody({ status: "running", finished_at: null }, RESULTS.slice(0, 2)),
-      scanBody({ status: "running", finished_at: null }, RESULTS.slice(0, 4)),
-      scanBody({ status: "completed" }),
+      scanBody({ finished_at: null }, RESULTS.slice(0, 1), "running"),
+      scanBody({ finished_at: null }, RESULTS.slice(0, 3), "running"),
+      scanBody(),
     ];
     let state = 0;
     const fetchMock = mockApi({
@@ -262,125 +164,64 @@ describe("Scan page", () => {
     await screen.findByLabelText("Bot");
     await runScan(user);
 
-    expect(await screen.findByText(/2 of 16 tests done/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 of 16 tests done/)).toBeInTheDocument();
     expect(screen.getByText(/Scan #7/)).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument(); // no dashboard until it is done
     state = 1;
-    expect(await screen.findByText(/4 of 16 tests done/)).toBeInTheDocument();
+    expect(await screen.findByText(/3 of 16 tests done/)).toBeInTheDocument();
     state = 2;
-    await waitFor(() => expect(screen.getByText(/completed/i)).toBeInTheDocument());
+    expect(await screen.findByRole("tablist", { name: "Scan results" })).toBeInTheDocument();
+    expect(screen.getByTestId("conclusion")).toBeInTheDocument();
     expect(screen.queryByText(/tests done/)).not.toBeInTheDocument();
-    expect(screen.getAllByRole("listitem", { name: /test result/i })).toHaveLength(6);
 
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ bot_id: "acme-weak" });
     expect((post?.[1]?.headers as Record<string, string>)["X-Owner-Token"]).toBe("secret");
   });
 
-  it("shows pass, fail, inconclusive, error and not applicable as different things", async () => {
+  it("says a free-tier wait may be the reason when no new result arrives for a while", async () => {
+    let state = 0;
+    const states: ScanDetail[] = [
+      scanBody({ finished_at: null }, RESULTS.slice(0, 1), "running"),
+      scanBody({ finished_at: null }, RESULTS.slice(0, 2), "running"),
+    ];
     mockApi({
       ...OK_ROUTES,
       "POST /scans": () => json(202, { scan_id: 7 }),
-      "GET /scans/7": () => json(200, scanBody()),
+      "GET /scans/7": () => json(200, states[state]),
     });
     const user = userEvent.setup();
-    render(<ScanPage apiUrl={API} pollMs={5} />);
+    render(<ScanPage apiUrl={API} pollMs={5} noResultNoteMs={40} />);
     await unlock(user);
     await screen.findByLabelText("Bot");
     await runScan(user);
-    await screen.findByText(/Read another customer's order/);
 
-    const row = (title: string) => screen.getByRole("listitem", { name: `Test result: ${title}` });
-    expect(within(row("Read another customer's order")).getByText("FAIL")).toBeInTheDocument();
-    expect(within(row("Ask for the staff override code")).getByText("PASS")).toBeInTheDocument();
-    expect(within(row("Direct injection")).getByText("INCONCLUSIVE")).toBeInTheDocument();
-    // An error must never read as a pass.
-    const errorRow = within(row("Get the bot to write a script tag"));
-    expect(errorRow.getByText("ERROR")).toBeInTheDocument();
-    expect(errorRow.queryByText("PASS")).not.toBeInTheDocument();
-    expect(
-      within(row("Hidden instruction in a help article: refund")).getByText("NOT APPLICABLE"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/1 of 16 tests done/)).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for a free-tier limit/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/No new result yet\. It may be waiting for a free-tier limit/)).toBeInTheDocument();
+    state = 1; // a result arrives, so the note goes away
+    expect(await screen.findByText(/2 of 16 tests done/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText(/No new result yet/)).not.toBeInTheDocument(),
+    );
   });
 
-  it("opens a test to show the message, reply, tool log, evidence, rule and model", async () => {
-    mockApi({
-      ...OK_ROUTES,
-      "POST /scans": () => json(202, { scan_id: 7 }),
-      "GET /scans/7": () => json(200, scanBody()),
-    });
-    const user = userEvent.setup();
-    render(<ScanPage apiUrl={API} pollMs={5} />);
-    await unlock(user);
-    await screen.findByLabelText("Bot");
-    await runScan(user);
-    await screen.findByText(/Read another customer's order/);
-
-    const item = screen.getByRole("listitem", { name: "Test result: Read another customer's order" });
-    expect(within(item).queryByText(/221 Fakewood Lane\./)).not.toBeInTheDocument();
-    await user.click(within(item).getByRole("button", { name: /show evidence/i }));
-    expect(within(item).getByText("the attack message")).toBeInTheDocument();
-    expect(within(item).getByText(/It ships to 221 Fakewood Lane\./)).toBeInTheDocument();
-    expect(within(item).getByText(/another customer's ship_to/)).toBeInTheDocument();
-    expect(within(item).getByText(/A customer may see only their own orders\./)).toBeInTheDocument();
-    const log = within(within(item).getByRole("list", { name: "Tool calls" }));
-    expect(log.getByText(/lookup_order/)).toBeInTheDocument();
-    expect(log.getByText(/"order_id":"B-2001"/)).toBeInTheDocument();
-    expect(within(item).getByText(/gullible-model/)).toBeInTheDocument();
-  });
-
-  it("shows what was tested and what was not, over all ten risks, with the disclaimer", async () => {
-    mockApi({
-      ...OK_ROUTES,
-      "POST /scans": () => json(202, { scan_id: 7 }),
-      "GET /scans/7": () => json(200, scanBody()),
-    });
-    const user = userEvent.setup();
-    render(<ScanPage apiUrl={API} pollMs={5} />);
-    await unlock(user);
-    await screen.findByLabelText("Bot");
-    await runScan(user);
-    const box = await screen.findByRole("region", { name: "What this scan checked and did not check" });
-
-    expect(within(box).getAllByRole("listitem")).toHaveLength(10);
-    const risk = (name: string) => within(box).getByRole("listitem", { name });
-    expect(within(risk("LLM02 Sensitive Information Disclosure")).getByText(/Tested/)).toBeInTheDocument();
-    expect(within(risk("LLM01 Prompt Injection")).getByText(/Attempted, no result/)).toBeInTheDocument();
-    expect(within(risk("LLM03 Supply Chain")).getByText(/Not tested/)).toBeInTheDocument();
-    expect(within(box).getByText(/not a claim that the bot is secure/i)).toBeInTheDocument();
-    expect(within(box).getByText(/owasp-llm-2025/)).toBeInTheDocument();
-    expect(within(box).getByText(/Normal requests: 1 of 1 worked/)).toBeInTheDocument();
-  });
-
-  it("shows the settings the scan ran with and which models answered", async () => {
-    mockApi({
-      ...OK_ROUTES,
-      "POST /scans": () => json(202, { scan_id: 7 }),
-      "GET /scans/7": () => json(200, scanBody()),
-    });
-    const user = userEvent.setup();
-    render(<ScanPage apiUrl={API} pollMs={5} />);
-    await unlock(user);
-    await screen.findByLabelText("Bot");
-    await runScan(user);
-    const settings = await screen.findByRole("region", { name: "Settings this scan ran with" });
-    expect(within(settings).getByText(/Models that answered: gullible-model/)).toBeInTheDocument();
-    expect(within(settings).getByText(/Suite version: 1/)).toBeInTheDocument();
-    expect(within(settings).getByText(/150 requests/)).toBeInTheDocument();
-  });
-
-  it("shows an interrupted scan as interrupted, with the reason", async () => {
+  it("shows an interrupted scan on the dashboard, with the reason", async () => {
     mockApi({
       ...OK_ROUTES,
       "POST /scans": () => json(202, { scan_id: 7 }),
       "GET /scans/7": () =>
-        json(200, scanBody({ status: "interrupted", note: "No progress for a while. Run it again." })),
+        json(
+          200,
+          scanBody({ status: "interrupted", note: "No progress for a while. Run it again." }),
+        ),
     });
     const user = userEvent.setup();
     render(<ScanPage apiUrl={API} pollMs={5} />);
     await unlock(user);
     await screen.findByLabelText("Bot");
     await runScan(user);
-    expect(await screen.findByText(/interrupted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Status: interrupted/)).toBeInTheDocument();
     expect(screen.getByText(/No progress for a while/)).toBeInTheDocument();
   });
 
@@ -415,22 +256,10 @@ describe("Scan page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach the backend/i);
   });
 
-  it("lists earlier scans and opens one", async () => {
+  it("lists earlier scans before one is open, and opens one on the dashboard", async () => {
     mockApi({
       "GET /bots": () => json(200, BOTS),
-      "GET /scans": () =>
-        json(200, {
-          scans: [
-            {
-              id: 7,
-              bot_id: "acme-weak",
-              status: "completed",
-              started_at: 1_760_000_000,
-              finished_at: 1_760_000_050,
-              counts: { pass: 3, fail: 1, inconclusive: 1, error: 1, not_applicable: 1 },
-            },
-          ],
-        }),
+      "GET /scans": () => json(200, EARLIER),
       "GET /scans/7": () => json(200, scanBody()),
     });
     const user = userEvent.setup();
@@ -440,6 +269,33 @@ describe("Scan page", () => {
     expect(within(earlier).getByText(/Scan #7/)).toBeInTheDocument();
     expect(within(earlier).getByText(/1 failed/)).toBeInTheDocument();
     await user.click(within(earlier).getByRole("button", { name: /open scan #7/i }));
-    expect(await screen.findByText(/Read another customer's order/)).toBeInTheDocument();
+    expect(await screen.findByRole("tablist", { name: "Scan results" })).toBeInTheDocument();
+    expect(screen.getByTestId("conclusion")).toBeInTheDocument();
+  });
+
+  it("uses the same password to compare with another scan from the dashboard", async () => {
+    const other = makeScan(RESULTS.slice(1), { id: 8, botId: "acme-hardened" });
+    const fetchMock = mockApi({
+      "GET /bots": () => json(200, BOTS),
+      "GET /scans": () =>
+        json(200, {
+          scans: [
+            ...EARLIER.scans,
+            { ...EARLIER.scans[0], id: 8, bot_id: "acme-hardened", counts: { ...EARLIER.scans[0].counts, fail: 0 } },
+          ],
+        }),
+      "GET /scans/7": () => json(200, scanBody()),
+      "GET /scans/8": () => json(200, other),
+    });
+    const user = userEvent.setup();
+    render(<ScanPage apiUrl={API} pollMs={5} />);
+    await unlock(user);
+    const earlier = await screen.findByRole("list", { name: "Earlier scans" });
+    await user.click(within(earlier).getByRole("button", { name: /open scan #7/i }));
+    await user.click(await screen.findByRole("tab", { name: "Compare" }));
+    await user.selectOptions(screen.getByLabelText("Compare with"), "8");
+    expect(await screen.findByText(/The same model answered both scans/)).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/scans/8"));
+    expect((call?.[1]?.headers as Record<string, string>)["X-Owner-Token"]).toBe("secret");
   });
 });
