@@ -107,6 +107,10 @@ def build_setup_router(
         except NoSuchSetup as missing:
             raise HTTPException(status_code=404, detail="no such setup") from missing
 
+    @router.get("/setups")
+    async def list_setups() -> dict[str, Any]:
+        return {"setups": await asyncio.to_thread(store.list_drafts)}
+
     @router.post("/setups", status_code=201)
     async def create_setup() -> dict[str, int]:
         return {"setup_id": await asyncio.to_thread(store.create_draft)}

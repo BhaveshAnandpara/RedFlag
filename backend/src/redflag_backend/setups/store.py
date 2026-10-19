@@ -55,6 +55,28 @@ class SetupStore:
                 ).scalar_one()
             )
 
+    def list_drafts(self) -> list[dict[str, Any]]:
+        """Every setup, newest first, with enough to recognise it and resume it."""
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT d.id, p.slug, d.updated_at, d.data->'fields'->'purpose'->>'value', "
+                    "(SELECT count(*) FROM setup_versions v WHERE v.project_id = d.project_id) "
+                    "FROM setup_drafts d JOIN projects p ON p.id = d.project_id "
+                    "ORDER BY d.updated_at DESC, d.id DESC"
+                )
+            ).all()
+        return [
+            {
+                "setup_id": int(r[0]),
+                "project_slug": str(r[1]),
+                "updated_at": float(r[2]),
+                "purpose": r[3] or "",
+                "versions": int(r[4]),
+            }
+            for r in rows
+        ]
+
     def get_draft(self, setup_id: int) -> tuple[SetupData, str, int]:
         """The draft's data, its project slug and its project id."""
         with self._engine.connect() as conn:

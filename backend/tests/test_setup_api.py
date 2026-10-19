@@ -329,3 +329,14 @@ def test_the_endpoint_key_is_in_no_table_after_a_full_session() -> None:
                 assert not any(KEY in row[0] for row in rows), table
     finally:
         engine.dispose()
+
+
+def test_the_owner_can_list_their_setups_most_recently_changed_first() -> None:
+    with setup_client() as client:
+        first, second = new_setup(client), new_setup(client)
+        client.put(f"/setups/{first}/purpose", json={"value": "A travel agent."}, headers=OWNER)
+        listing = client.get("/setups", headers=OWNER).json()["setups"]
+        assert [s["setup_id"] for s in listing] == [first, second]  # the edited one first
+        assert listing[0]["purpose"] == "A travel agent." and listing[1]["purpose"] == ""
+        assert {"project_slug", "updated_at", "versions"} <= set(listing[0])
+        assert client.get("/setups").status_code == 401
