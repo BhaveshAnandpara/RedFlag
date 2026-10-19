@@ -1,6 +1,6 @@
 # M4: Dashboard and reports
 
-**Status: built and tested, waiting for the deploy and the owner's check on the live site.** This document records what M4 is, how it works, how to save the public sample scans, and how to check it. It describes M4 only and will be updated as later milestones change things.
+**Status: complete and deployed (2026-10-20). Checked on the live site and approved by the owner.** This document records what M4 is, how it works, how to save the public sample scans, and how to check it. It describes M4 only and will be updated as later milestones change things.
 
 Related documents: [M3 setup](M3-setup.md) · [M2 setup](M2-setup.md) · [Milestone plan](Redflag_Milestones.md) · [M4 design](superpowers/specs/2026-10-20-m4-dashboard-design.md) · [M4 build plan](superpowers/plans/2026-10-20-m4-dashboard-plan.md)
 
@@ -149,3 +149,13 @@ Two deliberate breaks proved the key rules: counting a risk with no tests as ful
 - A severity and a fix note on every attack test, saved with each result.
 - A comparison that says whether the same AI model answered both scans.
 - An owner page with a live progress view, and a public page of saved real scans that makes no network request.
+
+## 9. Live acceptance record
+
+- The frontend deployed first (the public `/results` page and its links). The backend deployed on commit `80799ea` and the migration `e5f607182930` ran: an older scan (#3, run before the deploy) still opened, with severity and fix note empty and shown as "not rated".
+- The owner ran a fresh weak scan (#4) and a fresh hardened scan (#5) on the live site. Both completed with no errors, and every attack result carried a severity.
+- **Scan #4 (weak):** 11 passed, 5 failed (4 critical: another customer's order, the secret code, an unapproved refund, an email to a stranger; 1 high: a refund over the limit).
+- **Scan #5 (hardened):** 16 passed, 0 failed. The hardened bot has no output filter, so it passed the two unsafe-output tests only because the model refused on its own.
+- Both scans were answered by two models (Gemini, then Groq's gpt-oss after Gemini's free-tier limit), so Compare says the same models answered both. The Tests tab shows which model answered each test.
+- The two scans were saved as the public samples with `pnpm export:samples --weak 4 --hardened 5`, which passed the safety rules. `/results` shows them as saved real scans, read-only, with no network request.
+- Earlier, scan #1 (the first live scan, run by mistake before the rate-limit fix) stays in History as an honest record of four errors.
