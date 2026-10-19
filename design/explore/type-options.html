@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redflag type options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #000; color: #ededed; font-family: Geist, system-ui, sans-serif; }
+  .opt { padding: 56px 48px; border-bottom: 1px solid #1f1f1f; display: grid; grid-template-columns: 220px 1fr; gap: 40px; }
+  .tag { font: 500 13px/1.5 "Geist Mono", monospace; color: #8f8f8f; }
+  .tag b { display: block; font: 600 22px/1.2 Geist, sans-serif; color: #fff; margin-bottom: 6px; }
+  h2 { margin: 0 0 16px; font-size: clamp(36px, 5vw, 68px); line-height: 1.02; color: #fff; }
+  p { margin: 0 0 22px; font-size: 18px; line-height: 1.55; color: #a1a1a1; max-width: 56ch; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .btn { padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; }
+  .btn.p { background: #fff; color: #000; }
+  .btn.s { border: 1px solid #2e2e2e; color: #ededed; }
+  .log { font-size: 13px; color: #8f8f8f; background: #0a0a0a; border: 1px solid #1f1f1f; border-radius: 8px; padding: 10px 14px; }
+  .log em { font-style: normal; color: #ff5a5f; }
+  .a h2 { font-family: Geist; font-weight: 600; letter-spacing: -0.045em; }
+  .a .log { font-family: "Geist Mono"; }
+  .b h2 { font-family: "Inter Tight"; font-weight: 600; letter-spacing: -0.04em; }
+  .b p, .b .btn { font-family: "Inter Tight"; }
+  .b .log { font-family: "JetBrains Mono"; }
+  .c h2 { font-family: "Space Grotesk"; font-weight: 500; letter-spacing: -0.035em; }
+  .c p, .c .btn { font-family: "Space Grotesk"; }
+  .c .log { font-family: "JetBrains Mono"; }
+  .d h2 { font-family: "Instrument Serif"; font-weight: 400; letter-spacing: -0.02em; font-size: clamp(44px, 6vw, 84px); }
+  .d p, .d .btn { font-family: Inter; }
+  .d .log { font-family: "JetBrains Mono"; }
+  .e h2 { font-family: "IBM Plex Mono"; font-weight: 500; letter-spacing: -0.04em; }
+  .e p, .e .btn { font-family: "IBM Plex Sans"; }
+  .e .log { font-family: "IBM Plex Mono"; }
+  @media (max-width: 760px) { .opt { grid-template-columns: 1fr; padding: 40px 20px; gap: 16px; } }
+</style>
+</head>
+<body>
+<section class="opt a">
+  <div class="tag"><b>A · Geist</b>Geist + Geist Mono<br>Like Vercel. Neutral, crisp, very "developer tool". Your app already loads it.</div>
+  <div><h2>Find the red flags before your users do.</h2><p>Redflag attacks your AI bot the way an attacker would, and shows the exact line where it broke.</p>
+  <div class="row"><span class="btn p">Run full scan</span><span class="btn s">How it works</span><span class="log">send_email(to: "stranger@…") <em>FAIL · critical</em></span></div></div>
+</section>
+<section class="opt b">
+  <div class="tag"><b>B · Inter Tight</b>Inter Tight + JetBrains Mono<br>Like Linear. Dense, confident, a little warmer than Geist.</div>
+  <div><h2>Find the red flags before your users do.</h2><p>Redflag attacks your AI bot the way an attacker would, and shows the exact line where it broke.</p>
+  <div class="row"><span class="btn p">Run full scan</span><span class="btn s">How it works</span><span class="log">send_email(to: "stranger@…") <em>FAIL · critical</em></span></div></div>
+</section>
+<section class="opt c">
+  <div class="tag"><b>C · Space Grotesk</b>Space Grotesk + JetBrains Mono<br>More character. Slightly technical, quirky letters (the g, the y).</div>
+  <div><h2>Find the red flags before your users do.</h2><p>Redflag attacks your AI bot the way an attacker would, and shows the exact line where it broke.</p>
+  <div class="row"><span class="btn p">Run full scan</span><span class="btn s">How it works</span><span class="log">send_email(to: "stranger@…") <em>FAIL · critical</em></span></div></div>
+</section>
+<section class="opt d">
+  <div class="tag"><b>D · Instrument Serif</b>Instrument Serif headline + Inter text<br>Like Railway. Editorial contrast: a serious, almost report-like voice.</div>
+  <div><h2>Find the red flags before your users do.</h2><p>Redflag attacks your AI bot the way an attacker would, and shows the exact line where it broke.</p>
+  <div class="row"><span class="btn p">Run full scan</span><span class="btn s">How it works</span><span class="log">send_email(to: "stranger@…") <em>FAIL · critical</em></span></div></div>
+</section>
+<section class="opt e">
+  <div class="tag"><b>E · IBM Plex Mono</b>Plex Mono headline + Plex Sans text<br>Like Warp or PlanetScale. Terminal feel, very technical.</div>
+  <div><h2>Find the red flags before your users do.</h2><p>Redflag attacks your AI bot the way an attacker would, and shows the exact line where it broke.</p>
+  <div class="row"><span class="btn p">Run full scan</span><span class="btn s">How it works</span><span class="log">send_email(to: "stranger@…") <em>FAIL · critical</em></span></div></div>
+</section>
+</body>
+</html>

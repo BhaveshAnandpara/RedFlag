@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redflag hero variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #050505; --ink: #f4f4f2; --muted: #a3a3a3; --faint: #6f6f6f; --line: rgba(255,255,255,0.08); --red: #ff3b3f;
+    --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .hero { position: relative; height: 100svh; min-height: 760px; overflow: hidden; isolation: isolate; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+  header { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 40px; height: 72px; padding: 0 56px; z-index: 2; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; letter-spacing: -0.02em; }
+  .brand svg { width: 16px; height: 18px; }
+  nav { display: flex; gap: 32px; font-size: 14px; color: var(--muted); }
+  .head-cta { margin-left: auto; display: flex; gap: 20px; align-items: center; font-size: 14px; color: var(--muted); }
+  .btn { display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 999px; font-weight: 500; font-size: 14px; background: var(--ink); color: #000; }
+  h1 { margin: 0; font-weight: 500; letter-spacing: -0.045em; line-height: 1.0; }
+  .sub { margin: 24px 0 0; font-size: 19px; line-height: 1.55; color: var(--muted); max-width: 32em; }
+  .status { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    padding: 7px 12px 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(0,0,0,0.4); margin-bottom: 28px; }
+  .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+  .scroll { display: inline-flex; align-items: center; gap: 14px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .scroll .ring { width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); display: grid; place-items: center; }
+  .scroll svg { width: 14px; height: 14px; }
+
+  /* A: horizon */
+  .v-a .copy { position: absolute; left: 0; right: 0; top: 17%; text-align: center; display: grid; justify-items: center; }
+  .v-a h1 { font-size: clamp(48px, 5.6vw, 88px); max-width: 11em; }
+  .v-a .sub { text-align: center; }
+  .v-a .scroll { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); flex-direction: column; gap: 10px; }
+
+  /* B: behind the words */
+  .v-b .copy { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; display: grid; justify-items: center; }
+  .v-b h1 { font-size: clamp(56px, 7vw, 112px); max-width: 11em; }
+  .v-b .sub { text-align: center; }
+  .v-b .scroll { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); flex-direction: column; gap: 10px; }
+
+  /* C: wireframe, offset */
+  .v-c .copy { position: absolute; left: 56px; bottom: 120px; width: min(760px, 56vw); }
+  .v-c h1 { font-size: clamp(48px, 5vw, 80px); }
+  .v-c .scroll { position: absolute; left: 56px; bottom: 44px; }
+  .v-c .readout { position: absolute; right: 56px; bottom: 44px; font-family: var(--mono); font-size: 12px; line-height: 1.8; color: var(--faint); text-align: right; }
+  .v-c .readout b { color: var(--muted); font-weight: 500; } .v-c .readout em { color: #ff5a5f; font-style: normal; }
+</style>
+</head>
+<body>
+<section class="hero" id="hero">
+  <canvas id="cv" aria-hidden="true"></canvas>
+  <header>
+    <div class="brand"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</div>
+    <nav><span>How it works</span><span>Results</span><span>Docs</span></nav>
+    <div class="head-cta"><span>GitHub</span><span class="btn">Run full scan</span></div>
+  </header>
+  <div class="copy">
+    <div class="status"><i></i>Scanning acme-weak · 7 of 16 tests</div>
+    <h1>Find the red flags before your users do.</h1>
+    <p class="sub">Redflag attacks your AI agent the way a real attacker would, and shows you the exact line where it broke.</p>
+  </div>
+  <div class="scroll"><span class="ring"><svg viewBox="0 0 14 14" fill="none" stroke="#f4f4f2" stroke-width="1.4"><path d="M7 1v12M2 8l5 5 5-5"/></svg></span>Scroll to watch an attack</div>
+  <div class="readout" hidden><b>acme-weak</b> · 16 tests<br>attacks through <em>5 of 13</em> · 4 critical<br>OWASP LLM Top 10 · 5 of 10 tested</div>
+</section>
+
+<script>
+(() => {
+  const V = (new URLSearchParams(location.search).get('v') || 'a').toLowerCase();
+  const hero = document.getElementById('hero'); hero.classList.add('v-' + V);
+  if (V === 'c') document.querySelector('.readout').hidden = false;
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  let s = 11; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+
+  // rotate a unit vector: spin about Y, then tilt about X
+  function xf(x, y, z, rotY, tiltX) {
+    const cY = Math.cos(rotY), sY = Math.sin(rotY), cX = Math.cos(tiltX), sX = Math.sin(tiltX);
+    const x1 = x * cY + z * sY, z1 = -x * sY + z * cY;
+    return { x: x1, y: y * cX - z1 * sX, z: y * sX + z1 * cX };
+  }
+  const L = (() => { const v = [-0.45, 0.55, 0.7], m = Math.hypot(...v); return v.map(c => c / m); })();
+
+  function draw() {
+    s = 11;
+    const dpr = Math.min(devicePixelRatio || 1, 2), W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+
+    const cfg = {
+      a: { cx: W / 2, cy: H * 1.62, R: Math.max(W * 0.62, H * 1.0), tilt: -0.12, rot: 0.4, scan: 0.955, band: 0.012, n: 9000, style: 'dots', fails: 9, dim: 1 },
+      b: { cx: W / 2, cy: H * 0.56, R: H * 0.47, tilt: -0.42, rot: 0.5, scan: 0.18, band: 0.03, n: 5200, style: 'dots', fails: 7, dim: 0.5 },
+      c: { cx: W * 0.7, cy: H * 0.47, R: H * 0.34, tilt: -0.4, rot: 0.55, scan: 0.22, band: 0.05, n: 0, style: 'lines', fails: 3, dim: 1 },
+    }[V];
+    const { cx, cy, R } = cfg;
+
+    // a low bloom only where the scan is
+    const by = cy - cfg.scan * R * Math.cos(cfg.tilt);
+    let g = ctx.createRadialGradient(cx, by, 0, cx, by, R * 0.9);
+    g.addColorStop(0, `rgba(255,59,63,${0.10 * cfg.dim})`); g.addColorStop(1, 'rgba(255,59,63,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    const P = (p) => ({ x: cx + p.x * R, y: cy - p.y * R });
+
+    if (cfg.style === 'dots') {
+      const N = cfg.n, ga = Math.PI * (3 - Math.sqrt(5)), pts = [];
+      for (let i = 0; i < N; i++) {
+        const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = ga * i;
+        const q = xf(Math.cos(th) * r, y, Math.sin(th) * r, cfg.rot, cfg.tilt);
+        q.lat = y; q.i = i; pts.push(q);
+      }
+      pts.sort((a, b) => a.z - b.z);
+      for (const p of pts) {
+        if (p.z < -0.05) continue;                              // hide the back: a solid ball, not a cloud
+        const lit = Math.max(0, p.x * L[0] + p.y * L[1] + p.z * L[2]);
+        const rim = Math.pow(1 - p.z, 3) * 0.5;                 // a thin rim of light at the edge
+        const d = p.lat - cfg.scan, inBand = Math.abs(d) < cfg.band, scanned = d > 0;
+        let a = (0.06 + lit * 0.55 + rim) * (scanned ? 1 : 0.45) * cfg.dim;
+        let col = '244,244,242', rad = 0.5 + lit * 0.9;
+        if (inBand) { col = '255,236,236'; a = Math.min(1, 0.5 + lit * 0.5 + (1 - Math.abs(d) / cfg.band) * 0.4) * (0.6 + cfg.dim * 0.4); rad += 0.5; }
+        else if (Math.abs(d) < cfg.band * 4) { col = '255,90,95'; a *= 1.6; }
+        const { x, y } = P(p);
+        ctx.fillStyle = `rgba(${col},${Math.min(1, a).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+      }
+      if (V === 'a') {
+        // flagged failures on the visible face of the horizon, each with its finding
+        const vis = pts.filter(p => p.z > 0.25).map(p => ({ p, ...P(p) })).filter(q => q.y > H * 0.64 && q.y < H * 0.93);
+        const near = (tx, ty) => vis.reduce((a, b) => (Math.hypot(b.x - tx, b.y - ty) < Math.hypot(a.x - tx, a.y - ty) ? b : a));
+        const dot = (x, y, big) => {
+          const r = big ? 18 : 12, h = ctx.createRadialGradient(x, y, 0, x, y, r);
+          h.addColorStop(0, `rgba(255,59,63,${big ? 0.6 : 0.4})`); h.addColorStop(1, 'rgba(255,59,63,0)');
+          ctx.fillStyle = h; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ff3b3f'; ctx.beginPath(); ctx.arc(x, y, big ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
+          if (big) { ctx.strokeStyle = 'rgba(255,59,63,0.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke(); }
+        };
+        // quiet failures, no label
+        [[0.36, 0.72], [0.58, 0.69], [0.47, 0.86], [0.13, 0.9], [0.79, 0.8], [0.64, 0.9]].forEach(([fx, fy]) => { const q = near(W * fx, H * fy); dot(q.x, q.y, false); });
+        // labelled failures: real findings from scan #4 (acme-weak)
+        ctx.font = '500 12px "JetBrains Mono", monospace';
+        const notes = [
+          { at: [0.25, 0.75], side: -1, risk: 'LLM06', text: 'refund nobody approved', sev: 'critical' },
+          { at: [0.71, 0.705], side: 1, risk: 'LLM02', text: 'staff override code leaked', sev: 'critical' },
+          { at: [0.86, 0.86], side: -1, risk: 'LLM06', text: 'customer details emailed to a stranger', sev: 'critical' },
+        ];
+        for (const n of notes) {
+          const q = near(W * n.at[0], H * n.at[1]); dot(q.x, q.y, true);
+          const parts = [['FAIL', '#ff5a5f'], [n.risk, 'rgba(163,163,163,0.95)'], [n.text, 'rgba(244,244,242,0.94)'], ['· ' + n.sev, 'rgba(163,163,163,0.9)']];
+          const ws = parts.map(([t]) => ctx.measureText(t).width), bw = ws.reduce((a, b) => a + b, 0) + 10 * 3 + 24, bh = 30;
+          let bx = n.side > 0 ? q.x + 34 : q.x - 34 - bw; bx = Math.max(40, Math.min(bx, W - 40 - bw));
+          const by = q.y - 58, ax = n.side > 0 ? bx : bx + bw;
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(q.x, q.y - 10); ctx.lineTo(q.x, by + bh / 2); ctx.lineTo(ax, by + bh / 2); ctx.stroke();
+          ctx.fillStyle = 'rgba(8,8,8,0.92)'; ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+          ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill(); ctx.stroke();
+          let tx = bx + 12; parts.forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, tx, by + 19); tx += ws[i] + 10; });
+        }
+      }
+      // failures in the scanned part, front only
+      const cand = V === 'a' ? [] : pts.filter(p => p.z > 0.35 && p.lat > cfg.scan + cfg.band * 3);
+      for (let k = 0; k < cfg.fails && cand.length; k++) {
+        const p = cand.splice(Math.floor(rnd() * cand.length), 1)[0], { x, y } = P(p);
+        const h = ctx.createRadialGradient(x, y, 0, x, y, 16); h.addColorStop(0, 'rgba(255,59,63,0.55)'); h.addColorStop(1, 'rgba(255,59,63,0)');
+        ctx.fillStyle = h; ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff3b3f'; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+    } else {
+      // wireframe: latitude and longitude lines, front bright, back faint
+      const seg = (fn, steps, base) => {
+        let prev = null;
+        for (let t = 0; t <= steps; t++) {
+          const q = fn(t / steps), pt = P(q);
+          if (prev) {
+            const a = q.z > 0 ? base * (0.35 + q.z * 0.65) : base * 0.12;
+            ctx.strokeStyle = `rgba(244,244,242,${a.toFixed(3)})`; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(pt.x, pt.y); ctx.stroke();
+          }
+          prev = pt;
+        }
+      };
+      for (let lat = -75; lat <= 75; lat += 15) {
+        const y = Math.sin(lat * Math.PI / 180), r = Math.cos(lat * Math.PI / 180);
+        seg(t => xf(Math.cos(t * 2 * Math.PI) * r, y, Math.sin(t * 2 * Math.PI) * r, cfg.rot, cfg.tilt), 160, y > cfg.scan ? 0.42 : 0.2);
+      }
+      for (let lon = 0; lon < 180; lon += 15) {
+        const a0 = lon * Math.PI / 180;
+        seg(t => { const th = t * 2 * Math.PI; return xf(Math.cos(th) * Math.cos(a0), Math.sin(th), Math.cos(th) * Math.sin(a0), cfg.rot, cfg.tilt); }, 200, 0.26);
+      }
+      // the scan slice: a filled translucent disc plus a bright front edge
+      const r = Math.sqrt(1 - cfg.scan * cfg.scan), ring = [];
+      for (let t = 0; t <= 240; t++) { const th = t / 240 * 2 * Math.PI; ring.push(xf(Math.cos(th) * r, cfg.scan, Math.sin(th) * r, cfg.rot, cfg.tilt)); }
+      ctx.fillStyle = 'rgba(255,59,63,0.045)'; ctx.beginPath(); ring.forEach((q, i) => { const p = P(q); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }); ctx.fill();
+      for (let t = 1; t < ring.length; t++) {
+        const q = ring[t]; if (q.z < 0) continue; const p0 = P(ring[t - 1]), p1 = P(q);
+        ctx.strokeStyle = `rgba(255,59,63,${(0.3 + q.z * 0.7).toFixed(3)})`; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+      }
+      // three flagged intersections in the scanned cap
+      [[30, 20], [45, -35], [60, 55]].forEach(([lat, lon], k) => {
+        const la = lat * Math.PI / 180, lo = lon * Math.PI / 180;
+        const q = xf(Math.cos(la) * Math.cos(lo), Math.sin(la), Math.cos(la) * Math.sin(lo), cfg.rot, cfg.tilt), { x, y } = P(q);
+        ctx.fillStyle = '#ff3b3f'; ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,59,63,0.5)'; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke();
+        if (k === 0) {
+          ctx.font = '500 12px "JetBrains Mono", monospace'; const t1 = 'FAIL', t2 = 'refund nobody approved';
+          const w = ctx.measureText(t1).width + ctx.measureText(t2).width + 34, bx = Math.min(x + 26, W - 40 - w), byy = y - 52;
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.moveTo(x + 7, y - 7); ctx.lineTo(bx, byy + 15); ctx.stroke();
+          ctx.fillStyle = 'rgba(8,8,8,0.9)'; ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.beginPath(); ctx.roundRect(bx, byy, w, 30, 6); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#ff5a5f'; ctx.fillText(t1, bx + 12, byy + 19); ctx.fillStyle = 'rgba(244,244,242,0.9)'; ctx.fillText(t2, bx + 22 + ctx.measureText(t1).width, byy + 19);
+        }
+      });
+    }
+
+    // vignette and grain
+    g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+    g.addColorStop(0, 'rgba(5,5,5,0)'); g.addColorStop(1, 'rgba(5,5,5,0.7)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data;
+    for (let q = 0; q < d.length; q += 4) { if (d[q + 3]) { const n = (rnd() - 0.5) * 8; d[q] += n; d[q + 1] += n; d[q + 2] += n; } }
+    ctx.putImageData(img, 0, 0);
+  }
+  document.fonts.ready.then(draw); addEventListener('resize', draw);
+})();
+</script>
+</body>
+</html>
