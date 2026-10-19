@@ -368,3 +368,152 @@ describe("it never touches the network by itself", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+// --- the AI judge (M5) -----------------------------------------------------------------------
+
+function judgedResult(
+  title: string,
+  rule: "pass" | "fail" | "inconclusive",
+  judge: "pass" | "fail" | "unavailable",
+  combined: "pass" | "fail" | "inconclusive",
+  extra: Partial<Parameters<typeof makeResult>[0]> = {},
+) {
+  return makeResult({
+    title,
+    test_id: title,
+    status: combined,
+    rule_status: rule,
+    rule_evidence: `Rules output for ${title}`,
+    judge_status: judge,
+    judge_reason: `Judge reason for ${title}`,
+    judge_model: "judge-model",
+    judge_provider: "judge",
+    ...extra,
+  });
+}
+
+const JUDGED = makeScan(
+  [
+    judgedResult("Reworded leak", "pass", "fail", "fail", { risk: "LLM02", severity: "critical" }),
+    judgedResult("Caught by rules", "fail", "pass", "fail", { risk: "LLM06" }),
+    judgedResult("Judge offline", "pass", "unavailable", "inconclusive", { risk: "LLM01" }),
+    judgedResult("All good", "pass", "pass", "pass", { risk: "LLM05" }),
+    makeResult({ title: "Broke before judging", test_id: "broke", status: "error", risk: "LLM07" }),
+  ],
+  { id: 11 },
+);
+
+describe("the AI judge in the Tests tab", () => {
+  async function openTests(detail: ScanDetail = JUDGED) {
+    const view = renderDashboard(detail);
+    await view.user.click(screen.getByRole("tab", { name: "Tests" }));
+    return view;
+  }
+  const row = (title: string) =>
+    within(screen.getByRole("table", { name: "Results table" }))
+      .getAllByRole("row")
+      .find((r) => within(r).queryByText(title))!;
+
+  it("has an AI judge column with a word for each state beside the combined result", async () => {
+    await openTests();
+    expect(screen.getByRole("columnheader", { name: "AI judge" })).toBeInTheDocument();
+    expect(within(row("Reworded leak")).getByLabelText("AI judge: FAIL")).toBeInTheDocument();
+    expect(within(row("Caught by rules")).getByLabelText("AI judge: PASS")).toBeInTheDocument();
+    expect(within(row("Judge offline")).getByLabelText("AI judge: UNAVAILABLE")).toBeInTheDocument();
+    expect(within(row("Broke before judging")).getByLabelText("AI judge: NOT RUN")).toBeInTheDocument();
+    // The combined result is still the word in the first column.
+    expect(within(row("Reworded leak")).getByText("FAIL", { selector: "td:first-child *" })).toBeInTheDocument();
+  });
+
+  it("shows an unavailable judge in yellow and a judge fail in red", async () => {
+    await openTests();
+    expect(within(row("Judge offline")).getByLabelText("AI judge: UNAVAILABLE")).toHaveAttribute("data-tone", "yellow");
+    expect(within(row("Reworded leak")).getByLabelText("AI judge: FAIL")).toHaveAttribute("data-tone", "red");
+    expect(within(row("All good")).getByLabelText("AI judge: PASS")).toHaveAttribute("data-tone", "green");
+    expect(within(row("Broke before judging")).getByLabelText("AI judge: NOT RUN")).toHaveAttribute("data-tone", "grey");
+  });
+
+  it("shows an old scan's judge as NOT RUN and changes nothing else", async () => {
+    await openTests(makeScan([makeResult({ title: "Old test", status: "fail" })]));
+    expect(within(row("Old test")).getByLabelText("AI judge: NOT RUN")).toBeInTheDocument();
+    expect(within(row("Old test")).getByText("FAIL")).toBeInTheDocument();
+  });
+});
+
+describe("the AI judge in the Conversations tab", () => {
+  async function openItem(title: string, detail: ScanDetail = JUDGED) {
+    const view = renderDashboard(detail);
+    await view.user.click(screen.getByRole("tab", { name: "Conversations" }));
+    const item = screen.getByRole("listitem", { name: `Test result: ${title}` });
+    await view.user.click(within(item).getByRole("button", { name: /show evidence/i }));
+    return item;
+  }
+
+  it("shows the plain rules and the AI judge as two labelled blocks", async () => {
+    const item = await openItem("Reworded leak");
+    const rules = within(item).getByRole("group", { name: "Plain rules" });
+    const judge = within(item).getByRole("group", { name: "AI judge" });
+    expect(within(rules).getByText("PASS")).toBeInTheDocument();
+    expect(within(rules).getByText("Rules output for Reworded leak")).toBeInTheDocument();
+    expect(within(judge).getByText("FAIL")).toBeInTheDocument();
+    expect(within(judge).getByText("Judge reason for Reworded leak")).toBeInTheDocument();
+    expect(within(judge).getByText(/judge-model/)).toBeInTheDocument();
+  });
+
+  it("says in words when the rules and the judge disagree, and not when they agree", async () => {
+    const disagree = await openItem("Reworded leak");
+    expect(within(disagree).getByText(/The plain rules and the AI judge disagreed/)).toBeInTheDocument();
+  });
+
+  it("says nothing about disagreement when both agree", async () => {
+    const agree = await openItem("All good");
+    expect(within(agree).queryByText(/disagreed/)).not.toBeInTheDocument();
+  });
+
+  it("says the judge was unavailable instead of showing an empty block", async () => {
+    const item = await openItem("Judge offline");
+    const judge = within(item).getByRole("group", { name: "AI judge" });
+    expect(within(judge).getByText("UNAVAILABLE")).toBeInTheDocument();
+  });
+
+  it("says the AI judge did not run for an old result or one that errored", async () => {
+    const item = await openItem("Broke before judging");
+    expect(within(item).getByText(/The AI judge did not run on this test/)).toBeInTheDocument();
+    expect(within(item).queryByRole("group", { name: "Plain rules" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the AI judge on the Overview", () => {
+  it("says what the judge caught, that a verdict was unavailable, and that it is unchecked", () => {
+    renderDashboard(JUDGED);
+    const box = screen.getByTestId("conclusion");
+    expect(within(box).getByText(/The AI judge failed 1 test the plain rules had passed\./)).toBeInTheDocument();
+    expect(within(box).getByText(/1 AI judge verdict was unavailable/)).toBeInTheDocument();
+    expect(within(box).getByText(/has not been checked for accuracy/)).toBeInTheDocument();
+    expect(box.textContent).not.toMatch(/\b(safe|secure|ready)\b/i);
+  });
+
+  it("keeps a permanent note that the judge is unchecked, outside the colour banner", () => {
+    renderDashboard(JUDGED);
+    const note = screen.getByRole("note", { name: "About the AI judge" });
+    expect(note).toHaveTextContent(/not been checked for accuracy/);
+  });
+
+  it("says no judge ran on a scan from before the judge", () => {
+    renderDashboard(makeScan(many(3, "pass", { risk: "LLM01" })));
+    expect(screen.getByRole("note", { name: "About the AI judge" })).toHaveTextContent(/No AI judge ran/);
+  });
+
+  it("keeps the banner yellow and never green when a verdict was unavailable", () => {
+    renderDashboard(makeScan([judgedResult("Judge offline", "pass", "unavailable", "inconclusive", { risk: "LLM01" })]));
+    expect(screen.getByTestId("conclusion")).toHaveAttribute("data-tone", "yellow");
+  });
+
+  it("warns on the Compare tab when only one scan had the judge", async () => {
+    const unjudged = makeScan([makeResult({ title: "T", test_id: "T", status: "pass" })], { id: 12 });
+    const { user } = renderDashboard(JUDGED, { loadScan: vi.fn(async () => unjudged) });
+    await user.click(screen.getByRole("tab", { name: "Compare" }));
+    await user.selectOptions(screen.getByLabelText(/compare with/i), "8");
+    expect(await screen.findByText(/not like for like/i)).toBeInTheDocument();
+  });
+});

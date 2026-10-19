@@ -8,14 +8,19 @@ import {
   conclusion,
   criticalFailures,
   countByStatus,
+  judgeState,
+  judgeSummary,
+  NO_JUDGE_LINE,
   overallTone,
   riskBars,
+  ruleOutput,
+  UNCHECKED_JUDGE_LINE,
 } from "@/lib/analytics";
 import { buildReport } from "@/lib/report";
 import type { ScanDetail, ScanListItem, ScanResult, Status } from "@/lib/scan";
 
 import { Donut, RiskBars } from "./dashboard-charts";
-import { STATUS_WORD, StatusBadge, TONE_CLASS } from "./status";
+import { JUDGE_WORD, JudgeBadge, STATUS_WORD, StatusBadge, TONE_CLASS } from "./status";
 
 const TABS = ["Overview", "Tests", "Conversations", "Compare", "History"] as const;
 type Tab = (typeof TABS)[number];
@@ -159,6 +164,12 @@ function Overview({ detail }: { detail: ScanDetail }) {
         <p className="text-sm font-semibold">{text.closing}</p>
       </div>
 
+      <p role="note" aria-label="About the AI judge" className="rounded border-2 p-3 text-sm">
+        {judgeSummary(detail.results).ran
+          ? `${UNCHECKED_JUDGE_LINE} If either the plain rules or the AI judge fails a test, the test fails.`
+          : NO_JUDGE_LINE}
+      </p>
+
       <section aria-label="Results" className="space-y-2">
         <h3 className="font-semibold">Results</h3>
         <Donut counts={countByStatus(detail.results)} />
@@ -294,6 +305,7 @@ function TestsTable({
           <thead>
             <tr className="border-b-2">
               <th className="p-2">Result</th>
+              <th className="p-2">AI judge</th>
               <th className="p-2">Test</th>
               <th className="p-2">Risk</th>
               <th className="p-2">
@@ -315,6 +327,9 @@ function TestsTable({
               <tr key={result.test_id} className="border-b">
                 <td className="p-2">
                   <StatusBadge status={result.status} />
+                </td>
+                <td className="p-2">
+                  <JudgeBadge state={judgeState(result)} />
                 </td>
                 <td className="p-2">{result.title}</td>
                 <td className="p-2">{result.risk ?? "normal"}</td>
@@ -379,6 +394,7 @@ function ConversationItem({ result }: { result: ScanResult }) {
             <p className="text-xs font-semibold uppercase">Evidence</p>
             <p>{result.evidence}</p>
           </div>
+          <JudgeBlocks result={result} />
           <p>
             <span className="font-semibold">Rule:</span> {result.rule}
           </p>
@@ -394,6 +410,49 @@ function ConversationItem({ result }: { result: ScanResult }) {
         </div>
       )}
     </li>
+  );
+}
+
+function JudgeBlocks({ result }: { result: ScanResult }) {
+  const state = judgeState(result);
+  if (state === "not_run") {
+    return <p>The AI judge did not run on this test. Only the plain rules decided it.</p>;
+  }
+  const rules = ruleOutput(result);
+  const disagreed =
+    (rules.status === "pass" || rules.status === "fail") &&
+    (state === "pass" || state === "fail") &&
+    rules.status !== state;
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-2 md:grid-cols-2">
+        <div role="group" aria-label="Plain rules" className="space-y-1 rounded border-2 p-2">
+          <p className="text-xs font-semibold uppercase">Plain rules</p>
+          <StatusBadge status={rules.status} />
+          <p>{rules.evidence}</p>
+        </div>
+        <div role="group" aria-label="AI judge" className="space-y-1 rounded border-2 p-2">
+          <p className="text-xs font-semibold uppercase">AI judge</p>
+          <span
+            data-tone={state === "unavailable" ? "yellow" : state === "fail" ? "red" : "green"}
+            className="inline-block text-xs font-semibold"
+          >
+            {JUDGE_WORD[state]}
+          </span>
+          <p>{result.judge_reason ?? "No reason was recorded."}</p>
+          {result.judge_model && (
+            <p className="text-xs">
+              Answered by {result.judge_provider} ({result.judge_model})
+            </p>
+          )}
+        </div>
+      </div>
+      {disagreed && (
+        <p className="font-semibold">
+          The plain rules and the AI judge disagreed. If either fails a test, the test fails.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -486,6 +545,7 @@ function Compare({
           >
             {comparison.modelStatement}
           </p>
+          {comparison.judgeStatement && <p>{comparison.judgeStatement}</p>}
           {comparison.suiteVersionsDiffer && (
             <p>
               These scans ran different versions of the test library (version{" "}
