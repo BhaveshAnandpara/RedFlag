@@ -22,7 +22,7 @@ Every milestone includes its own automated tests and a short README update, so t
 | M2 | Demo targets and sandbox | Vulnerable and hardened demo bots with simulated tools |
 | M3 | Scan engine (deterministic) | Run a scan and get evidence-based verdicts |
 | M4 | Dashboard and reports | Findings, metrics, comparison and Markdown reports |
-| M5 | Judge and evaluation quality | LLM judge with measured accuracy |
+| M5 | The AI judge | AI judge on every test with a reason (accuracy checking is M5b, later) |
 | M6 | Policy builder | Plain-language rules turned into generated tests |
 | M7 | Adaptive and multi-turn attacks | Attack mutation and multi-turn escalation |
 | M8 | External targets (HTTP and MCP) | Test your own endpoint or MCP server safely |
@@ -140,20 +140,40 @@ Every milestone includes its own automated tests and a short README update, so t
 
 ---
 
-## M5: Judge and evaluation quality
+## M5: The AI judge
 
-**Goal:** Make the semantic verdicts trustworthy, and show how much to trust them.
+**Goal:** Let Redflag judge what plain rules cannot, with a written reason on every test, and be honest that the judge is not yet validated.
+
+**Scope change (decided by the owner, 2026-10-19).** The first plan was an LLM judge used only where rules cannot decide, a labeling tool, measured judge accuracy and a held-out attack set. The owner changed it: the judge runs on **every** test, accuracy checking and the labeling tool move to a later milestone (M5b below), and the held-out set is dropped because the bots are demos.
 
 **What gets built**
-- An LLM judge, used only where deterministic checks cannot decide
-- A small labeling tool to hand-label results
-- Judge validation: accuracy, false positives, false negatives, and the known limits
-- A held-out attack set that is never used when tuning defenses
+- An AI judge that reads every test result (attack, reply, tool log, context about the app) and says pass or fail with a plain-language reason
+- A combined verdict: if either the plain rules or the judge fail a test, it fails; both outputs are shown side by side
+- A judge that cannot be steered by the bot's reply, runs on Redflag's own keys and budget, and never turns an outage into a pass
+- A visible statement everywhere that the judge has not yet been checked for accuracy
 
 **Done when**
-- The report shows judge agreement with your labels, with a stated sample size
-- Categories where the judge is weak are listed as limitations
-- The before/after result on the held-out set is reported alongside the main result
+- Every result in a new scan carries the plain rules' output, the judge's verdict and reason, and the combined result
+- A judge outage shows as unclear, never as a pass, and does not stop the scan
+- The dashboard and report show both outputs, mark disagreements and say the judge is unvalidated
+- Old scans still open
+
+**Spec items:** FR-27, FR-29 (accuracy parts deferred to M5b)
+
+---
+
+## M5b: Judge accuracy (later)
+
+**Goal:** Show how much to trust the judge.
+
+**What gets built**
+- A small labeling tool to hand-label results
+- Judge validation: agreement with the owner's labels, false positives and negatives, and the known limits
+- Categories where the judge is weak, listed as limitations
+
+**Done when**
+- The report shows judge agreement with the owner's labels, with a stated sample size
+- Weak categories are listed as limitations
 
 **Spec items:** FR-27, FR-29, NFR-07
 

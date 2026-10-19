@@ -65,7 +65,7 @@ The original M5 had four parts. The owner changed it:
 
 ## Constraints
 
-- Free tiers only. Judging adds about 16 AI calls per scan on Redflag's own free quota, so a scan gets slower. The M1 cache (temperature 0, content-keyed) makes an identical re-judge free.
+- Free tiers only. Judging adds about 16 AI calls per scan on Redflag's own free quota, so a scan gets slower. The judge has no answer cache, because each prompt carries a fresh random marker.
 - The Scan API stays owner-only. The public `/results` page stays a read-only replay with no network call.
 - M1 files stay unchanged unless a bug is found. The judge **uses** the router; it does not change it.
 - Scans from before M5 must still open, with the judge shown as "not run (scan from before the judge existed)".
