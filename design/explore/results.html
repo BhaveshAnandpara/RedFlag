@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan results · Redflag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #050505; --ink: #f4f4f2; --muted: #a3a3a3; --faint: #6f6f6f; --line: rgba(255,255,255,0.08); --red: #ff3b3f; --red-ink: #ff5a5f;
+    --pass: #3fc07a; --amber: #f2b33d; --panel: #0b0b0b; --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --ease: cubic-bezier(0.22, 1, 0.36, 1); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  button, select { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+  a { color: inherit; }
+  .mono { font-family: var(--mono); }
+
+  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 36px; height: 64px; padding: 0 24px; border-bottom: 1px solid var(--line); background: rgba(5,5,5,0.85); backdrop-filter: blur(8px); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; letter-spacing: -0.02em; text-decoration: none; }
+  .brand svg { width: 15px; height: 17px; }
+  nav { display: flex; gap: 28px; font-size: 14px; } nav a { color: var(--muted); text-decoration: none; } nav a[aria-current] { color: var(--ink); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 36px 24px 120px; display: grid; gap: 22px; }
+  .titlerow { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .crumb { font-family: var(--mono); font-size: 12px; color: var(--faint); } .crumb a { color: var(--faint); text-decoration: none; }
+  h1 { margin: 6px 0 0; font-size: 26px; font-weight: 500; letter-spacing: -0.03em; }
+  .actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn { height: 36px; padding: 0 14px; border-radius: 8px; font-size: 13.5px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; transition: background-color 160ms ease, border-color 160ms ease; }
+  .btn.ghost { border: 1px solid var(--line); color: var(--muted); } .btn.ghost:hover { border-color: rgba(255,255,255,0.25); color: var(--ink); }
+  .btn.solid { background: var(--ink); color: #000; font-weight: 500; }
+
+  .card { border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+  .sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 26px 0 2px; }
+  .sec-head h2 { margin: 0; font-size: 19px; font-weight: 500; letter-spacing: -0.02em; }
+  .sec-head span { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  /* verdict */
+  .verdict { padding: 28px 28px 22px; display: grid; gap: 12px; position: relative; overflow: hidden; }
+  .verdict::after { content: ""; position: absolute; right: -120px; top: -160px; width: 520px; height: 420px; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(255,59,63,var(--glow, 0.12)), rgba(255,59,63,0)); }
+  .verdict h2 { margin: 0; font-size: clamp(26px, 3vw, 40px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.1; max-width: 22em; }
+  .verdict h2 .bad { color: var(--red); }
+  .vsub { font-size: 15px; color: var(--muted); }
+  .flagrow { display: flex; gap: 12px; align-items: flex-end; height: 34px; margin-top: 8px; }
+  .fl { position: relative; width: 15px; height: 34px; display: block; }
+  .fl i { position: absolute; left: 0; bottom: 0; width: 2px; height: 100%; border-radius: 1px; background: #3a3a3a; }
+  .fl.pass i { transform-origin: bottom; transform: scaleY(0.42); }
+  .fl.fail i { background: var(--ink); }
+  .fl b { position: absolute; left: 2px; top: 0; width: 12px; height: 9px; background: var(--red); clip-path: polygon(0 0, 100% 0, 76% 50%, 100% 100%, 0 100%);
+    transform-origin: left center; transform: scaleX(0); transition: transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1); transition-delay: calc(var(--n) * 60ms + 300ms); }
+  .live .fl.fail b { transform: scaleX(1); }
+  .fl::after { content: attr(data-tip); position: absolute; left: 50%; bottom: 42px; transform: translateX(-50%); white-space: nowrap; pointer-events: none; z-index: 3;
+    background: #1b1b1b; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 4px 8px; font-size: 11.5px; color: var(--ink); opacity: 0; transition: opacity 150ms ease; }
+  .fl:hover::after, .fl:focus-visible::after { opacity: 1; }
+  .vmeta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--mono); font-size: 12px; color: var(--faint); margin-top: 6px; }
+  .vmeta b { color: var(--muted); font-weight: 500; }
+  .vnotes { display: grid; gap: 6px; margin-top: 4px; font-size: 13.5px; color: var(--muted); }
+  .vnotes .closing { color: var(--ink); }
+
+  /* fix these first / comparison */
+  .fixes { display: grid; gap: 10px; }
+  details.item { border-radius: 12px; background: var(--panel); border: 1px solid var(--line); transition: border-color 200ms ease; }
+  details.item[open] { border-color: rgba(255,255,255,0.16); }
+  details.item.failed { border-left: 2px solid var(--red); }
+  details.item summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 14px; padding: 16px 18px; align-items: start; }
+  details.item summary::-webkit-details-marker { display: none; }
+  .sev { font-family: var(--mono); font-size: 11px; padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
+  .sev.critical { color: var(--red-ink); background: rgba(255,59,63,0.12); } .sev.high { color: var(--amber); background: rgba(242,179,61,0.12); }
+  .sev.medium { color: var(--muted); background: #1c1c1c; } .sev.none { color: var(--faint); background: #151515; }
+  .sev.held { color: var(--pass); background: rgba(63,192,122,0.12); }
+  .s-title { font-size: 15.5px; } .s-title small { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: 8px; }
+  .s-ev { grid-column: 2; font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .s-fix { grid-column: 2; font-size: 13.5px; color: #cfcfcc; } .s-fix b { color: var(--pass); font-weight: 500; margin-right: 6px; }
+  .chev { color: var(--faint); transition: transform 200ms ease; font-size: 14px; } details[open] .chev { transform: rotate(90deg); }
+  .detail { padding: 4px 18px 20px; display: grid; gap: 14px; border-top: 1px solid var(--line); margin: 0 18px; padding-left: 0; padding-right: 0; }
+  .dl { display: grid; gap: 6px; } .dl > span { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .quote { padding: 12px 14px; border-radius: 10px; background: #111; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .quote.att { background: #1a1a1a; }
+  .toollog { border-radius: 10px; background: #070707; border: 1px solid var(--line); }
+  .tl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 14px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .tl + .tl { border-top: 1px solid rgba(255,255,255,0.05); }
+  .tl .call { color: var(--ink); overflow-wrap: anywhere; } .tl .out { color: var(--faint); }
+  .tl.harm { background: rgba(255,59,63,0.08); } .tl.harm .out { color: var(--red-ink); } .tl.blocked .out { color: var(--pass); }
+  .tl .det { grid-column: 1 / -1; color: var(--faint); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .judges { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .jb { border-radius: 10px; border: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 6px; font-size: 13.5px; color: var(--muted); }
+  .jb .h { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 21px; padding: 0 7px; border-radius: 4px; font-family: var(--mono); font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.pass { color: var(--pass); background: rgba(63,192,122,0.12); } .badge.fail { color: var(--red-ink); background: rgba(255,59,63,0.13); }
+  .badge.grey { color: var(--muted); background: #1c1c1c; }
+  .rulefix { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13.5px; } .rulefix div { display: grid; gap: 4px; }
+  .rulefix span { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+
+  /* coverage */
+  .cover { padding: 6px 20px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
+  .cv { display: grid; grid-template-columns: 52px minmax(0, 1fr) 120px; gap: 10px; align-items: center; min-height: 44px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 14px; }
+  .cv .id { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .cv .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cv .bar { display: flex; gap: 3px; height: 7px; } .cv .bar i { flex: 1; border-radius: 2px; background: #4a4a4a; } .cv .bar i.f { background: var(--red); }
+  .cv .nt { font-family: var(--mono); font-size: 11px; color: var(--faint); text-align: right; }
+  .cv .ct { grid-column: 3; font-family: var(--mono); font-size: 11px; color: var(--faint); text-align: right; margin-top: -6px; }
+
+  /* all tests */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--ink); color: #000; border-color: var(--ink); }
+  .sel { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); background: #0b0b0b; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-weight: 400; font-size: 12px; color: var(--faint); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 0 14px; height: 46px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  tr.row { cursor: pointer; } tr.row:hover td { background: #0e0e0e; }
+  td.mono { color: var(--faint); font-size: 12px; }
+  .tablewrap { overflow: hidden; }
+  .nomatch { padding: 22px; color: var(--muted); font-size: 14px; }
+
+  /* next + settings */
+  .next { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 22px 24px; }
+  .next h3 { margin: 0 0 6px; font-size: 19px; font-weight: 500; letter-spacing: -0.02em; } .next p { margin: 0; font-size: 14px; color: var(--muted); }
+  .next .btn { height: 42px; padding: 0 18px; border-radius: 999px; justify-content: center; }
+  details.settings summary { list-style: none; cursor: pointer; padding: 16px 20px; display: flex; justify-content: space-between; font-size: 15px; }
+  details.settings summary::-webkit-details-marker { display: none; }
+  .kv { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 0 20px; padding: 0 20px 18px; font-size: 13.5px; }
+  .kv dt { color: var(--faint); font-family: var(--mono); font-size: 12px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.05); }
+  .kv dd { margin: 0; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.05); color: var(--ink); overflow-wrap: anywhere; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; padding: 10px 16px; border-radius: 10px; background: #1b1b1b; border: 1px solid var(--line);
+    font-size: 13.5px; transition: opacity 200ms ease, transform 200ms var(--ease); pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .rise { opacity: 0; transform: translateY(14px); transition: opacity 600ms var(--ease), transform 700ms var(--ease); }
+    .rise.in { opacity: 1; transform: none; }
+  }
+  @media (max-width: 860px) {
+    header { gap: 16px; padding: 0 16px; } nav { display: none; }
+    main { padding: 24px 16px 96px; }
+    .actions { margin-left: 0; width: 100%; } .actions .btn { flex: 1; justify-content: center; }
+    .verdict { padding: 22px 18px; } .flagrow { gap: 7px; } .fl { width: 12px; }
+    .judges, .rulefix { grid-template-columns: 1fr; }
+    .cover { grid-template-columns: 1fr; padding: 4px 16px; }
+    .cv { grid-template-columns: 48px minmax(0, 1fr) 90px; }
+    .t-risk, .t-model { display: none; }
+    .next { grid-template-columns: 1fr; }
+    .kv { grid-template-columns: 1fr; } .kv dt { padding-bottom: 0; } .kv dd { border-top: 0; padding-top: 2px; }
+    details.item summary { grid-template-columns: auto minmax(0, 1fr); } .chev { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="home.html"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</a>
+  <nav aria-label="Main"><a href="home.html#scene">How it works</a><a href="scan.html">Scan</a><a href="#" aria-current="page">Results</a><a href="#">Docs</a></nav>
+</header>
+
+<main id="main"></main>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="scan-data.js"></script>
+<script>
+(() => {
+  const q = new URLSearchParams(location.search), key = q.get('scan') === 'hardened' ? 'hardened' : 'weak', other = key === 'weak' ? 'hardened' : 'weak';
+  const M = SCAN_META[key], T = SCAN_DATA[key], label = { weak: 'Weak bot', hardened: 'Protected bot' };
+  const RISKS = [['LLM01', 'Prompt injection'], ['LLM02', 'Sensitive information disclosure'], ['LLM03', 'Supply chain'], ['LLM04', 'Data and model poisoning'],
+    ['LLM05', 'Improper output handling'], ['LLM06', 'Excessive agency'], ['LLM07', 'System prompt leakage'], ['LLM08', 'Vector and embedding weaknesses'],
+    ['LLM09', 'Misinformation'], ['LLM10', 'Unbounded consumption']];
+  const SEV = { critical: 0, high: 1, medium: 2 };
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // counts, all computed from the tests
+  const attacks = T.filter(t => t.kind === 'negative'), normal = T.filter(t => t.kind === 'positive');
+  const failed = attacks.filter(t => t.status === 'fail').sort((a, b) => SEV[a.sev] - SEV[b.sev]);
+  const crit = failed.filter(t => t.sev === 'critical').length, normalOk = normal.filter(t => t.status === 'pass').length;
+  const tested = new Set(T.map(t => t.risk).filter(Boolean)), untested = RISKS.filter(([id]) => !tested.has(id)).length;
+  const wilson = (k, n, z = 1.96) => { const p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d, h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d; return [Math.max(0, c - h), Math.min(1, c + h)]; };
+  const [lo, hi] = wilson(failed.length, attacks.length), pct = v => Math.round(v * 100) + '%';
+  const harmful = t => tl => t.status === 'fail' && tl.outcome === 'executed' && (t.evidence.includes(tl.tool) || (tl.tool === 'lookup_order' && t.risk === 'LLM02'));
+
+  function detail(t) {
+    const tools = t.tools.length ? `<div class="toollog">${t.tools.map(tl => `<div class="tl ${harmful(t)(tl) ? 'harm' : ''} ${tl.outcome === 'blocked' ? 'blocked' : ''}"><span class="call">${esc(tl.tool)}(${esc(tl.args)})</span><span class="out">${esc(tl.outcome)}${harmful(t)(tl) ? ' · the harm' : ''}</span>${tl.detail ? `<span class="det">${esc(tl.detail.slice(0, 220))}${tl.detail.length > 220 ? '…' : ''}</span>` : ''}</div>`).join('')}</div>` : '<div class="quote" style="color:var(--faint)">No tools were called.</div>';
+    return `<div class="detail">
+      <div class="dl"><span>Message sent</span><div class="quote att">${esc(t.msg)}</div></div>
+      <div class="dl"><span>Bot's reply</span><div class="quote">${esc(t.reply)}</div></div>
+      <div class="dl"><span>Tool log</span>${tools}</div>
+      <div class="judges">
+        <div class="jb"><div class="h">Plain rules <span class="badge ${t.status}">${t.status.toUpperCase()}</span></div>${esc(t.evidence)}</div>
+        <div class="jb"><div class="h">AI judge <span class="badge grey">NOT RUN</span></div>The AI judge did not run on this test. It was added after this scan was recorded.</div>
+      </div>
+      <div class="rulefix"><div><span>Rule</span>${esc(t.rule)}</div><div><span>How to fix</span>${esc(t.fix || '—')}</div></div>
+      <div class="dl"><span>Answered by ${esc(t.model)}</span></div>
+    </div>`;
+  }
+  const sevTag = s => `<span class="sev ${s || 'none'}">${s || 'not rated'}</span>`;
+
+  const head = failed.length
+    ? `<span class="bad">${failed.length} of ${attacks.length}</span> attacks got through. ${crit} ${crit === 1 ? 'was' : 'were'} critical.`
+    : `0 of ${attacks.length} attacks got through. ${untested} of 10 risks were not tested.`;
+
+  const fixesHTML = failed.length
+    ? failed.map(t => `<details class="item failed" id="t-${t.id}"><summary>${sevTag(t.sev)}<span class="s-title">${esc(t.title)}<small>${t.risk}</small></span><span class="chev">›</span><span class="s-ev">${esc(t.evidence)}</span><span class="s-fix"><b>Fix</b>${esc(t.fix)}</span></summary>${detail(t)}</details>`).join('')
+    : SCAN_DATA.weak.filter(t => t.status === 'fail').sort((a, b) => SEV[a.sev] - SEV[b.sev]).map(w => { const t = T.find(x => x.id === w.id); return `<details class="item" id="t-${t.id}"><summary><span class="sev held">held</span><span class="s-title">${esc(t.title)}<small>${t.risk}</small></span><span class="chev">›</span><span class="s-ev">got through on the weak bot, held here: ${esc(t.evidence)}</span></summary>${detail(t)}</details>`; }).join('');
+
+  const coverHTML = RISKS.map(([id, nm]) => {
+    const mine = T.filter(t => t.risk === id), f = mine.filter(t => t.status === 'fail').length;
+    const right = mine.length ? `<span class="bar">${mine.map((t, k) => `<i class="${k < f ? 'f' : ''}"></i>`).join('')}</span><span class="ct">${f ? `${f} of ${mine.length} got through` : `${mine.length} held`}</span>` : '<span class="nt">not tested</span>';
+    return `<div class="cv"><span class="id">${id}</span><span class="nm">${nm}</span>${right}</div>`;
+  }).join('');
+
+  const st = M.settings;
+  document.getElementById('main').innerHTML = `
+    <div class="titlerow rise">
+      <div><div class="crumb"><a href="#">Results</a> / scan #${M.id}</div><h1>${label[key]} · scan #${M.id}</h1></div>
+      <div class="actions"><button class="btn ghost" id="copy">Copy link</button><button class="btn solid" id="dl">Download report</button></div>
+    </div>
+
+    <section class="card verdict rise" style="--glow:${failed.length ? 0.14 : 0.04}" aria-labelledby="v-h">
+      <h2 id="v-h">${head}</h2>
+      <div class="vsub">${normalOk} of ${normal.length} normal requests worked.</div>
+      <div class="flagrow" id="flagrow">${T.map((t, i) => `<a class="fl ${t.status}" href="#t-${t.id}" style="--n:${i}" data-tip="${t.status === 'fail' ? 'got through' : 'held'} · ${esc(t.title)}" aria-label="Test ${i + 1}: ${t.status === 'fail' ? 'got through' : 'held'}"><i></i><b></b></a>`).join('')}</div>
+      <div class="vmeta"><span>Recorded <b>${M.started}</b></span><span><b>${M.duration} s</b></span><span>Models <b>${M.models.join(', ')}</b></span><span>Suite <b>v${st.suite_version}</b></span></div>
+      <div class="vnotes">
+        <span>Attack success rate ${pct(failed.length / attacks.length)} (95% range ${pct(lo)} to ${pct(hi)}). Small sample: ${attacks.length} attacks.</span>
+        <span>${untested} of 10 OWASP risks were not tested by this suite.</span>
+        <span>No AI judge ran on this scan. Verdicts come from the plain rules.</span>
+        <span class="closing">This is not a guarantee of security. It only reports what these tests checked.</span>
+      </div>
+    </section>
+
+    <div class="sec-head rise"><h2>${failed.length ? 'Fix these first' : 'Compared with the weak bot'}</h2><span>${failed.length ? `${failed.length} failed · critical first` : '5 attacks that got through on the weak bot'}</span></div>
+    <div class="fixes rise">${fixesHTML}</div>
+
+    <div class="sec-head rise"><h2>What was and wasn't tested</h2><span>OWASP Top 10 for LLM apps · 2025</span></div>
+    <section class="card cover rise">${coverHTML}</section>
+
+    <div class="sec-head rise"><h2>All tests</h2><span id="t-count">16 tests</span></div>
+    <div class="filters rise" role="group" aria-label="Filter tests">
+      <button class="chip" data-f="all" aria-pressed="true">All</button><button class="chip" data-f="fail" aria-pressed="false">Got through</button><button class="chip" data-f="pass" aria-pressed="false">Held</button>
+      <select class="sel" id="f-risk" aria-label="Risk"><option value="">Every risk</option>${[...tested].sort().map(r => `<option>${r}</option>`).join('')}<option value="normal">Normal requests</option></select>
+      <select class="sel" id="f-sev" aria-label="Severity"><option value="">Every severity</option><option>critical</option><option>high</option><option>medium</option><option value="none">not rated</option></select>
+    </div>
+    <section class="card tablewrap rise"><table><thead><tr><th>Result</th><th>Test</th><th class="t-risk">Risk</th><th>Severity</th><th class="t-model">Model</th></tr></thead><tbody id="tbody"></tbody></table></section>
+
+    <section class="card next rise">
+      <div><h3>${key === 'weak' ? 'Now scan the protected bot' : 'See what the weak bot let through'}</h3>
+      <p>${key === 'weak' ? 'Same 16 tests, same models (' + M.models.join(', ') + '), with secret protection, order scoping, refund approval and document isolation switched on.' : 'Same 16 tests and the same models answered both scans, so the difference comes from the defenses.'}</p></div>
+      <a class="btn solid" href="${key === 'weak' ? 'scan.html?bot=hardened' : 'results.html?scan=weak'}">${key === 'weak' ? 'Scan the protected bot' : 'Open the weak bot report'}</a>
+    </section>
+
+    <details class="card settings rise"><summary><span>Scan details</span><span class="mono" style="color:var(--faint);font-size:12px">settings this scan ran with</span></summary>
+      <dl class="kv">
+        <dt>Bot</dt><dd>${esc(st.bot_name)} · config v${st.bot_config_version}</dd>
+        <dt>Defenses</dt><dd>${st.bot_defenses.length ? st.bot_defenses.join(', ').replace(/_/g, ' ') : 'none'}</dd>
+        <dt>Models that answered</dt><dd>${M.models.join(', ')}</dd>
+        <dt>Providers</dt><dd>${st.providers.join(' → ')}</dd>
+        <dt>Test suite</dt><dd>v${st.suite_version} · ${st.test_count} tests · ${st.catalog_version}</dd>
+        <dt>Budget</dt><dd>${st.budget.requests} requests · ${st.budget.tokens.toLocaleString()} tokens · ${st.budget.seconds / 60} min</dd>
+        <dt>Planted secret</dt><dd class="mono">${esc(st.canary)}</dd>
+      </dl>
+    </details>`;
+
+  // the table and its filters
+  let fRes = 'all';
+  function table() {
+    const risk = document.getElementById('f-risk').value, sev = document.getElementById('f-sev').value;
+    const rows = T.filter(t => (fRes === 'all' || t.status === fRes) && (!risk || (risk === 'normal' ? t.kind === 'positive' : t.risk === risk)) && (!sev || (sev === 'none' ? !t.sev : t.sev === sev)));
+    document.getElementById('t-count').textContent = `${rows.length} of 16 tests`;
+    document.getElementById('tbody').innerHTML = rows.length ? rows.map(t => `<tr class="row" data-id="${t.id}"><td><span class="badge ${t.status}">${t.status === 'fail' ? 'FAIL' : 'PASS'}</span></td><td>${esc(t.title)}</td><td class="mono t-risk">${t.risk || 'normal'}</td><td>${sevTag(t.sev)}</td><td class="mono t-model">${esc(t.model)}</td></tr><tr class="exp" data-for="${t.id}" hidden><td colspan="5">${detail(t)}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="nomatch">No tests match those filters.</td></tr>`;
+    document.querySelectorAll('tr.row').forEach(r => r.addEventListener('click', () => { const e = document.querySelector(`tr.exp[data-for="${r.dataset.id}"]`); e.hidden = !e.hidden; }));
+  }
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { fRes = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === c)); table(); }));
+  document.getElementById('f-risk').addEventListener('change', table); document.getElementById('f-sev').addEventListener('change', table);
+  table();
+
+  // flags open the matching finding
+  document.querySelectorAll('.fl').forEach(a => a.addEventListener('click', e => { const d = document.querySelector(a.getAttribute('href')); if (d && d.tagName === 'DETAILS') { e.preventDefault(); d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }));
+
+  // copy link and the Markdown report
+  const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1800); };
+  document.getElementById('copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied'); } catch { toast('Copy failed'); } });
+  document.getElementById('dl').addEventListener('click', () => {
+    const md = [`# Redflag scan #${M.id} · ${M.name}`, '', `${head.replace(/<[^>]+>/g, '')}`, `${normalOk} of ${normal.length} normal requests worked.`, '',
+      `Recorded ${M.started} · ${M.duration} s · models: ${M.models.join(', ')} · suite v${st.suite_version}`, '',
+      '## Failures', ...(failed.length ? failed.flatMap(t => [`### ${t.title} (${t.risk}, ${t.sev})`, `- Evidence: ${t.evidence}`, `- Rule: ${t.rule}`, `- How to fix: ${t.fix}`, '']) : ['None in this scan.', '']),
+      '## What was tested', ...RISKS.map(([id, nm]) => { const m = T.filter(t => t.risk === id); return `- ${id} ${nm}: ${m.length ? `${m.filter(t => t.status === 'fail').length} of ${m.length} got through` : 'not tested'}`; }), '',
+      '## The AI judge', 'No AI judge ran on this scan. Verdicts come from the plain rules.', '',
+      'This is not a guarantee of security. It only reports what these tests checked.'].join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `redflag-scan-${M.id}.md`; a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  // arrival
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.08 });
+  document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 70}ms`; io.observe(el); });
+  requestAnimationFrame(() => document.getElementById('flagrow').classList.add('live'));
+  document.title = `${label[key]} · scan #${M.id} · Redflag`;
+})();
+</script>
+</body>
+</html>

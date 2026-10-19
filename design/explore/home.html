@@ -741,10 +741,10 @@
     <div class="dash" id="dash" data-ui>
       <div class="dash-bar">
         <span class="dots"><i></i><i></i><i></i></span>
-        <span class="crumb">Results <span>/</span> <b id="d-scan">Scan #4 · acme-weak</b></span>
+        <span class="crumb">Results <span>/</span> <b id="d-scan">Scan #4 · weak bot</b></span>
         <div class="seg" role="tablist" aria-label="Which demo bot">
           <button role="tab" aria-selected="true" data-mode="weak">Weak bot</button>
-          <button role="tab" aria-selected="false" data-mode="hardened">Hardened bot</button>
+          <button role="tab" aria-selected="false" data-mode="hardened">Protected bot</button>
         </div>
         <span class="dash-actions"><span class="ghost">Copy link</span><span class="solid">Download report</span></span>
       </div>
@@ -1362,7 +1362,7 @@ document.querySelectorAll('#risks .dots[data-pass]').forEach((el, row) => {
     ['LLM09', 'Misinformation'], ['LLM10', 'Unbounded consumption']];
   const SCANS = {
     weak: {
-      crumb: 'Scan #4 · acme-weak', failed: [4, 6, 10, 11, 12],
+      crumb: 'Scan #4 · weak bot', failed: [4, 6, 10, 11, 12],
       head: '<span class="bad">5 of 13</span> attacks got through. 4 were critical.',
       meta: '3 of 3 normal requests worked · 19 Oct 2026 · 25.7 s · gemini-3.5-flash-lite, gpt-oss-20b',
       fixes: [
@@ -1374,7 +1374,7 @@ document.querySelectorAll('#risks .dots[data-pass]').forEach((el, row) => {
       ],
     },
     hardened: {
-      crumb: 'Scan #5 · acme-hardened', failed: [],
+      crumb: 'Scan #5 · protected bot', failed: [],
       head: '0 of 13 attacks got through. 5 of 10 risks were not tested.',
       meta: '3 of 3 normal requests worked · 19 Oct 2026 · 45.1 s · gemini-3.5-flash-lite, gpt-oss-20b',
       fixes: [],
@@ -1393,7 +1393,7 @@ document.querySelectorAll('#risks .dots[data-pass]').forEach((el, row) => {
     $('fixes').innerHTML = weak
       ? S.fixes.map(([sev, t, r, e, f], n) => `<li style="--n:${n}"><span class="sev ${sev === 'high' ? 'high' : ''}">${sev}</span><span class="t">${t}<span>${r}</span></span><span class="e">${e}</span><span class="f"><b>Fix</b>${f}</span></li>`).join('')
       : `<li class="empty" style="--n:0">No attack got through. Not a clean bill of health: the five risks marked "not tested" were never tried. Here is what changed from the weak bot:</li>` +
-        SCANS.weak.fixes.map(([sev, t, r], n) => `<li style="--n:${n + 1}"><span class="sev held">held</span><span class="t">${t}<span>${r}</span></span><span class="e">got through on acme-weak, held on acme-hardened</span></li>`).join('');
+        SCANS.weak.fixes.map(([sev, t, r], n) => `<li style="--n:${n + 1}"><span class="sev held">held</span><span class="t">${t}<span>${r}</span></span><span class="e">got through on the weak bot, held on the protected bot</span></li>`).join('');
     $('cover').innerHTML = RISKS.map(([id, nm, n, f]) => {
       const failed = weak ? (f || 0) : 0;
       const right = n ? `<span class="bar">${Array.from({ length: n }, (_, k) => `<i class="${k < failed ? 'f' : ''}"></i>`).join('')}</span>` : '<span class="nt">not tested</span>';
