@@ -54,6 +54,11 @@ jobs:
           -e FRONTEND_ORIGIN=http://localhost:3000
           redflag-backend
           python -c "import redflag_backend.main"
+      - name: The production image must carry the bots and load them without errors
+        run: >
+          docker run --rm
+          redflag-backend
+          python -c "from redflag_backend.sandbox.loader import load_bots; r = load_bots(); assert not r.errors, r.errors; assert {'acme-weak', 'acme-hardened'} <= set(r.bots), sorted(r.bots)"
 
   frontend:
     runs-on: ubuntu-latest

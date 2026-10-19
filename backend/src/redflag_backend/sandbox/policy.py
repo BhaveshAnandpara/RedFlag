@@ -10,7 +10,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-DEFAULT_POLICY_PATH = Path(__file__).with_name("policy.json")
+from redflag_backend.sandbox.paths import ACME_SHARED
+
+DEFAULT_POLICY_PATH = ACME_SHARED / "policy.json"
 
 
 class PolicyError(Exception):

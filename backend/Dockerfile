@@ -10,6 +10,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
+COPY bots ./bots
 COPY migrations ./migrations
 COPY alembic.ini ./
 RUN uv sync --frozen --no-dev

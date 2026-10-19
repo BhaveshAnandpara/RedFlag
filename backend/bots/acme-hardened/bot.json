@@ -1,0 +1,8 @@
+{
+  "id": "acme-hardened",
+  "name": "Acme Store support bot (hardened)",
+  "description": "The same shop bot with defenses switched on: secret protection, order scoping, refund approval and document isolation.",
+  "shared": "acme_store",
+  "defenses": ["secret_protection", "order_scoping", "refund_approval", "document_isolation"],
+  "config_version": 1
+}

@@ -15,8 +15,9 @@ from redflag_backend.llm.budget import BudgetCaps, SessionBudget
 from redflag_backend.llm.router import Attempt, Router, RouterFailure
 from redflag_backend.llm.types import LLMRequest, Message
 from redflag_backend.sandbox.attacks import ATTACKS, Attack
-from redflag_backend.sandbox.bot import ALL_DEFENSES, TargetReply, build_bot
+from redflag_backend.sandbox.bot import TargetReply
 from redflag_backend.sandbox.checks import evaluate
+from redflag_backend.sandbox.loader import BotDefinition, load_bots
 from redflag_backend.sandbox.policy import Policy, default_policy
 
 # Plenty for four attacks on two bots, each with a few tool steps, and still a hard limit.
@@ -99,7 +100,7 @@ async def _run_once(
     budget: SessionBudget,
     attack: Attack,
     bot_name: str,
-    defenses: frozenset[str],
+    bot: BotDefinition,
     policy: Policy,
     now: Callable[[], datetime],
 ) -> Run:
@@ -109,7 +110,7 @@ async def _run_once(
     for _ in range(1 + RETRIES):
         model = RouterModel(router, budget)
         try:
-            result = await build_bot(model, defenses).send(attack.message, attack.approvals)
+            result = await bot.create(model).send(attack.message, attack.approvals)
             error = None
             break
         except RouterFailure as failure:
@@ -117,7 +118,7 @@ async def _run_once(
     verdict = evaluate(attack.id, result, policy, attack.approvals, error)
     return Run(
         bot=bot_name,
-        defenses=sorted(defenses),
+        defenses=sorted(bot.defenses),
         reply=result.reply if result else "",
         tool_calls=[
             ToolRecord(tool=c.tool, arguments=c.arguments, outcome=c.outcome, detail=c.detail)
@@ -141,14 +142,14 @@ async def record_all(
     router: Router, now: Callable[[], datetime] = lambda: datetime.now(UTC)
 ) -> Recordings:
     policy = default_policy()
+    registry = load_bots()
+    weak, hardened = registry.bots["acme-weak"], registry.bots["acme-hardened"]
     budget = SessionBudget(RECORDING_CAPS, started=time.time())
     attacks: list[AttackRecord] = []
     for attack in ATTACKS:
         runs = {
-            "weak": await _run_once(router, budget, attack, "weak", frozenset(), policy, now),
-            "hardened": await _run_once(
-                router, budget, attack, "hardened", ALL_DEFENSES, policy, now
-            ),
+            "weak": await _run_once(router, budget, attack, "weak", weak, policy, now),
+            "hardened": await _run_once(router, budget, attack, "hardened", hardened, policy, now),
         }
         attacks.append(
             AttackRecord(

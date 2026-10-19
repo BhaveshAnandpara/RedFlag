@@ -1,0 +1,8 @@
+{
+  "id": "acme-weak",
+  "name": "Acme Store support bot (weak)",
+  "description": "A support bot for a made-up online shop with no protection added. It is meant to be attacked.",
+  "shared": "acme_store",
+  "defenses": [],
+  "config_version": 1
+}
