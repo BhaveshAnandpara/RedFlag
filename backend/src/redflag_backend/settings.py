@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     judge_budget_max_requests: int = 60
     judge_budget_max_tokens: int = 200_000
     judge_budget_max_seconds: float = 1800.0
+    # Redflag's own public host name (for example redflag-xyz.onrender.com). A bot endpoint that
+    # points at it is refused, so Redflag cannot be aimed at itself.
+    public_backend_host: str | None = None
     # A running scan with no progress for this long is treated as interrupted.
     scan_stale_seconds: float = 300.0
     # Free tiers allow only a few requests a minute. When every model is rate-limited, a scan

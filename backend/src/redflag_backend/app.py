@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,6 +25,9 @@ from redflag_backend.scan.runner import ScanRunner
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.suite import load_suite
 from redflag_backend.settings import Settings
+from redflag_backend.setups.api import build_setup_router
+from redflag_backend.setups.store import SetupStore
+from redflag_backend.targets.http_target import Resolver
 
 
 def create_app(
@@ -32,6 +36,8 @@ def create_app(
     clock: Callable[[], float] | None = None,
     bot_providers: Sequence[Provider] | None = None,
     bots_dir: Path | None = None,
+    target_transport: httpx.AsyncBaseTransport | None = None,
+    target_resolver: Resolver | None = None,
 ) -> FastAPI:
     now = clock or time.time
     engine = create_engine(
@@ -100,6 +106,18 @@ def create_app(
             runner,
             active_bot_providers,
             catalog,
+        )
+    )
+
+    # Setups: what the owner tells Redflag about their own bot. Never calls an address inside.
+    own_hosts = [settings.public_backend_host] if settings.public_backend_host else []
+    app.include_router(
+        build_setup_router(
+            settings,
+            SetupStore(engine, clock=now),
+            transport=target_transport,
+            resolver=target_resolver,
+            blocked_hosts=own_hosts,
         )
     )
 
