@@ -52,7 +52,9 @@ def upgrade() -> None:
     # Which setup version a scan ran with. Scans of the demo bots and older scans have none.
     op.add_column(
         "scans",
-        sa.Column("setup_version_id", sa.Integer(), sa.ForeignKey("setup_versions.id"), nullable=True),
+        sa.Column(
+            "setup_version_id", sa.Integer(), sa.ForeignKey("setup_versions.id"), nullable=True
+        ),
     )
 
 
