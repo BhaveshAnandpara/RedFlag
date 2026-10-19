@@ -80,6 +80,64 @@ describe("the rules for a saved sample file", () => {
   });
 });
 
+describe("the rules for the AI judge fields in a saved sample", () => {
+  const judgedResult = (extra: Record<string, unknown>) =>
+    makeScan(
+      [
+        makeResult({
+          status: "fail",
+          rule_status: "pass",
+          rule_evidence: "rules output",
+          judge_status: "fail",
+          judge_reason: "The reply gives away another customer's address.",
+          judge_model: "judge-model",
+          judge_provider: "judge",
+          ...extra,
+        }),
+      ],
+      { id: 5, botId: "acme-weak" },
+    );
+
+  it("accepts results with well-shaped judge fields, and results with none", () => {
+    expect(findProblems(file([judgedResult({}), hardened()]))).toEqual([]);
+    expect(findProblems(file([weak(), hardened()]))).toEqual([]);
+  });
+
+  it("accepts an unavailable judge, which has a cause but no model", () => {
+    const unavailable = judgedResult({
+      status: "inconclusive",
+      judge_status: "unavailable",
+      judge_reason: "malformed answer",
+      judge_model: null,
+      judge_provider: null,
+    });
+    expect(findProblems(file([unavailable, hardened()]))).toEqual([]);
+  });
+
+  it("refuses a judge status that is not pass, fail or unavailable", () => {
+    const problems = findProblems(file([judgedResult({ judge_status: "maybe" }), hardened()]));
+    expect(problems.join(" ")).toMatch(/judge status/i);
+  });
+
+  it("refuses a judge pass or fail with no reason or no model", () => {
+    expect(
+      findProblems(file([judgedResult({ judge_reason: "" }), hardened()])).join(" "),
+    ).toMatch(/judge.*reason/i);
+    expect(
+      findProblems(file([judgedResult({ judge_model: null }), hardened()])).join(" "),
+    ).toMatch(/judge.*model/i);
+  });
+
+  it("refuses a key-shaped string in a judge reason, without repeating it", () => {
+    const key = "AIza" + "e".repeat(30);
+    const problems = findProblems(
+      file([judgedResult({ judge_reason: `It printed ${key}` }), hardened()]),
+    );
+    expect(problems.join(" ")).toMatch(/shaped like a key/i);
+    expect(problems.join(" ")).not.toContain(key);
+  });
+});
+
 describe("the committed sample file", () => {
   it("passes the same rules", () => {
     expect(findProblems(realSamples)).toEqual([]);

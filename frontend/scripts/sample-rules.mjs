@@ -12,6 +12,7 @@ const KEY_SHAPES = [
 ];
 
 const VERDICTS = new Set(["pass", "fail", "inconclusive"]);
+const JUDGE_STATES = new Set(["pass", "fail", "unavailable"]);
 
 /**
  * Everything wrong with a sample file, as plain sentences. An empty list means it is fine.
@@ -52,6 +53,21 @@ export function findProblems(data) {
       }
       if (VERDICTS.has(result.status) && (!result.model || !result.provider)) {
         problems.push(`Scan #${id}: the result for ${result.test_id} has a verdict but no model.`);
+      }
+      // The AI judge's fields are optional (scans from before the judge have none), but when
+      // they are there they must be well shaped.
+      const judge = result.judge_status;
+      if (judge !== undefined && judge !== null) {
+        if (!JUDGE_STATES.has(judge)) {
+          problems.push(`Scan #${id}: the result for ${result.test_id} has an unknown judge status.`);
+        } else {
+          if (!result.judge_reason) {
+            problems.push(`Scan #${id}: the judge reason for ${result.test_id} is missing.`);
+          }
+          if (judge !== "unavailable" && (!result.judge_model || !result.judge_provider)) {
+            problems.push(`Scan #${id}: the judge verdict for ${result.test_id} has no model.`);
+          }
+        }
       }
     }
   }
