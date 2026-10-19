@@ -35,6 +35,14 @@ export type ScanResult = {
   // and are shown as "not rated".
   severity?: Severity | null;
   remediation?: string | null;
+  // The two sides of the combined `status` and `evidence`, saved since M5. Scans from before
+  // the judge, and tests that errored or did not apply, have none (null or missing).
+  rule_status?: "pass" | "fail" | "inconclusive" | null;
+  rule_evidence?: string | null;
+  judge_status?: "pass" | "fail" | "unavailable" | null;
+  judge_reason?: string | null;
+  judge_model?: string | null;
+  judge_provider?: string | null;
 };
 
 export type Severity = "critical" | "high" | "medium";
@@ -63,6 +71,9 @@ export type ScanSettings = {
   test_count: number;
   canary: string;
   providers: string[];
+  // Recorded since M5: which prompt version and which providers the AI judge ran with.
+  judge_prompt_version?: number;
+  judge_providers?: string[];
   budget: { requests: number; tokens: number; seconds: number; concurrency: number };
 };
 

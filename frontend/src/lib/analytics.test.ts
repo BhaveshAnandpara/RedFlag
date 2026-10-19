@@ -341,3 +341,163 @@ describe("the banner colour", () => {
     expect(overallTone(everyRiskPassed())).toBe("green");
   });
 });
+
+// --- the AI judge (M5) -----------------------------------------------------------------------
+
+import { judgeState, judgeSummary, ruleOutput } from "./analytics";
+
+const judged = (
+  rule: "pass" | "fail" | "inconclusive",
+  judge: "pass" | "fail" | "unavailable",
+  combined: "pass" | "fail" | "inconclusive",
+) =>
+  makeResult({
+    status: combined,
+    rule_status: rule,
+    rule_evidence: `rules said ${rule}`,
+    judge_status: judge,
+    judge_reason: `judge said ${judge}`,
+    judge_model: "judge-model",
+    judge_provider: "judge",
+  });
+
+describe("a result's judge state and plain-rules output", () => {
+  it("reads the judge's own answer", () => {
+    expect(judgeState(judged("pass", "fail", "fail"))).toBe("fail");
+    expect(judgeState(judged("pass", "pass", "pass"))).toBe("pass");
+    expect(judgeState(judged("pass", "unavailable", "inconclusive"))).toBe("unavailable");
+  });
+
+  it("is 'not run' for old scans, errors and tests that did not apply", () => {
+    expect(judgeState(makeResult({ status: "pass" }))).toBe("not_run");
+    expect(judgeState(makeResult({ status: "error", judge_status: null }))).toBe("not_run");
+  });
+
+  it("falls back to the combined result for the rules' output on old results", () => {
+    expect(ruleOutput(makeResult({ status: "fail", evidence: "old evidence" }))).toEqual({
+      status: "fail",
+      evidence: "old evidence",
+    });
+    expect(ruleOutput(judged("pass", "fail", "fail"))).toEqual({
+      status: "pass",
+      evidence: "rules said pass",
+    });
+  });
+});
+
+describe("what the judge changed", () => {
+  const results = [
+    judged("pass", "fail", "fail"), // judge caught what the rules passed
+    judged("pass", "fail", "fail"),
+    judged("fail", "pass", "fail"), // rules caught what the judge passed
+    judged("pass", "pass", "pass"),
+    judged("pass", "unavailable", "inconclusive"),
+    makeResult({ status: "error" }),
+  ];
+
+  it("counts judge fails the rules had passed, rule fails the judge had passed, and outages", () => {
+    expect(judgeSummary(results)).toEqual({
+      ran: true,
+      judged: 5,
+      passed: 2,
+      failed: 2,
+      unavailable: 1,
+      notRun: 1,
+      judgeCaught: 2,
+      rulesCaught: 1,
+      disagreements: 3,
+    });
+  });
+
+  it("says the judge did not run on an old scan", () => {
+    const summary = judgeSummary(many(3, "pass"));
+    expect(summary.ran).toBe(false);
+    expect(summary.notRun).toBe(3);
+  });
+});
+
+describe("the conclusion with a judge", () => {
+  const scan = makeScan(
+    [...results(), ...many(2, "pass", { risk: "LLM01" })],
+    {},
+  );
+  function results() {
+    return [judged("pass", "fail", "fail"), judged("pass", "pass", "pass"), judged("pass", "unavailable", "inconclusive")];
+  }
+
+  it("says what the judge caught, how many judgments were unavailable, and that it is unchecked", () => {
+    const text = conclusionText(scan);
+    expect(text).toContain("The AI judge failed 1 test the plain rules had passed.");
+    expect(text).toContain("1 AI judge verdict was unavailable");
+    expect(text).toContain("has not been checked for accuracy");
+  });
+
+  it("says no judge ran on a scan from before the judge", () => {
+    const text = conclusionText(makeScan(many(3, "pass")));
+    expect(text).toContain("No AI judge ran on this scan");
+    expect(text).not.toContain("has not been checked for accuracy");
+  });
+
+  it("never says the bot is safe, secure or ready", () => {
+    expect(conclusionText(scan)).not.toMatch(/\b(safe|secure|ready)\b/i);
+  });
+
+  it("keeps the banner yellow, not green, when a judge verdict was unavailable", () => {
+    const every = ["LLM01", "LLM02", "LLM03", "LLM04", "LLM05", "LLM06", "LLM07", "LLM08", "LLM09", "LLM10"];
+    const results = every.map((risk, i) =>
+      i === 0 ? { ...judged("pass", "unavailable", "inconclusive"), risk } : { ...judged("pass", "pass", "pass"), risk },
+    );
+    expect(overallTone(makeScan(results))).toBe("yellow");
+    expect(overallTone(makeScan(results.map((r, i) => (i === 0 ? { ...judged("pass", "pass", "pass"), risk: every[0] } : r))))).toBe("green");
+  });
+});
+
+describe("comparing a judged scan with an unjudged one", () => {
+  it("warns that the two are not like for like", () => {
+    const withJudge = makeScan([judged("pass", "pass", "pass")], { id: 1 });
+    const without = makeScan([makeResult({ status: "pass" })], { id: 2 });
+    expect(compareScans(withJudge, without).judgeStatement).toMatch(/not like for like/i);
+    expect(compareScans(without, withJudge).judgeStatement).toMatch(/not like for like/i);
+  });
+
+  it("is quiet when both had a judge or neither did", () => {
+    const a = makeScan([judged("pass", "pass", "pass")], { id: 1 });
+    const b = makeScan([judged("pass", "pass", "pass")], { id: 2 });
+    const c = makeScan([makeResult()], { id: 3 });
+    const d = makeScan([makeResult()], { id: 4 });
+    expect(compareScans(a, b).judgeStatement).toBeNull();
+    expect(compareScans(c, d).judgeStatement).toBeNull();
+  });
+});
+
+describe("the report with a judge", () => {
+  const scan = makeScan([
+    judged("pass", "fail", "fail"),
+    judged("fail", "pass", "fail"),
+    judged("pass", "unavailable", "inconclusive"),
+    judged("pass", "pass", "pass"),
+  ]);
+  const report = buildReport(scan);
+
+  it("has an AI judge section with the counts and the unchecked line", () => {
+    expect(report).toContain("## The AI judge");
+    expect(report).toContain("has not been checked for accuracy");
+    expect(report).toMatch(/unavailable/i);
+  });
+
+  it("shows both outputs for each failure", () => {
+    expect(report).toContain("Plain rules (PASS): rules said pass");
+    expect(report).toContain("AI judge (FAIL): judge said fail");
+    expect(report).toContain("Plain rules (FAIL): rules said fail");
+  });
+
+  it("counts the disagreements", () => {
+    expect(report).toContain("2 tests where the plain rules and the AI judge disagreed");
+  });
+
+  it("says no judge ran for an old scan and still never says safe", () => {
+    const old = buildReport(makeScan(many(2, "pass")));
+    expect(old).toContain("No AI judge ran on this scan");
+    expect(report).not.toMatch(/\b(safe|secure|ready)\b/i);
+  });
+});

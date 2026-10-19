@@ -1,6 +1,15 @@
 // The Markdown report. It lists everything the scan did, including what failed, what could not
 // be decided and what was not tested, and it ends with a plain line that it is no guarantee.
-import { CLOSING_LINE, conclusion } from "@/lib/analytics";
+import {
+  CLOSING_LINE,
+  NO_JUDGE_LINE,
+  UNCHECKED_JUDGE_LINE,
+  conclusion,
+  judgeState,
+  judgeSummary,
+  ruleOutput,
+  type JudgeState,
+} from "@/lib/analytics";
 import type { ScanDetail, ScanResult, Status } from "@/lib/scan";
 
 const STATUS_WORD: Record<Status, string> = {
@@ -9,6 +18,13 @@ const STATUS_WORD: Record<Status, string> = {
   inconclusive: "INCONCLUSIVE",
   error: "ERROR",
   not_applicable: "NOT APPLICABLE",
+};
+
+const JUDGE_WORD: Record<JudgeState, string> = {
+  pass: "PASS",
+  fail: "FAIL",
+  unavailable: "UNAVAILABLE",
+  not_run: "NOT RUN",
 };
 
 const cell = (text: string) => text.replace(/\|/g, "\\|").replace(/\n/g, " ");
@@ -53,11 +69,32 @@ export function buildReport(detail: ScanDetail): string {
   );
   lines.push(`- Secret planted for this scan: ${settings.canary}`, "");
 
+  const judge = judgeSummary(results);
+  lines.push("## The AI judge", "");
+  if (!judge.ran) {
+    lines.push(NO_JUDGE_LINE, "");
+  } else {
+    lines.push(
+      "Each test was also read by a second AI, which said pass or fail and gave a reason. If either the plain rules or the AI judge failed a test, the test failed.",
+      "",
+    );
+    lines.push(`- Judged: ${judge.judged} tests (${judge.passed} pass, ${judge.failed} fail)`);
+    lines.push(`- Judge verdicts unavailable: ${judge.unavailable}`);
+    lines.push(`- Not judged (errors, not applicable): ${judge.notRun}`);
+    lines.push(
+      `- ${judge.disagreements} ${judge.disagreements === 1 ? "test" : "tests"} where the plain rules and the AI judge disagreed (judge failed ${judge.judgeCaught} the rules passed, rules failed ${judge.rulesCaught} the judge passed)`,
+    );
+    lines.push("", UNCHECKED_JUDGE_LINE, "");
+  }
+
   lines.push("## What was tested", "");
-  lines.push("| Test | Risk | Severity | Result | Model |", "|---|---|---|---|---|");
+  lines.push(
+    "| Test | Risk | Severity | Result | AI judge | Model |",
+    "|---|---|---|---|---|---|",
+  );
   for (const r of results) {
     lines.push(
-      `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${STATUS_WORD[r.status]} | ${r.model ?? "none"} |`,
+      `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${STATUS_WORD[r.status]} | ${JUDGE_WORD[judgeState(r)]} | ${r.model ?? "none"} |`,
     );
   }
   lines.push("");
@@ -69,6 +106,15 @@ export function buildReport(detail: ScanDetail): string {
     lines.push(`### ${r.title}`, "");
     lines.push(`- Severity: ${severityText(r)}`);
     lines.push(`- Evidence: ${r.evidence}`);
+    if (judgeState(r) !== "not_run") {
+      const rules = ruleOutput(r);
+      lines.push(`- Plain rules (${STATUS_WORD[rules.status]}): ${rules.evidence}`);
+      lines.push(
+        `- AI judge (${JUDGE_WORD[judgeState(r)]}): ${r.judge_reason ?? "no reason recorded"}${
+          r.judge_model ? ` [${r.judge_model}]` : ""
+        }`,
+      );
+    }
     lines.push(`- Rule: ${r.rule}`);
     lines.push(`- How to fix: ${r.remediation ?? "No fix note was recorded for this result."}`, "");
   }

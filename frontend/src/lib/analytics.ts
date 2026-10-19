@@ -181,6 +181,7 @@ export function conclusion(scan: ScanDetail): Conclusion {
       `${noResult} of ${summary.risks.length} ${plural(noResult, "risk has", "risks have")} no pass or fail result.`,
     );
   }
+  details.push(...judgeLines(results));
   return { headline, details, closing: CLOSING_LINE };
 }
 
@@ -193,6 +194,8 @@ export type Comparison = {
   sameModels: boolean;
   modelStatement: string;
   suiteVersionsDiffer: boolean;
+  /** Set when only one of the two scans had the AI judge. Null when both or neither did. */
+  judgeStatement: string | null;
   changed: { test_id: string; title: string; from: Status; to: Status }[];
   onlyInFirst: string[];
   onlyInSecond: string[];
@@ -232,6 +235,10 @@ export function compareScans(first: ScanDetail, second: ScanDetail): Comparison 
     sameModels,
     modelStatement,
     suiteVersionsDiffer: first.scan.settings.suite_version !== second.scan.settings.suite_version,
+    judgeStatement:
+      judgeSummary(first.results).ran === judgeSummary(second.results).ran
+        ? null
+        : "Only one of these scans had the AI judge, so they are not like for like: the judge can fail tests that the plain rules pass.",
     changed,
     onlyInFirst: [...firstById].filter(([id]) => !secondById.has(id)).map(([, r]) => r.title),
     onlyInSecond: [...secondById].filter(([id]) => !firstById.has(id)).map(([, r]) => r.title),
@@ -251,4 +258,80 @@ export function overallTone(scan: ScanDetail): Tone {
   const incomplete =
     counts.error + counts.inconclusive > 0 || scan.summary.risks.some((r) => r.state !== "tested");
   return incomplete ? "yellow" : "green";
+}
+
+export type JudgeState = "pass" | "fail" | "unavailable" | "not_run";
+
+/** The AI judge's own answer for a result. Null or missing means it did not run. */
+export function judgeState(result: ScanResult): JudgeState {
+  return result.judge_status ?? "not_run";
+}
+
+/** What the plain rules said on their own. Old results fall back to the combined result. */
+export function ruleOutput(result: ScanResult): { status: Status; evidence: string } {
+  return {
+    status: result.rule_status ?? result.status,
+    evidence: result.rule_evidence ?? result.evidence,
+  };
+}
+
+export type JudgeSummary = {
+  ran: boolean;
+  judged: number;
+  passed: number;
+  failed: number;
+  unavailable: number;
+  notRun: number;
+  /** Tests the judge failed that the plain rules had passed. */
+  judgeCaught: number;
+  /** Tests the plain rules failed that the judge had passed. */
+  rulesCaught: number;
+  /** Tests where both decided pass or fail and disagreed. */
+  disagreements: number;
+};
+
+export function judgeSummary(results: ScanResult[]): JudgeSummary {
+  const state = (r: ScanResult) => judgeState(r);
+  const judgedResults = results.filter((r) => state(r) !== "not_run");
+  const judgeCaught = results.filter(
+    (r) => state(r) === "fail" && r.rule_status === "pass",
+  ).length;
+  const rulesCaught = results.filter(
+    (r) => state(r) === "pass" && r.rule_status === "fail",
+  ).length;
+  return {
+    ran: judgedResults.length > 0,
+    judged: judgedResults.length,
+    passed: results.filter((r) => state(r) === "pass").length,
+    failed: results.filter((r) => state(r) === "fail").length,
+    unavailable: results.filter((r) => state(r) === "unavailable").length,
+    notRun: results.length - judgedResults.length,
+    judgeCaught,
+    rulesCaught,
+    disagreements: judgeCaught + rulesCaught,
+  };
+}
+
+export const NO_JUDGE_LINE =
+  "No AI judge ran on this scan, so only the plain rules decided the results.";
+export const UNCHECKED_JUDGE_LINE =
+  "The AI judge has not been checked for accuracy, so treat its verdicts as unconfirmed.";
+
+/** The sentences about the judge, shared by the conclusion and the report. */
+export function judgeLines(results: ScanResult[]): string[] {
+  const summary = judgeSummary(results);
+  if (!summary.ran) return [NO_JUDGE_LINE];
+  const lines: string[] = [];
+  if (summary.judgeCaught > 0) {
+    lines.push(
+      `The AI judge failed ${summary.judgeCaught} ${plural(summary.judgeCaught, "test", "tests")} the plain rules had passed.`,
+    );
+  }
+  if (summary.unavailable > 0) {
+    lines.push(
+      `${summary.unavailable} AI judge ${plural(summary.unavailable, "verdict was", "verdicts were")} unavailable, so ${plural(summary.unavailable, "that test is", "those tests are")} unclear.`,
+    );
+  }
+  lines.push(UNCHECKED_JUDGE_LINE);
+  return lines;
 }
