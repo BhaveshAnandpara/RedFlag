@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     bot_budget_max_concurrency: int = 1
     # A running scan with no progress for this long is treated as interrupted.
     scan_stale_seconds: float = 300.0
+    # Free tiers allow only a few requests a minute. When every model is rate-limited, a scan
+    # pauses (at least this long, at most the max) and tries again, a few times, before it gives
+    # up on that test and records an error that says why.
+    scan_rate_limit_wait_seconds: float = 20.0
+    scan_rate_limit_max_wait_seconds: float = 70.0
+    scan_rate_limit_retries: int = 3
     # Unlocks the model-router endpoints. When unset, those endpoints stay locked for everyone.
     owner_token: str | None = Field(default=None, repr=False)
     # Neon can take several seconds to wake from idle; allow for that before saying "degraded".

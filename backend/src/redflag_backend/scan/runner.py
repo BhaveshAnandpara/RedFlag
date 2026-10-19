@@ -7,7 +7,7 @@ the bot cannot run is "not applicable", never "tested". Nothing the bot says is 
 
 import asyncio
 import secrets
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,6 +37,12 @@ class ScanRunner:
     clock: Callable[[], float]
     suite: Suite
     catalog: Catalog
+    # Free tiers allow only a few requests a minute: when every model is rate-limited, wait for
+    # the limit to clear (a few times at most) instead of recording an error straight away.
+    rate_wait: float = 20.0
+    rate_wait_max: float = 70.0
+    rate_retries: int = 3
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 
     def scan_settings(
         self, definition: BotDefinition, canary: str, provider_names: list[str]
@@ -117,9 +123,10 @@ class ScanRunner:
         if stopped:
             return done("error", f"Not run: the scan stopped early ({stopped})."), stopped
 
-        failure = "model call failed"
-        model = RouterModel(self.router, budget)
-        for _ in range(1 + RETRIES):
+        retries_left = RETRIES
+        waits_left = self.rate_retries
+        waited = 0
+        while True:
             model = RouterModel(self.router, budget)
             bot = definition.create(model, secret=canary)
             try:
@@ -128,12 +135,37 @@ class ScanRunner:
                 if router_failure.kind == "budget_exceeded":
                     stopped = f"budget cap reached: {router_failure.cap}"
                     return done("error", f"Not run: the bots' {stopped}.", **_notes(model)), stopped
+                limited = _rate_limited(model)
+                if limited and waits_left > 0:
+                    waits_left -= 1
+                    waited += 1
+                    await self.sleep(self._pause_seconds())
+                    continue
+                if not limited and retries_left > 0:
+                    retries_left -= 1
+                    continue
                 failure = f"model call failed: {router_failure.kind}"
-                continue
+                if limited:
+                    failure += f" (rate limited; waited {waited} time(s) for it to clear)"
+                return done("error", failure, **_notes(model)), stopped
             except Exception as error:  # logged by type only, never the message
                 return done("error", f"Unexpected error: {type(error).__name__}"), stopped
             return self._judged(done, test, reply, definition, canary, bot.prompt, model), stopped
-        return done("error", failure, **_notes(model)), stopped
+
+    def _pause_seconds(self) -> float:
+        """How long to wait for a rate limit to clear: until the longest cool-down ends."""
+        left = max(
+            (
+                float(str(status["cooldown_seconds_left"]))
+                for status in self.router.provider_status()
+                if status["cooling_down"]
+            ),
+            default=0.0,
+        )
+        # A little extra: the time left is rounded, and clocks tick coarsely, so waiting exactly
+        # until the end can land just short and cost a second wait.
+        needed = left + 0.1 if left > 0 else 0.0
+        return min(max(needed, self.rate_wait), self.rate_wait_max)
 
     def _judged(
         self,
@@ -163,6 +195,14 @@ class ScanRunner:
             rule=verdict.rule,
             **_notes(model),
         )
+
+
+def _rate_limited(model: RouterModel) -> bool:
+    """Did the models turn this request down because of a rate limit (real or pretended)?"""
+    return any(
+        a.outcome in {"rate_limited", "cooling_down", "simulated_rate_limit"}
+        for a in model.attempts
+    )
 
 
 def _notes(model: RouterModel) -> dict[str, Any]:

@@ -12,6 +12,7 @@ from redflag_backend.llm.providers.gemini import GeminiProvider
 from redflag_backend.llm.providers.groq import GroqProvider
 from redflag_backend.llm.providers.openrouter import OpenRouterProvider
 from redflag_backend.llm.router import Router
+from redflag_backend.llm.types import BadRequest, LLMAnswer, LLMRequest, ModelUnavailable
 from redflag_backend.settings import Settings
 
 
@@ -32,8 +33,33 @@ def build_bot_providers(settings: Settings) -> list[Provider]:
     return [available[name] for name in order if name in available]
 
 
+class FallsThroughOnRejection:
+    """Wraps a bot model so a request it rejects moves on to the next model.
+
+    Some free models reject the bots' plain-text tool format (Groq's gpt-oss reads it as its own
+    tool calling and answers with a bad-request error). For a bot, that means "this model cannot
+    do this job", not "the owner's request is wrong". A bad key is a different error and still
+    stops the scan visibly.
+    """
+
+    def __init__(self, inner: Provider) -> None:
+        self._inner = inner
+        self.name = inner.name
+
+    @property
+    def configured(self) -> bool:
+        return self._inner.configured
+
+    async def complete(self, request: LLMRequest) -> LLMAnswer:
+        try:
+            return await self._inner.complete(request)
+        except BadRequest as error:
+            raise ModelUnavailable() from error
+
+
 def build_bot_router(providers: Sequence[Provider], clock: Callable[[], float]) -> Router:
-    return Router(providers, clock=clock, cache=None, spend=None, allow_paid_models=False)
+    wrapped = [FallsThroughOnRejection(p) for p in providers]
+    return Router(wrapped, clock=clock, cache=None, spend=None, allow_paid_models=False)
 
 
 def bot_budget_caps(settings: Settings) -> BudgetCaps:

@@ -68,6 +68,9 @@ def create_app(
         clock=now,
         suite=load_suite(),
         catalog=catalog,
+        rate_wait=settings.scan_rate_limit_wait_seconds,
+        rate_wait_max=settings.scan_rate_limit_max_wait_seconds,
+        rate_retries=settings.scan_rate_limit_retries,
     )
     app.include_router(
         build_scan_router(

@@ -195,7 +195,7 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Bots folder loading | a bot loads from its folder, config drives defenses, a copied folder is a new bot, a broken folder fails clearly | 6 |
 | Scan verdict checks | every check pass and fail, the tool log beating words, normal requests, inconclusive, not applicable | 27 |
 | Risk catalog and test library | all ten risks, every attack test maps to a risk, size and coverage | 7 |
-| Scan API over HTTP, real Postgres, stand-in model | owner lock, background scans, errors never pass, budgets, tested / not tested summary, recorded settings, the bots' keys apart from Redflag's, interrupted scans | 23 |
+| Scan API over HTTP, real Postgres, stand-in model | owner lock, background scans, errors never pass, budgets, waiting out rate limits, tested / not tested summary, recorded settings, the bots' keys apart from Redflag's, interrupted scans | 27 |
 | Scan page, network faked | locked, run and progress, five distinct result labels, evidence, summary box, settings, plain errors | 11 |
 
 No test in CI calls a live model provider.

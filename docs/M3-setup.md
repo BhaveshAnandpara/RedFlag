@@ -96,7 +96,7 @@ Every scan result ends with a box listing all ten catalog risks. A risk is **tes
 ### 2.6 Running, storing and recovering
 
 - **Start**: `POST /scans` returns at once with the scan number and the scan runs in the background, one test at a time. Only one scan can run at once (a second gets a 409), to protect the bots' quota.
-- **Failures**: a model failure is retried once and then saved as an **error**. A hard budget per scan (default 150 requests and 300,000 tokens) stops the scan cleanly. The tests that did not run are saved as errors that name the reason. Nothing is skipped silently.
+- **Failures**: a model failure is retried once and then saved as an **error**. If every model is rate-limited (free tiers allow only a few requests a minute), the scan **waits for the limit to clear** and tries again, up to 3 times, before it records an error that says "rate limited". In the bots' own router a model that rejects the bots' format (Groq's gpt-oss does) is skipped for the next model, while a bad key still stops the scan visibly. A hard budget per scan (default 150 requests and 300,000 tokens) stops the scan cleanly. The tests that did not run are saved as errors that name the reason. Nothing is skipped silently.
 - **Stored in Postgres**: `projects` (one per bot), `scans` (the scan number, status, the settings used) and `scan_results` (one row per test with the message, reply, tool log, verdict, evidence, rule, model and attempts).
 - **Interrupted scans**: if a running scan makes no progress for 5 minutes (the free backend restarted or went to sleep), it is marked **interrupted** when the backend starts or when the scan is read, never left looking "running". There is no resume: run it again. Keep the Scan page open while a scan runs; its polling keeps the free instance awake.
 - **Settings recorded with every scan**: the bot and its config version, its defenses, the catalog and suite versions, the budget caps, the providers, the canary and the models that answered.
@@ -126,6 +126,7 @@ The bots need keys that are **separate from Redflag's own**. Keys from the same 
 | `BOT_PROVIDER_ORDER` | Default `gemini,groq,openrouter` |
 | `BOT_BUDGET_MAX_REQUESTS`, `BOT_BUDGET_MAX_TOKENS`, `BOT_BUDGET_MAX_SECONDS`, `BOT_BUDGET_MAX_CONCURRENCY` | Limits for one scan. Defaults 150, 300,000, 1800, 1 |
 | `SCAN_STALE_SECONDS` | Default 300 |
+| `SCAN_RATE_LIMIT_WAIT_SECONDS`, `SCAN_RATE_LIMIT_MAX_WAIT_SECONDS`, `SCAN_RATE_LIMIT_RETRIES` | How a scan waits out a rate limit. Defaults 20, 70, 3 |
 
 `OWNER_TOKEN` is the same password as the router test page uses.
 
@@ -139,7 +140,7 @@ Only at the five agreed seams. The only faked part is the outside model.
 
 | Seam | What it covers | Tests |
 |---|---|---|
-| Scan API over HTTP, real Postgres, a stand-in model | owner lock, background scan, every result saved, weak versus hardened, errors never pass, budget stop, not applicable, tested / not tested summary, recorded settings, fresh canary, the bots' keys apart from Redflag's, no key in any response, 409/404/503, interrupted scans, CORS | 23 |
+| Scan API over HTTP, real Postgres, a stand-in model | owner lock, background scan, every result saved, weak versus hardened, errors never pass, budget stop, waiting out rate limits, skipping a model that rejects the format, not applicable, tested / not tested summary, recorded settings, fresh canary, the bots' keys apart from Redflag's, no key in any response, 409/404/503, interrupted scans, CORS | 27 |
 | Verdict checks | every check pass and fail, the tool log beating words, normal requests, a bot that refuses everything, inconclusive, rule citation, not applicable | 27 |
 | Bots folder loading | a bot loads and answers, config drives defenses, prompts are files, a copied folder is a new bot, a broken folder fails clearly, shared pieces edited once | 6 |
 | Catalog and test library | all ten risks with version and source, every attack test maps to a real risk, size and coverage, poisoned-document tests, every test applies to both Acme bots | 7 |
@@ -152,6 +153,7 @@ The stand-in model is "gullible": it does whatever it is told or shown. Both bot
 - **Docker was not running**, so the test database was unreachable and pytest looked frozen. pytest's `faulthandler_timeout` showed it waiting on the database connection. Starting Docker Desktop and the database container fixed it.
 - **A stale background command applied its edits twice**, once more. Edits are now made with the file tools or idempotent commands.
 - **The Windows Store `python3` stub hangs** a shell command. It was typed by reflex three times in this milestone; the fix is simply never to call it.
+- **The first live scan hit a rate limit.** Gemini's free tier allowed only a few requests a minute, so it cooled down mid-scan, the router fell to Groq, and Groq's gpt-oss rejected the bots' format as a bad request, which is never retried. Four tests ended as honest errors. The scan now waits out a rate limit, and the bots' router skips a model that rejects the format. New tests cover both.
 - **A fake server that moves too fast.** My first progress test advanced the fake scan through its states every few milliseconds, faster than the test could look. The fake now holds each state until the test has checked it.
 
 ## 6. Checking it on the live site (your acceptance)

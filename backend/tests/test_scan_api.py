@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 from sqlalchemy import create_engine
 
-from redflag_backend.llm.types import LLMAnswer, LLMRequest, ServerError
+from redflag_backend.llm.types import BadRequest, LLMAnswer, LLMRequest, RateLimited, ServerError
 from redflag_backend.sandbox.loader import BOTS_DIR
 from redflag_backend.scan.store import ScanStore
 from tests.helpers import (
@@ -366,3 +366,84 @@ def test_the_page_is_allowed_to_call_the_scan_api_with_the_password_header() -> 
         )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+# --- free-tier rate limits and models that reject the bots' format ------------------------
+
+
+class RateLimitedFirst:
+    """Rate-limited for its first few calls, then a normal gullible model."""
+
+    name = "limited"
+    configured = True
+
+    def __init__(self, limited_calls: int) -> None:
+        self.limited_calls = limited_calls
+        self.calls = 0
+        self._inner = GullibleProvider()
+
+    async def complete(self, request: LLMRequest) -> LLMAnswer:
+        self.calls += 1
+        if self.calls <= self.limited_calls:
+            raise RateLimited(retry_after=0.02)
+        return await self._inner.complete(request)
+
+
+class AlwaysRateLimited:
+    name = "limited"
+    configured = True
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete(self, request: LLMRequest) -> LLMAnswer:
+        self.calls += 1
+        raise RateLimited(retry_after=0.02)
+
+
+class RejectsTheFormat:
+    """Like Groq's gpt-oss: it refuses the bots' tool format with a bad-request error."""
+
+    name = "picky"
+    configured = True
+
+    async def complete(self, request: LLMRequest) -> LLMAnswer:
+        raise BadRequest()
+
+
+FAST_WAITS = {"scan_rate_limit_wait_seconds": 0.1, "scan_rate_limit_max_wait_seconds": 0.5}
+
+
+def test_a_rate_limit_in_the_middle_of_a_scan_is_waited_out_not_turned_into_errors() -> None:
+    limited = RateLimitedFirst(limited_calls=3)
+    with scan_client([limited], scan_rate_limit_retries=5, **FAST_WAITS) as client:  # type: ignore[arg-type]
+        scan = run_scan(client, "acme-weak")
+    assert scan["scan"]["status"] == "completed"
+    assert scan["summary"]["counts"]["error"] == 0
+    assert len(scan["results"]) == 16
+    assert limited.calls > 3  # it really was limited, then the scan carried on
+
+
+def test_a_rate_limit_that_never_clears_ends_in_errors_that_say_so_after_a_few_tries() -> None:
+    limited = AlwaysRateLimited()
+    with scan_client([limited], scan_rate_limit_retries=2, **FAST_WAITS) as client:  # type: ignore[arg-type]
+        scan = run_scan(client, "acme-weak")
+    assert scan["scan"]["status"] == "completed"
+    assert {r["status"] for r in scan["results"]} == {"error"}
+    assert all("rate limit" in r["evidence"].lower() for r in scan["results"])
+    assert 0 < limited.calls <= 16 * 3  # one try plus two waits per test, never endless
+
+
+def test_a_model_that_rejects_the_bots_format_is_skipped_for_the_next_model() -> None:
+    gullible = GullibleProvider()
+    with scan_client([RejectsTheFormat(), gullible]) as client:
+        scan = run_scan(client, "acme-weak")
+    assert scan["summary"]["counts"]["error"] == 0
+    assert {r["provider"] for r in scan["results"]} == {"gullible"}
+    assert len(gullible.calls) > 0
+
+
+def test_if_every_model_rejects_the_format_the_tests_are_errors_never_passes() -> None:
+    with scan_client([RejectsTheFormat()]) as client:
+        scan = run_scan(client, "acme-weak")
+    assert {r["status"] for r in scan["results"]} == {"error"}
