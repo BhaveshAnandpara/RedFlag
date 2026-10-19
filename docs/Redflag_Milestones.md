@@ -23,9 +23,9 @@ Every milestone includes its own automated tests and a short README update, so t
 | M3 | Scan engine (deterministic) | Run a scan and get evidence-based verdicts |
 | M4 | Dashboard and reports | Findings, metrics, comparison and Markdown reports |
 | M5 | The AI judge | AI judge on every test with a reason (accuracy checking is M5b, later) |
-| M6 | Policy builder | Plain-language rules turned into generated tests |
+| M6 | Test your own bot | Chat setup, generated tests, runs on your own HTTP endpoint |
 | M7 | Adaptive and multi-turn attacks | Attack mutation and multi-turn escalation |
-| M8 | External targets (HTTP and MCP) | Test your own endpoint or MCP server safely |
+| M8 | External targets: MCP servers and the rest | Test an MCP server safely, with proof of permission |
 | M9 | Regression and CI | Saved suites and a scheduled pass/fail gate |
 | M10 | Launch polish | Audit, privacy, accessibility, docs, demo video |
 
@@ -179,21 +179,27 @@ Every milestone includes its own automated tests and a short README update, so t
 
 ---
 
-## M6: Policy builder
+## M6: Test your own bot
 
-**Goal:** Test an app against its own stated rules.
+**Goal:** Let the owner describe their own AI app in a chat, review the rules Redflag understood, get described tests, choose which to run, and run them on the real bot over an HTTP chat endpoint.
+
+**Scope change (decided by the owner, 2026-10-20).** The first plan was a policy form with generated tests that ran on the demo bots. The owner changed it: the setup is a **chat with an AI interviewer** (not a static form), a **supervisor AI** writes a tester context and a judge context, tests run on the **user's real bot** over HTTP (so the HTTP part of M8 moved here), and permission and ownership checks are **deferred** to before any public launch.
 
 **What gets built**
-- A form where you describe the AI's purpose, allowed actions, forbidden actions, data restrictions and tool permissions
-- An LLM that converts the description into a structured, editable policy, with ambiguous rules highlighted
-- An approval step before any tests are generated
-- Test generation from the approved policy, with policy versions saved for comparison
-- Guardrail tests that also check legitimate requests are not blocked
+- A chat setup with an interviewer AI, a side panel of editable fields, required items, follow-up questions that can be skipped, file and example uploads
+- A supervisor AI that writes the tester context and the judge context
+- A rules screen with unclear rules highlighted, and numbered, immutable setup versions
+- Generation of up to 30 described tests, all ticked, with flags for unconfirmed rules and real actions; the user chooses and confirms before anything runs
+- A safe HTTP chat-endpoint connector (OpenAI-compatible or custom) with Test connection, refusing private and internal addresses, with the key never stored
+- Runs judged by the AI judge alone, shown in the existing dashboard, with Compare between setup versions
 
 **Done when**
-- You can describe an AI in plain language, approve the policy, and get a generated test set
-- Two policy versions can be compared on their results
-- No tests run on a policy the user has not approved
+- The owner can describe a bot in the chat, review and confirm the rules, get up to 30 tests, untick some, and run the rest on a real HTTP endpoint
+- Nothing runs before confirming, and only the ticked tests run
+- Two setup versions can be compared and the changed rules are listed
+- The endpoint key appears in no prompt, log, saved row or report
+
+**Open items (deferred by the owner):** permission and ownership checks, securing the supervisor against hostile pasted text, and opening the page to other people.
 
 **Spec items:** FR-08, FR-09, FR-10, FR-11, FR-12, FR-15
 
@@ -217,21 +223,20 @@ Every milestone includes its own automated tests and a short README update, so t
 
 ---
 
-## M8: External targets (HTTP and MCP)
+## M8: External targets: MCP servers and the rest
 
-**Goal:** Test applications you own, beyond the built-in demo.
+**Goal:** Test applications you own beyond a plain HTTP chat endpoint. The HTTP chat-endpoint connector and its address checks were built in M6.
 
 **What gets built**
-- A connector for a configurable chat or API endpoint
 - A connector for a supported MCP server that lists its tools and schemas
-- Connection validation (reachability, protocol, authentication, basic function)
+- Connection validation (reachability, protocol, authentication, basic function) for MCP
 - Tests for tool permissions, unauthorized calls and parameter manipulation
-- SSRF protection: loopback, private-network and cloud-metadata addresses are blocked
-- Risky write operations limited to explicitly authorized, isolated environments
+- Reading a tool log from a target that exposes one
+- Proof of permission to test a target, and risky write operations limited to explicitly authorized, isolated environments
 
 **Done when**
-- A scan runs against an HTTP target and an MCP server you control
-- Requests to blocked addresses are rejected
+- A scan runs against an MCP server you control
+- A target that is not proven to be yours is refused
 - The public demo still allows no unrestricted target URLs
 
 **Spec items:** FR-03, FR-04, FR-05, FR-06, FR-19, NFR-03

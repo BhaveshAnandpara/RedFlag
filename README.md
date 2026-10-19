@@ -5,7 +5,7 @@
 Redflag tests whether LLM apps, RAG systems, agents and MCP tools obey their intended rules, and shows the evidence behind every finding. It is built to be honest: it never claims an app is "completely secure", and every report must separate what was **tested** from what was **not tested** or **inconclusive**.
 
 > **Status: Milestones 0 and 1 of 11 are deployed and checked: the foundation and the model router.**
-> The public site has a status check (is the backend and its database healthy), a page called **How Redflag tests your AI** that replays recorded attacks, and a **saved scan results** page with a full dashboard of a weak and a hardened demo bot. M1 added an owner-only model router and test page, and M3 an owner-only Scan page that runs a 16-test suite on a demo bot; M4 turned its results into a dashboard with charts, a comparison and a report, and M5 added an AI judge that reads every test result alongside the plain rules. Scanning your own app arrives in later milestones. See the [roadmap](#roadmap).
+> The public site has a status check (is the backend and its database healthy), a page called **How Redflag tests your AI** that replays recorded attacks, and a **saved scan results** page with a full dashboard of a weak and a hardened demo bot. M1 added an owner-only model router and test page, and M3 an owner-only Scan page that runs a 16-test suite on a demo bot; M4 turned its results into a dashboard with charts, a comparison and a report, M5 added an AI judge that reads every test result alongside the plain rules, and M6 an owner-only page where you describe your own bot in a chat, review the rules, get up to 30 described tests and run them on the real bot over HTTP. Opening it to other people, MCP servers and regression runs arrive in later milestones. See the [roadmap](#roadmap).
 
 - Live backend health check: <https://redflag-8dcv.onrender.com/health>
 - Live frontend: <https://red-flag-gules.vercel.app/>
@@ -71,6 +71,10 @@ A finished scan opens on a dashboard with five tabs: an **Overview** (a conclusi
 ### The AI judge (M5)
 
 After each test, a second AI (the **judge**) reads the attack, the bot's reply, the tools the bot called and a description of what the app must never do, and says PASS or FAIL with a plain-language reason. The plain rules still run, and if **either** says FAIL the test fails. Each test's details show both outputs side by side and say so when they disagree. If the judge cannot answer (free quota, a bad reply), the test shows yellow "unclear", never a green pass. The bot's reply is treated as untrusted data and fenced off from the judge's instructions, and the judge is never told what the rules decided. It runs on Redflag's own model keys, apart from the bots'. **The judge has not yet been checked for accuracy**, and every report and dashboard says so. Full detail: [docs/M5-setup.md](docs/M5-setup.md).
+
+### Testing your own bot (M6)
+
+The owner-only page `/setup` connects Redflag to **your own chatbot or agent** over an HTTP chat endpoint (OpenAI-compatible, or a custom request template). You describe the bot in a **chat with an AI interviewer**, which asks follow-up questions (each skippable) and fills a side panel you can edit; a **supervisor AI** turns everything into two contexts, one for the AI that writes the tests and one for the AI judge. You review the **rules** it understood (unclear ones are highlighted), confirm them as a numbered version, get **up to 30 described tests**, all ticked, and choose which to run. Nothing runs until you confirm, only the ticked tests are sent, and the AI judge decides every result (there is no plain-rules check and no tool log for a real bot, and the page says so). The endpoint key goes in a separate field, never reaches the chat AI, and is never stored or logged. Calls to private or internal addresses are refused. **Permission to test a given server is not checked yet.** Full detail: [docs/M6-setup.md](docs/M6-setup.md).
 
 ### A visit when the backend is asleep
 
@@ -203,6 +207,10 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Bots folder loading | a bot loads from its folder, config drives defenses, a copied folder is a new bot, a broken folder fails clearly | 6 |
 | Scan verdict checks | every check pass and fail, the tool log beating words, normal requests, inconclusive, not applicable | 27 |
 | Risk catalog and test library | all ten risks, every attack test maps to a risk, size and coverage, a severity and fix note on every attack test | 9 |
+| HTTP target adapter, stand-in server | both formats, the key only in its header, errors for bad replies, timeouts, redirects and size, every refused address, pinned address, Test connection | 48 |
+| Setup API, setup chat, generator and run over HTTP, real Postgres, scripted models and stand-in endpoint | drafts and versions, locked edits, required items, the key in no table, interview caps and skipping, files, the two contexts, up to 30 generated tests with flags, nothing runs without a valid selection, the judge decides alone, request cap, one scan at a time | 66 |
+| Setup page, network faked | unlock, secure key, Test connection, side panel, required items, skip, files, examples, contexts, rules screen, select page, run progress, plain errors | 25 |
+| Dashboard and report for scans of your own bot | no tool log, no plain rule, setup version and target, rule changes in Compare | 11 |
 | AI judge on its own interface, scripted model | pass and fail with a reason, malformed answers retried once, outages and no model are "unavailable", rate limits waited out, the bot's text fenced as data, own budget, long reasons trimmed and key shapes removed, tool descriptions and log-reading note | 20 |
 | Judge inside a scan over HTTP, real Postgres, stand-in models | the whole combination table, both outputs saved, no judge call for errors, outages and no judge model never stop a scan, the judge's own budget, separate models for bots and judge, old scans readable, tool descriptions from the bot's own file | 20 |
 | Scan API over HTTP, real Postgres, stand-in model | owner lock, background scans, errors never pass, budgets, waiting out rate limits, tested / not tested summary, recorded settings, the bots' keys apart from Redflag's, interrupted scans, severity and fix notes | 29 |
@@ -228,6 +236,8 @@ No test in CI calls a live model provider.
 | `ALLOW_PAID_MODELS`, `PAID_SPEND_CAP_USD`, `OPENROUTER_PAID_MODEL` | Backend host (Render) | No | The paid path. Off unless both the switch and a cap above zero are set |
 | `BOT_GEMINI_API_KEY`, `BOT_GROQ_API_KEY`, `BOT_OPENROUTER_API_KEY` | Backend host (Render) | **Yes** | The demo bots' own model keys, kept apart from the router's. Use keys from other accounts or projects, or the two will share one quota |
 | `BOT_PROVIDER_ORDER`, `BOT_*_MODEL`, `BOT_BUDGET_MAX_*`, `SCAN_STALE_SECONDS` | Backend host (Render) | No | Which model the bots try first, and the hard limits for one scan. Defaults are in `backend/.env.example` |
+| `SETUP_BUDGET_MAX_*`, `SETUP_CHAT_MAX_MESSAGES`, `SETUP_MAX_FOLLOWUPS`, `SETUP_FILE_MAX_*`, `RUN_MAX_ENDPOINT_REQUESTS` | Backend host (Render) | No | Limits for the setup chat, the uploads and a run on your own bot. Defaults are in `backend/.env.example` |
+| `PUBLIC_BACKEND_HOST` | Backend host (Render) | No | Redflag's own public host name (for example `redflag-8dcv.onrender.com`). An endpoint that points at it is refused |
 | `JUDGE_BUDGET_MAX_REQUESTS`, `JUDGE_BUDGET_MAX_TOKENS`, `JUDGE_BUDGET_MAX_SECONDS` | Backend host (Render) | No | Hard limits for the AI judge in one scan. It uses Redflag's own keys above, so no new keys are needed |
 
 Other router settings (saved-answer expiry and size, per-session limits) have safe defaults and are listed in `backend/.env.example`.
@@ -279,7 +289,7 @@ Most problems on the live site come from free-tier behavior, not bugs. Find your
 
 - **Cold starts.** The free backend host sleeps after 15 minutes without traffic and takes about a minute to wake. Neon sleeps after 5 minutes and wakes in a few seconds. The first visit after a quiet spell is slow by design.
 - **Free-tier ceilings.** Render: 750 free instance hours a month. Neon: 0.5 GB of storage and 100 compute-hours a month. Vercel Hobby: non-commercial use, with usage quotas. When a ceiling is hit, that part of the app stops until the quota resets. Limits were last checked on 2026-10-18 and change often.
-- **Only the demo bots can be scanned.** The 16-test suite runs on the two Acme Store bots, and each test is decided by simple facts (tool log, canary, exact text) and an AI judge, and **the judge has not yet been checked for accuracy**, so it can be wrong in both directions. A pass means no problem was found by these tests, never that a bot is secure. Every scan result says what was not tested.
+- **Your own bot can be scanned by the owner only, over an HTTP chat endpoint.** Permission to test a given server is not checked yet, so this stays locked. MCP servers are not supported. The demo suite runs on the two Acme Store bots, and each test is decided by simple facts (tool log, canary, exact text) and an AI judge, and **the judge has not yet been checked for accuracy**, so it can be wrong in both directions. A pass means no problem was found by these tests, never that a bot is secure. Every scan result says what was not tested.
 - **Not complete security.** Even when testing arrives, an OWASP checklist is not proof an app is secure. Reports will always separate tested, untested and inconclusive risks.
 - **No accounts, rate limiting or end-to-end browser tests yet.**
 - **Model providers are free tiers too.** Groq, Gemini and OpenRouter have small quotas that change often (checked 2026-10-18: roughly 30 requests a minute and 1,000 a day on most Groq models, 5 to 15 a minute on Gemini depending on the source, and 20 a minute and 50 a day on OpenRouter's free models, rising to 1,000 a day after $10 of lifetime purchases). The router exists to survive this: fallback, saved answers and hard budgets. When a quota runs out, a request fails visibly. It is never silently passed.
@@ -300,9 +310,9 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | M3 | Scan engine with deterministic verdicts | ✅ Done |
 | M4 | Dashboard and reports | ✅ Done |
 | M5 | AI judge on every test (accuracy checking comes later) | ✅ Done |
-| M6 | Policy builder | Planned |
+| M6 | Test your own bot: chat setup, generated tests, HTTP endpoint | Built, awaiting live check |
 | M7 | Adaptive and multi-turn attacks | Planned |
-| M8 | External targets (HTTP and MCP) | Planned |
+| M8 | External targets: MCP servers and the rest | Planned |
 | M9 | Regression testing and CI gate | Planned |
 | M10 | Launch polish | Planned |
 
@@ -330,6 +340,7 @@ Redflag/
 - [M3 scan engine: how it works, how to add a bot, how to check it](docs/M3-setup.md)
 - [M4 dashboard and reports: how it works, how to save the public samples, how to check it](docs/M4-setup.md)
 - [M5 AI judge: how it works, how to check it](docs/M5-setup.md)
+- [M6 test your own bot: how it works, how to check it](docs/M6-setup.md)
 - [Milestone plan](docs/Redflag_Milestones.md)
 - [Requirements specification](docs/Redflag_Requirements_Specification.docx)
 - [M0 design](docs/superpowers/specs/2026-10-18-m0-foundation-design.md) and [build plan](docs/superpowers/plans/2026-10-18-m0-foundation-plan.md)
@@ -338,3 +349,4 @@ Redflag/
 - [M3 design](docs/superpowers/specs/2026-10-20-m3-scan-engine-design.md) and [build plan](docs/superpowers/plans/2026-10-20-m3-scan-engine-plan.md)
 - [M4 design](docs/superpowers/specs/2026-10-20-m4-dashboard-design.md) and [build plan](docs/superpowers/plans/2026-10-20-m4-dashboard-plan.md)
 - [M5 design](docs/superpowers/specs/2026-10-19-m5-ai-judge-design.md) and [build plan](docs/superpowers/plans/2026-10-19-m5-ai-judge-plan.md)
+- [M6 design](docs/superpowers/specs/2026-10-20-m6-your-own-bot-design.md) and [build plan](docs/superpowers/plans/2026-10-20-m6-your-own-bot-plan.md)
