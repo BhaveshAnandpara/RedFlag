@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     bot_budget_max_tokens: int = 300_000
     bot_budget_max_seconds: float = 1800.0
     bot_budget_max_concurrency: int = 1
+    # Hard limits for the AI judge in one scan. The judge runs on Redflag's own keys and models
+    # (the ones above), so it never draws on the bots' quota.
+    judge_budget_max_requests: int = 60
+    judge_budget_max_tokens: int = 200_000
+    judge_budget_max_seconds: float = 1800.0
     # A running scan with no progress for this long is treated as interrupted.
     scan_stale_seconds: float = 300.0
     # Free tiers allow only a few requests a minute. When every model is rate-limited, a scan

@@ -10,9 +10,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from redflag_backend.judge.judge import Judge
 from redflag_backend.llm.api import build_llm_router
+from redflag_backend.llm.budget import BudgetCaps
 from redflag_backend.llm.provider import Provider
 from redflag_backend.llm.providers.factory import build_providers
+from redflag_backend.llm.router import Router
 from redflag_backend.sandbox.loader import BOTS_DIR, load_bots
 from redflag_backend.scan.api import build_scan_router
 from redflag_backend.scan.bot_models import bot_budget_caps, build_bot_providers, build_bot_router
@@ -45,6 +48,7 @@ def create_app(
         except SQLAlchemyError:
             pass  # the database may still be waking up; reading a scan applies the same rule
         yield
+        engine.dispose()  # hand the database connections back when the app stops
 
     app = FastAPI(title="Redflag", lifespan=lifespan)
     app.add_middleware(
@@ -61,6 +65,14 @@ def create_app(
         build_bot_providers(settings) if bot_providers is None else list(bot_providers)
     )
     catalog = load_catalog()
+    # The AI judge uses Redflag's own models (not the bots' keys), through its own router.
+    judge = Judge(
+        Router(active_providers, clock=now),
+        clock=now,
+        rate_wait=settings.scan_rate_limit_wait_seconds,
+        rate_wait_max=settings.scan_rate_limit_max_wait_seconds,
+        rate_retries=settings.scan_rate_limit_retries,
+    )
     runner = ScanRunner(
         store=scan_store,
         router=build_bot_router(active_bot_providers, now),
@@ -68,6 +80,14 @@ def create_app(
         clock=now,
         suite=load_suite(),
         catalog=catalog,
+        judge=judge,
+        judge_caps=BudgetCaps(
+            requests=settings.judge_budget_max_requests,
+            tokens=settings.judge_budget_max_tokens,
+            seconds=settings.judge_budget_max_seconds,
+            concurrency=1,
+        ),
+        judge_providers=[p.name for p in active_providers if p.configured],
         rate_wait=settings.scan_rate_limit_wait_seconds,
         rate_wait_max=settings.scan_rate_limit_max_wait_seconds,
         rate_retries=settings.scan_rate_limit_retries,

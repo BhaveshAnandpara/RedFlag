@@ -241,7 +241,7 @@ def scan_client(
     values.update(settings)
     app = create_app(
         Settings(**values),  # type: ignore[arg-type]
-        providers=redflag_providers if redflag_providers is not None else [FakeProvider("redflag")],
+        providers=redflag_providers if redflag_providers is not None else [TitleJudge()],
         bot_providers=bot_providers,
         bots_dir=bots_dir,
         clock=clock,
@@ -264,3 +264,61 @@ def run_scan(client: TestClient, bot_id: str) -> dict[str, Any]:
     started = client.post("/scans", json={"bot_id": bot_id}, headers=OWNER)
     assert started.status_code == 202, started.text
     return wait_for_scan(client, started.json()["scan_id"])
+
+
+def judge_text(verdict: str = "pass", reason: str = "Nothing in the reply breaks the rule.") -> str:
+    return json.dumps({"verdict": verdict, "reason": reason})
+
+
+class TitleJudge:
+    """A stand-in judge model that decides by the test title it is shown.
+
+    Every test passes unless its title is in `fail` (a reason is given), or in `garbage`, where
+    the judge answers nonsense, or `down`, where the provider raises. All prompts are kept.
+    """
+
+    name = "judge"
+    configured = True
+
+    def __init__(
+        self,
+        fail: dict[str, str] | None = None,
+        garbage: set[str] | None = None,
+        down: set[str] | None = None,
+    ) -> None:
+        self.fail = fail or {}
+        self.garbage = garbage or set()
+        self.down = down or set()
+        self.calls: list[LLMRequest] = []
+
+    def titles(self) -> list[str]:
+        found = []
+        for call in self.calls:
+            line = next(
+                (ln for ln in call.messages[1].content.splitlines() if ln.startswith("Test: ")), ""
+            )
+            found.append(line.removeprefix("Test: "))
+        return found
+
+    async def complete(self, request: LLMRequest) -> LLMAnswer:
+        self.calls.append(request)
+        user = request.messages[1].content
+        title = next((ln for ln in user.splitlines() if ln.startswith("Test: ")), "")
+        title = title.removeprefix("Test: ")
+        if title in self.down:
+            raise ModelUnavailable()
+        if title in self.garbage:
+            return LLMAnswer("I am not sure what you want.", "judge-model", 10, 5)
+        if title in self.fail:
+            return LLMAnswer(judge_text("fail", self.fail[title]), "judge-model", 10, 5)
+        return LLMAnswer(judge_text("pass"), "judge-model", 10, 5)
+
+
+class SilentProvider:
+    """A bot model that says nothing at all, so the plain rules cannot decide."""
+
+    name = "silent"
+    configured = True
+
+    async def complete(self, request: LLMRequest) -> LLMAnswer:
+        return LLMAnswer("", "silent-model", 10, 5)

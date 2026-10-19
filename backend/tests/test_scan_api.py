@@ -273,7 +273,10 @@ def test_a_scan_uses_only_the_bots_models_never_redflags_own() -> None:
     bots = GullibleProvider()
     with scan_client([bots], redflag_providers=[redflag]) as client:
         run_scan(client, "acme-weak")
-    assert redflag.calls == []
+    # Redflag's own model is used only to judge, never to answer as the bot.
+    assert redflag.calls and all(
+        "security test of an AI app" in c.messages[0].content for c in redflag.calls
+    )
     assert len(bots.calls) > 0
 
 

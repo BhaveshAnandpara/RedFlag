@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from redflag_backend.judge.judge import PROMPT_VERSION, Judge, JudgeRequest
 from redflag_backend.llm.budget import BudgetCaps, SessionBudget
 from redflag_backend.llm.router import Router, RouterFailure
 from redflag_backend.sandbox.bot import TargetReply
@@ -18,6 +19,8 @@ from redflag_backend.sandbox.loader import BotDefinition
 from redflag_backend.sandbox.recording import RouterModel
 from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.checks import CheckContext, evaluate, missing_needs
+from redflag_backend.scan.combine import combine
+from redflag_backend.scan.judge_context import app_context, rule_at_stake
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.suite import ScanTest, Suite
 
@@ -37,6 +40,10 @@ class ScanRunner:
     clock: Callable[[], float]
     suite: Suite
     catalog: Catalog
+    # The AI judge runs on Redflag's own models with its own budget, apart from the bots'.
+    judge: Judge
+    judge_caps: BudgetCaps
+    judge_providers: list[str]
     # Free tiers allow only a few requests a minute: when every model is rate-limited, wait for
     # the limit to clear (a few times at most) instead of recording an error straight away.
     rate_wait: float = 20.0
@@ -57,6 +64,13 @@ class ScanRunner:
             "test_count": len(self.suite.tests),
             "canary": canary,
             "providers": provider_names,
+            "judge_prompt_version": PROMPT_VERSION,
+            "judge_providers": self.judge_providers,
+            "judge_budget": {
+                "requests": self.judge_caps.requests,
+                "tokens": self.judge_caps.tokens,
+                "seconds": self.judge_caps.seconds,
+            },
             "budget": {
                 "requests": self.caps.requests,
                 "tokens": self.caps.tokens,
@@ -67,11 +81,12 @@ class ScanRunner:
 
     async def run(self, scan_id: int, definition: BotDefinition, canary: str) -> None:
         budget = SessionBudget(self.caps, started=self.clock())
+        judge_budget = SessionBudget(self.judge_caps, started=self.clock())
         stopped: str | None = None
         try:
             for position, test in enumerate(self.suite.tests):
                 result, stopped = await self._run_test(
-                    position, test, definition, canary, budget, stopped
+                    position, test, definition, canary, budget, judge_budget, stopped
                 )
                 await asyncio.to_thread(self.store.add_result, scan_id, result, self.clock())
             await asyncio.to_thread(self.store.finish_scan, scan_id, "completed", self.clock())
@@ -88,6 +103,7 @@ class ScanRunner:
         definition: BotDefinition,
         canary: str,
         budget: SessionBudget,
+        judge_budget: SessionBudget,
         stopped: str | None,
     ) -> tuple[dict[str, Any], str | None]:
         started = self.clock()
@@ -153,7 +169,10 @@ class ScanRunner:
                 return done("error", failure, **_notes(model)), stopped
             except Exception as error:  # logged by type only, never the message
                 return done("error", f"Unexpected error: {type(error).__name__}"), stopped
-            return self._judged(done, test, reply, definition, canary, bot.prompt, model), stopped
+            judged = await self._judged(
+                done, test, reply, definition, canary, bot.prompt, model, judge_budget
+            )
+            return judged, stopped
 
     def _pause_seconds(self) -> float:
         """How long to wait for a rate limit to clear: until the longest cool-down ends."""
@@ -170,7 +189,7 @@ class ScanRunner:
         needed = left + 0.1 if left > 0 else 0.0
         return min(max(needed, self.rate_wait), self.rate_wait_max)
 
-    def _judged(
+    async def _judged(
         self,
         done: Callable[..., dict[str, Any]],
         test: ScanTest,
@@ -179,6 +198,7 @@ class ScanRunner:
         canary: str,
         prompt: str,
         model: RouterModel,
+        judge_budget: SessionBudget,
     ) -> dict[str, Any]:
         ctx = CheckContext(
             data={**definition.data, "secret": canary},
@@ -187,15 +207,36 @@ class ScanRunner:
             secret=canary,
         )
         verdict = evaluate(test, reply, ctx)
+        tool_calls = [
+            {"tool": c.tool, "arguments": c.arguments, "outcome": c.outcome, "detail": c.detail}
+            for c in reply.tool_calls
+        ]
+        # The judge reads the same test, reply and tool log, but is never told the rules' verdict.
+        judgment = await self.judge.judge(
+            JudgeRequest(
+                rule=rule_at_stake(definition, test),
+                title=test.title,
+                kind=test.kind,
+                message=test.message,
+                reply=reply.reply,
+                tool_calls=tool_calls,
+                context=app_context(definition, canary),
+            ),
+            judge_budget,
+        )
+        status, evidence = combine(verdict, judgment)
         return done(
-            verdict.status,
-            verdict.evidence,
+            status,
+            evidence,
             reply=reply.reply,
-            tool_calls=[
-                {"tool": c.tool, "arguments": c.arguments, "outcome": c.outcome, "detail": c.detail}
-                for c in reply.tool_calls
-            ],
+            tool_calls=tool_calls,
             rule=verdict.rule,
+            rule_status=verdict.status,
+            rule_evidence=verdict.evidence,
+            judge_status=judgment.status,
+            judge_reason=judgment.reason,
+            judge_model=judgment.model,
+            judge_provider=judgment.provider,
             **_notes(model),
         )
 

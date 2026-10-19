@@ -7,7 +7,8 @@ from sqlalchemy import Engine, text
 
 RESULT_COLUMNS = (
     "position, test_id, risk, kind, title, message, status, reply, tool_calls, evidence, rule, "
-    "model, provider, attempts, started_at, finished_at, severity, remediation"
+    "model, provider, attempts, started_at, finished_at, severity, remediation, rule_status, "
+    "rule_evidence, judge_status, judge_reason, judge_model, judge_provider"
 )
 
 
@@ -45,6 +46,12 @@ class ScanStore:
         values = {
             "severity": None,
             "remediation": None,
+            "rule_status": None,
+            "rule_evidence": None,
+            "judge_status": None,
+            "judge_reason": None,
+            "judge_model": None,
+            "judge_provider": None,
             **result,
             "scan_id": scan_id,
             "tool_calls": json.dumps(result["tool_calls"]),
@@ -55,11 +62,13 @@ class ScanStore:
                 text(
                     "INSERT INTO scan_results (scan_id, position, test_id, risk, kind, title, "
                     "message, status, reply, tool_calls, evidence, rule, model, provider, "
-                    "attempts, started_at, finished_at, severity, remediation) VALUES "
-                    "(:scan_id, :position, :test_id, "
+                    "attempts, started_at, finished_at, severity, remediation, rule_status, "
+                    "rule_evidence, judge_status, judge_reason, judge_model, judge_provider) "
+                    "VALUES (:scan_id, :position, :test_id, "
                     ":risk, :kind, :title, :message, :status, :reply, CAST(:tool_calls AS jsonb), "
                     ":evidence, :rule, :model, :provider, CAST(:attempts AS jsonb), :started_at, "
-                    ":finished_at, :severity, :remediation)"
+                    ":finished_at, :severity, :remediation, :rule_status, :rule_evidence, "
+                    ":judge_status, :judge_reason, :judge_model, :judge_provider)"
                 ),
                 values,
             )
