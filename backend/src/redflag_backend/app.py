@@ -13,7 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from redflag_backend.judge.judge import Judge
 from redflag_backend.llm.api import build_llm_router
-from redflag_backend.llm.budget import BudgetCaps
+from redflag_backend.llm.budget import BudgetBook, BudgetCaps
 from redflag_backend.llm.provider import Provider
 from redflag_backend.llm.providers.factory import build_providers
 from redflag_backend.llm.router import Router
@@ -26,6 +26,7 @@ from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.suite import load_suite
 from redflag_backend.settings import Settings
 from redflag_backend.setups.api import build_setup_router
+from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.setups.store import SetupStore
 from redflag_backend.targets.http_target import Resolver
 
@@ -110,11 +111,24 @@ def create_app(
     )
 
     # Setups: what the owner tells Redflag about their own bot. Never calls an address inside.
+    setup_llm = SetupLLM(
+        Router(active_providers, clock=now),
+        BudgetBook(
+            BudgetCaps(
+                requests=settings.setup_budget_max_requests,
+                tokens=settings.setup_budget_max_tokens,
+                seconds=settings.setup_budget_max_seconds,
+                concurrency=1,
+            ),
+            now,
+        ),
+    )
     own_hosts = [settings.public_backend_host] if settings.public_backend_host else []
     app.include_router(
         build_setup_router(
             settings,
             SetupStore(engine, clock=now),
+            setup_llm,
             transport=target_transport,
             resolver=target_resolver,
             blocked_hosts=own_hosts,

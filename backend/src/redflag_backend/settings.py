@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     judge_budget_max_requests: int = 60
     judge_budget_max_tokens: int = 200_000
     judge_budget_max_seconds: float = 1800.0
+    # The setup chat, the supervisor and the test generator: how much of Redflag's own model
+    # quota one setup may use, and how long the interview and the uploads may be.
+    setup_budget_max_requests: int = 60
+    setup_budget_max_tokens: int = 150_000
+    setup_budget_max_seconds: float = 3600.0
+    setup_chat_max_messages: int = 30
+    setup_max_followups: int = 8
+    setup_file_max_bytes: int = 20_000
+    setup_file_max_count: int = 5
     # Redflag's own public host name (for example redflag-xyz.onrender.com). A bot endpoint that
     # points at it is refused, so Redflag cannot be aimed at itself.
     public_backend_host: str | None = None

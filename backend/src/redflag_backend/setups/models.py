@@ -35,10 +35,42 @@ class Rule(BaseModel):
     locked: bool = False
 
 
+class Item(BaseModel):
+    """A short fact such as a limit or a kind of protected data."""
+
+    id: str
+    text: str
+    source: Source = "model"
+    locked: bool = False
+
+
+class ToolSpec(BaseModel):
+    name: str
+    description: str
+    # "reads" only looks things up; "acts" changes something in the world
+    effect: Literal["reads", "acts"] = "acts"
+    source: Source = "model"
+    locked: bool = False
+
+
+class Example(BaseModel):
+    """Something the user pasted, kept word for word. Only the user adds these, never a model."""
+
+    id: str
+    text: str
+    label: Literal["bad_reply", "good_reply", "conversation"] = "conversation"
+
+
 class Fields(BaseModel):
     purpose: FieldValue = Field(default_factory=FieldValue)
     rules: list[Rule] = Field(default_factory=list)
+    limits: list[Item] = Field(default_factory=list)
+    protected_data: list[Item] = Field(default_factory=list)
+    tools: list[ToolSpec] = Field(default_factory=list)
+    examples: list[Example] = Field(default_factory=list)
     notes: FieldValue = Field(default_factory=FieldValue)
+    # Topics the user chose not to answer. They stay unclear and are never guessed.
+    unclear: list[str] = Field(default_factory=list)
 
 
 class Endpoint(BaseModel):
@@ -57,10 +89,59 @@ class Connection(BaseModel):
     last_error: str | None = None
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class UploadedFile(BaseModel):
+    name: str
+    content: str
+
+
+class Tagged(BaseModel):
+    """One line of a context, with where it came from."""
+
+    text: str
+    source: Literal["user", "model"] = "model"
+
+
+class TesterContext(BaseModel):
+    purpose: str = ""
+    tools: list[ToolSpec] = Field(default_factory=list)
+    weak_spots: list[Tagged] = Field(default_factory=list)
+    what_to_try: list[Tagged] = Field(default_factory=list)
+    notes: str = ""
+
+
+class JudgeContext(BaseModel):
+    purpose: str = ""
+    rules: list[Tagged] = Field(default_factory=list)
+    limits: list[Tagged] = Field(default_factory=list)
+    protected_data: list[Tagged] = Field(default_factory=list)
+    tools: list[ToolSpec] = Field(default_factory=list)
+    # Always the user's own examples, word for word, never written by a model
+    examples: list[Example] = Field(default_factory=list)
+    unclear: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class Contexts(BaseModel):
+    tester: TesterContext = Field(default_factory=TesterContext)
+    judge: JudgeContext = Field(default_factory=JudgeContext)
+    # Context fields the user edited, as "tester.notes" or "judge.rules". Regenerating keeps them.
+    locked: list[str] = Field(default_factory=list)
+
+
 class SetupData(BaseModel):
     fields: Fields = Field(default_factory=Fields)
     endpoint: Endpoint = Field(default_factory=Endpoint)
     connection: Connection = Field(default_factory=Connection)
+    chat: list[ChatTurn] = Field(default_factory=list)
+    files: list[UploadedFile] = Field(default_factory=list)
+    contexts: Contexts | None = None
+    followups_asked: int = 0
+    user_messages: int = 0
 
 
 def required_status(data: SetupData) -> dict[str, bool]:

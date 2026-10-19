@@ -105,9 +105,12 @@ class SetupStore:
                 ),
                 {"p": row[1]},
             ).scalar_one()
+            # Uploaded files and the chat stay in the draft; a version keeps the fields, the
+            # endpoint settings (never the key) and the two contexts.
             snapshot = {
                 "fields": data.fields.model_dump(),
                 "endpoint": data.endpoint.model_dump(),
+                "contexts": data.contexts.model_dump() if data.contexts else None,
             }
             conn.execute(
                 text(

@@ -16,6 +16,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from redflag_backend.settings import Settings
+from redflag_backend.setups.chat_api import add_chat_routes
+from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.setups.models import (
     MAX_CONNECTION_TESTS,
     Endpoint,
@@ -63,6 +65,7 @@ def _error(status: int, kind: str, **more: Any) -> JSONResponse:
 def build_setup_router(
     settings: Settings,
     store: SetupStore,
+    llm: SetupLLM,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     resolver: Resolver | None = None,
@@ -88,6 +91,11 @@ def build_setup_router(
             "endpoint": data.endpoint.model_dump(),
             "connection": data.connection.model_dump(),
             "required": required_status(data),
+            "chat": [turn.model_dump() for turn in data.chat],
+            "files": [{"name": f.name, "bytes": len(f.content.encode())} for f in data.files],
+            "contexts": data.contexts.model_dump() if data.contexts else None,
+            "followups_asked": data.followups_asked,
+            "user_messages": data.user_messages,
         }
 
     async def change(setup_id: int, apply: Any) -> Any:
@@ -253,4 +261,5 @@ def build_setup_router(
         except (NoSuchSetup, NoSuchVersion) as missing:
             raise HTTPException(status_code=404, detail="no such version") from missing
 
+    add_chat_routes(router, settings, store, llm)
     return router
