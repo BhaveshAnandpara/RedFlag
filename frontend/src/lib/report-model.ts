@@ -143,6 +143,14 @@ export function mcpModel(detail: ScanDetail) {
   const calledNames = new Set(called.map((c) => c.name));
   const cover: Cover[] = [
     ...Object.entries(MCP_FAMILIES).map(([id, fam]) => {
+      if (id === "broad_parameters") {
+        // One merged row covers every tool, so its count of affected tools lives in the
+        // evidence text ("N of M tools have a parameter ..."), not in one row per tool.
+        const row = results.find((r) => r.test_id === "mcp-static-broad_parameters");
+        const n = Number(/^(\d+) of (\d+) tools/.exec(row?.evidence ?? "")?.[2] ?? toolCount);
+        const f = row?.status === "fail" ? Number(/^(\d+) of \d+ tools/.exec(row.evidence)?.[1] ?? 0) : 0;
+        return { id: fam.risk, name: fam.title, n, f };
+      }
       const bad = new Set(
         results.filter((r) => mcpFamily(r.test_id) === id && r.status === "fail").map((r) => mcpTool(r.test_id)),
       );

@@ -130,6 +130,12 @@ class McpScanRunner:
                     )
                 )
                 continue
+            if family_id == "broad_parameters":
+                # This family flags almost every tool with any text parameter, so one row per
+                # tool is noise, not signal: it drowns out the rare, specific findings from the
+                # other families. One row names every affected tool instead.
+                results.append(self._broad_parameters_result(family, tools, flagged, now))
+                continue
             for tool, found in flagged:
                 worst = min(found, key=lambda f: SEVERITY_RANK[f.severity]).severity
                 results.append(
@@ -146,6 +152,30 @@ class McpScanRunner:
                     )
                 )
         return results
+
+    def _broad_parameters_result(
+        self,
+        family: Any,
+        tools: Sequence[McpTool],
+        flagged: list[tuple[McpTool, list[Any]]],
+        now: float,
+    ) -> dict[str, Any]:
+        worst = min(
+            (f.severity for _, found in flagged for f in found), key=lambda s: SEVERITY_RANK[s]
+        )
+        per_tool = " · ".join(
+            f"{tool.name}: {'; '.join(f.evidence for f in found)}" for tool, found in flagged
+        )
+        return self._static_result(
+            "mcp-static-broad_parameters",
+            family,
+            "fail",
+            f"{len(flagged)} of {len(tools)} tools have a parameter with no list, pattern or "
+            f"length limit. {per_tool}",
+            worst,
+            now,
+            message=f"Checked the input schema of {len(tools)} tools.",
+        )
 
     def _static_result(
         self,

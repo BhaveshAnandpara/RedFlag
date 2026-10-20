@@ -111,7 +111,14 @@ describe("a check of an MCP server", () => {
     const results = [
       makeResult({ test_id: "mcp-static-hidden_instructions-export_csv", status: "fail", severity: "critical" }),
       makeResult({ test_id: "mcp-static-hidden_characters", status: "pass", severity: "critical" }),
-      makeResult({ test_id: "mcp-static-broad_parameters-read_file", status: "fail", severity: "medium" }),
+      makeResult({
+        test_id: "mcp-static-broad_parameters",
+        status: "fail",
+        severity: "medium",
+        evidence:
+          "1 of 4 tools have a parameter with no list, pattern or length limit. read_file: " +
+          "The parameter “path” takes any text, with no list, pattern or length limit.",
+      }),
       makeResult({ test_id: "mcp-dyn-read_file-traversal-path-1", status: "fail", severity: "critical" }),
       makeResult({ test_id: "mcp-dyn-read_file-oversized-path-5", status: "inconclusive", severity: "medium" }),
       makeResult({ test_id: "mcp-dyn-read_file-injection-path-3", status: "pass", severity: "high" }),
@@ -138,7 +145,7 @@ describe("a check of an MCP server", () => {
     expect(m.failed.map((r) => r.test_id)).toEqual([
       "mcp-static-hidden_instructions-export_csv",
       "mcp-dyn-read_file-traversal-path-1",
-      "mcp-static-broad_parameters-read_file",
+      "mcp-static-broad_parameters",
     ]);
     expect(m.critical).toBe(2);
     expect(m.unclear).toBe(1);

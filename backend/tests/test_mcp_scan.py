@@ -127,7 +127,9 @@ def test_a_poisoned_description_and_an_open_parameter_fail_with_the_tool_named()
     assert hidden["status"] == "fail" and hidden["severity"] == "critical"
     assert hidden["risk"] == "LLM01" and "weather" in hidden["title"]
     assert found["mcp-static-sensitive_wording-weather"]["status"] == "fail"
-    assert found["mcp-static-broad_parameters-run"]["severity"] == "high"
+    broad = found["mcp-static-broad_parameters"]
+    assert broad["status"] == "fail" and broad["severity"] == "high"
+    assert "run" in broad["evidence"]
     assert "mcp-static-hidden_instructions" not in found  # flagged, so no all-clear row
     assert "mcp-static-hidden_characters" in found
 
