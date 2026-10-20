@@ -15,6 +15,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
+from redflag_backend.ci.api import add_token_routes
+from redflag_backend.ci.tokens import CiTokenStore
 from redflag_backend.settings import Settings
 from redflag_backend.setups.chat_api import add_chat_routes
 from redflag_backend.setups.llm import SetupLLM
@@ -70,6 +72,7 @@ def build_setup_router(
     store: SetupStore,
     llm: SetupLLM,
     runs: RunDeps,
+    tokens: CiTokenStore,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     resolver: Resolver | None = None,
@@ -273,4 +276,5 @@ def build_setup_router(
     add_test_routes(router, store, llm)
     add_variation_routes(router, settings, store)
     add_run_routes(router, store, runs)
+    add_token_routes(router, store, tokens)
     return router

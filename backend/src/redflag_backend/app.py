@@ -12,6 +12,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from redflag_backend.attacks.attacker import Attacker
+from redflag_backend.ci.api import build_ci_router
+from redflag_backend.ci.tokens import CiTokenStore
 from redflag_backend.judge.judge import PROMPT_VERSION, Judge
 from redflag_backend.llm.api import build_llm_router
 from redflag_backend.llm.budget import BudgetBook, BudgetCaps
@@ -71,7 +73,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["X-Owner-Token", "Content-Type"],
+        allow_headers=["X-Owner-Token", "Content-Type", "Authorization"],
     )
     active_providers = build_providers(settings) if providers is None else providers
     app.include_router(build_llm_router(settings, active_providers, engine, clock))
@@ -178,12 +180,16 @@ def create_app(
         judge_providers=[p.name for p in active_providers if p.configured],
         judge_prompt_version=PROMPT_VERSION,
     )
+    setup_store = SetupStore(engine, clock=now)
+    ci_tokens = CiTokenStore(engine, clock=now)
+    app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))
     app.include_router(
         build_setup_router(
             settings,
-            SetupStore(engine, clock=now),
+            setup_store,
             setup_llm,
             run_deps,
+            ci_tokens,
             transport=target_transport,
             resolver=target_resolver,
             blocked_hosts=own_hosts,
