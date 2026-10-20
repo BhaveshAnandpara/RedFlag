@@ -17,6 +17,7 @@ import {
 } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
+import { CiPanel } from "./ci-panel";
 import { Dashboard } from "./dashboard";
 import { StatusBadge, TONE_CLASS } from "./status";
 
@@ -252,6 +253,13 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
                     Run again
                   </button>
                 </section>
+              )}
+              {scan.scan.settings.setup && (
+                <CiPanel
+                  api={api}
+                  setupId={scan.scan.settings.setup.setup_id}
+                  setProblem={setProblem}
+                />
               )}
               <Dashboard
                 detail={scan}

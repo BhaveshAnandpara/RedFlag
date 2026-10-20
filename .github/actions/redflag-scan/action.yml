@@ -1,0 +1,47 @@
+name: Redflag scan
+description: Run your Redflag tests against your bot and fail the build on findings.
+inputs:
+  url:
+    description: The address of your Redflag backend.
+    required: true
+  token:
+    description: An API token for one setup, made on the Redflag setup page. Keep it in a secret.
+    required: true
+  target-key:
+    description: Your bot's own key, if it needs one. Keep it in a secret.
+    required: false
+    default: ""
+  fail-on:
+    description: The lowest severity that fails the build (critical, high, medium or any).
+    required: false
+    default: critical
+  fail-on-unclear:
+    description: Also fail the build when some tests could not be decided.
+    required: false
+    default: "false"
+  version:
+    description: The setup version to run. Empty means the latest.
+    required: false
+    default: ""
+  timeout:
+    description: How many seconds to wait for the run to finish.
+    required: false
+    default: "900"
+runs:
+  using: composite
+  steps:
+    - name: Run the Redflag tests
+      shell: bash
+      env:
+        REDFLAG_URL: ${{ inputs.url }}
+        REDFLAG_TOKEN: ${{ inputs.token }}
+        REDFLAG_TARGET_KEY: ${{ inputs.target-key }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        FAIL_ON_UNCLEAR: ${{ inputs.fail-on-unclear }}
+        VERSION: ${{ inputs.version }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        args=(--fail-on "$FAIL_ON" --timeout "$TIMEOUT")
+        if [ "$FAIL_ON_UNCLEAR" = "true" ]; then args+=(--fail-on-unclear); fi
+        if [ -n "$VERSION" ]; then args+=(--version "$VERSION"); fi
+        node "${{ github.action_path }}/../../../ci/redflag-ci.mjs" "${args[@]}"

@@ -104,6 +104,7 @@ class FakeBackend {
   tests: GeneratedTest[] = generated();
   scanStates: unknown[] = [];
   scanById: Record<number, unknown> = {};
+  tokens: { id: number; label: string; created_at: number; last_used_at: number | null; revoked: boolean }[] = [];
   overrides: Record<string, (body: unknown) => Response> = {};
   password = "owner-secret";
   assistantReply = { reply: "Thanks. How much can it refund?", asking: "refund limit" };
@@ -200,6 +201,17 @@ class FakeBackend {
         );
       this.tests = [...this.tests, ...added];
       return json(201, { added, tests: this.tests });
+    }
+    if (key === "GET /setups/5/ci-tokens") return json(200, { tokens: this.tokens });
+    if (key === "POST /setups/5/ci-tokens") {
+      const id = this.tokens.length + 1;
+      this.tokens = [...this.tokens, { id, label: body.label, created_at: 1, last_used_at: null, revoked: false }];
+      return json(201, { id, label: body.label, token: "rf_shown-only-once-abcdefghijklmnop" });
+    }
+    const revoke = /^DELETE \/setups\/5\/ci-tokens\/(\d+)$/.exec(key);
+    if (revoke) {
+      this.tokens = this.tokens.map((t) => (t.id === Number(revoke[1]) ? { ...t, revoked: true } : t));
+      return new Response(null, { status: 204 });
     }
     if (key === "POST /scans/11/rerun") return json(202, { scan_id: 12 });
     const other = /^GET \/scans\/(\d+)$/.exec(key);
@@ -711,5 +723,85 @@ describe("run again", () => {
     await screen.findByRole("tab", { name: "Overview" });
     await user.click(screen.getByRole("button", { name: "Run again" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("A scan is already running.");
+  });
+});
+
+describe("using it in your builds", () => {
+  const finishedReal = () =>
+    makeScan(
+      [makeResult({ test_id: "g-1", title: "Talk it out of its rules", status: "pass", rule_status: null, judge_status: "pass", judge_reason: "r" })],
+      { id: 11, botId: "target-5", setup: { version: 1, rules: [] } },
+    );
+
+  async function toFinished(backend: FakeBackend) {
+    backend.setup = view({ ...READY, fields: { ...view().fields, purpose: { value: "A bank bot.", source: "model", locked: false }, rules: [RULE] } });
+    backend.scanStates = [finishedReal()];
+    const user = await started(backend);
+    await user.click(screen.getByRole("button", { name: "Review the rules" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm the rules and save a version" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm and run 3 tests" }));
+    await screen.findByRole("tab", { name: "Overview" });
+    return user;
+  }
+
+  it("lists the existing tokens by name and last use, and never their values", async () => {
+    const backend = new FakeBackend();
+    backend.tokens = [
+      { id: 1, label: "github", created_at: 1_760_000_000, last_used_at: 1_760_100_000, revoked: false },
+      { id: 2, label: "old laptop", created_at: 1_750_000_000, last_used_at: null, revoked: true },
+    ];
+    await toFinished(backend);
+    const panel = await screen.findByRole("region", { name: "Use this in your builds" });
+    const list = within(panel).getByRole("list", { name: "Your API tokens" });
+    expect(within(list).getByText(/github/)).toHaveTextContent(/last used/i);
+    expect(within(list).getByText(/old laptop/)).toHaveTextContent(/never used/i);
+    expect(within(list).getByText(/old laptop/)).toHaveTextContent(/revoked/i);
+    expect(panel.textContent).not.toMatch(/rf_/);
+  });
+
+  it("makes a token, shows it once with a warning, and keeps it out of the list afterwards", async () => {
+    const backend = new FakeBackend();
+    const user = await toFinished(backend);
+    const panel = await screen.findByRole("region", { name: "Use this in your builds" });
+    await user.clear(within(panel).getByLabelText("Token name"));
+    await user.type(within(panel).getByLabelText("Token name"), "github");
+    await user.click(within(panel).getByRole("button", { name: "Create an API token" }));
+    const shown = await within(panel).findByRole("status");
+    expect(shown).toHaveTextContent("rf_shown-only-once-abcdefghijklmnop");
+    expect(shown).toHaveTextContent(/shown only once/i);
+    expect(backend.bodies("POST", "/ci-tokens")).toEqual([{ label: "github" }]);
+    const list = within(panel).getByRole("list", { name: "Your API tokens" });
+    expect(within(list).getByText(/github/)).toBeInTheDocument();
+    expect(list.textContent).not.toContain("rf_shown-only-once");
+  });
+
+  it("revokes a token", async () => {
+    const backend = new FakeBackend();
+    backend.tokens = [{ id: 1, label: "github", created_at: 1, last_used_at: null, revoked: false }];
+    const user = await toFinished(backend);
+    const panel = await screen.findByRole("region", { name: "Use this in your builds" });
+    await user.click(within(panel).getByRole("button", { name: "Revoke token github" }));
+    expect(await within(panel).findByText(/revoked/i)).toBeInTheDocument();
+    expect(backend.calls.some((c) => c.method === "DELETE" && c.path === "/setups/5/ci-tokens/1")).toBe(true);
+    expect(within(panel).queryByRole("button", { name: "Revoke token github" })).not.toBeInTheDocument();
+  });
+
+  it("shows the command and the workflow with secret names, never a token", async () => {
+    const backend = new FakeBackend();
+    await toFinished(backend);
+    const panel = await screen.findByRole("region", { name: "Use this in your builds" });
+    expect(within(panel).getByText(/REDFLAG_TOKEN/)).toBeInTheDocument();
+    expect(within(panel).getByText(/node ci\/redflag-ci\.mjs/)).toBeInTheDocument();
+    expect(within(panel).getByText(/secrets\.REDFLAG_TARGET_KEY/)).toBeInTheDocument();
+    expect(panel.textContent).toMatch(/not a guarantee of security/i);
+  });
+
+  it("says plainly when a token cannot be made", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /setups/5/ci-tokens"] = () => json(404, {});
+    const user = await toFinished(backend);
+    const panel = await screen.findByRole("region", { name: "Use this in your builds" });
+    await user.click(within(panel).getByRole("button", { name: "Create an API token" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/something went wrong/i);
   });
 });
