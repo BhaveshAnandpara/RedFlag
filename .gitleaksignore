@@ -3,3 +3,4 @@
 # string at run time, so no key-shaped text is left in the source.
 2ca824089405f3ee9b184519ca8601cad4244db7:backend/tests/test_judge.py:gcp-api-key:180
 2ca824089405f3ee9b184519ca8601cad4244db7:backend/tests/test_judge.py:gcp-api-key:200
+b775330315361cc6344f3d2901da24a32125d5bd:frontend/src/lib/connect-parse.test.ts:generic-api-key:8

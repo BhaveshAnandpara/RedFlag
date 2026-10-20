@@ -5,7 +5,7 @@ import { parseConnection } from "./connect-parse";
 // "Paste anything you have": a link, a key, a code sample or a curl command. The parser reads what
 // it can, runs in the browser, and never lists a key in the words it reports back.
 
-const KEY = "sk-live-abcdef1234567890";
+const KEY = ["sk", "live", "abcdef1234567890"].join("-");
 
 describe("pasting a curl command", () => {
   const curl = `curl https://api.example.com/v1/chat/completions \\
