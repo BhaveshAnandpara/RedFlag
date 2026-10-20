@@ -24,10 +24,10 @@ Every milestone includes its own automated tests and a short README update, so t
 | M4 | Dashboard and reports | Findings, metrics, comparison and Markdown reports |
 | M5 | The AI judge | AI judge on every test with a reason (accuracy checking is M5b, later) |
 | M6 | Test your own bot | Chat setup, generated tests, runs on your own HTTP endpoint |
-| M7 | Adaptive and multi-turn attacks | Attack mutation and multi-turn escalation |
-| M8 | External targets: MCP servers and the rest | Test an MCP server safely, with proof of permission |
-| M9 | Regression and CI | Saved suites and a scheduled pass/fail gate |
-| M10 | Launch polish | Audit, privacy, accessibility, docs, demo video |
+| M7 | Adaptive and multi-turn attacks | Attack mutation and multi-turn escalation. Built in wave 2 |
+| M8 | External targets: MCP servers | Test an MCP server. Built in wave 2 (proof of permission still deferred) |
+| M9 | Regression and CI | Run again, comparison, API tokens, a command and a GitHub Action. Built in wave 2 |
+| M10 | Launch polish | Audit, privacy, accessibility, docs, demo video. Audit, copy and docs done; demo video, accounts and ownership proof open |
 
 **Milestones that make it a product:** M0 to M4 give a working, deployed tool. M5 makes the results trustworthy. M6 to M9 are extensions, so you can stop after any of them with something finished.
 

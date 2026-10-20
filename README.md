@@ -76,6 +76,10 @@ After each test, a second AI (the **judge**) reads the attack, the bot's reply, 
 
 The owner-only page `/setup` connects Redflag to **your own chatbot or agent** over an HTTP chat endpoint (OpenAI-compatible, or a custom request template). You describe the bot in a **chat with an AI interviewer**, which asks follow-up questions (each skippable) and fills a side panel you can edit; a **supervisor AI** turns everything into two contexts, one for the AI that writes the tests and one for the AI judge. You review the **rules** it understood (unclear ones are highlighted), confirm them as a numbered version, get **up to 30 described tests**, all ticked, and choose which to run. Nothing runs until you confirm, only the ticked tests are sent, and the AI judge decides every result (there is no plain-rules check and no tool log for a real bot, and the page says so). The endpoint key goes in a separate field, never reaches the chat AI, and is never stored or logged. Calls to private or internal addresses are refused. **Permission to test a given server is not checked yet.** Full detail: [docs/M6-setup.md](docs/M6-setup.md).
 
+### Wave 2: variations, multi-turn, CI, quick scan, judge accuracy and MCP checks
+
+Built as one batch after M6. **Attack variations** rewrite an attack eight fixed ways (authority, role-play, hypothetical, urgency, override, base64, a hidden document, a fake system message); **multi-turn** lets an attacker AI continue a conversation for up to 4 turns. **Run again** repeats a scan of your bot and shows what changed; **API tokens, a command and a GitHub Action** run the same tests from a build with a pass/fail gate. Risks carry **MITRE ATLAS** tags and the report can be printed. The **quick scan** at `/quick` is the easy front door: pick how your bot is built (or paste a curl command), say hello, confirm the answer, choose what it must never do and run a built-in starter pack. In the Conversations tab you can **label whether the judge was right**, and the dashboard then shows agreement, false alarms and misses per risk with the sample size. The page `/mcp` **checks an MCP server**: its tool descriptions always (plain rules), and its tools only if you tick them, with manipulated text, read by the judge. Full detail and settings: [docs/Wave2-setup.md](docs/Wave2-setup.md).
+
 ### A visit when the backend is asleep
 
 The free hosts sleep when idle, so the first visit can hit a sleeping backend. The page is built for it:
@@ -219,6 +223,10 @@ CI runs all of this on every push, plus a `gitleaks` scan. `pnpm check:bundle` f
 | Analytics, comparison and report functions | counts, risk bars, success rate and range, the conclusion and its banned words, comparison wording, the Markdown report, judge counts and wording | 45 |
 | Saved sample file rules | completed scans, one weak and one hardened, evidence, nothing key-shaped, well-shaped judge fields | 14 |
 | Public results page | saved-not-live label, no run button, Compare ready, no network request | 6 |
+| Attack strategies, variations, multi-turn, run again, CI, ATLAS tags, quick scan over HTTP, real Postgres, stand-in endpoint and judge | each strategy, variations added and run, conversations with the attacker, comparison with the last run, tokens stored as hashes, the CI gate, the starter pack and its rules | see `backend/tests/test_attack_strategies.py`, `test_multi_turn.py`, `test_rerun.py`, `test_ci.py`, `test_atlas.py`, `test_quick_scan.py` |
+| Judge labels over HTTP, real Postgres | a label saved, changed and cleared, owner-only, agreement, false alarms and misses per risk, results with no verdict left out, small-sample flag | 7 |
+| MCP target, static checks and MCP scans, stand-in server | handshake, session id, paging, event-stream replies, the key only in its header, refused addresses, each static pattern, manipulated calls only for ticked tools, sandbox gate, caps, errors never pass | 42 |
+| Quick scan, MCP, labeling and CI pages, network faked | connect flows, hello check, rules and gates, progress then dashboard, tool choices and sandbox box, label buttons and accuracy panel, paste-anything reader | see `frontend/src/components/*.test.tsx` and `frontend/src/lib/*.test.ts` |
 
 No test in CI calls a live model provider.
 
@@ -236,7 +244,7 @@ No test in CI calls a live model provider.
 | `ALLOW_PAID_MODELS`, `PAID_SPEND_CAP_USD`, `OPENROUTER_PAID_MODEL` | Backend host (Render) | No | The paid path. Off unless both the switch and a cap above zero are set |
 | `BOT_GEMINI_API_KEY`, `BOT_GROQ_API_KEY`, `BOT_OPENROUTER_API_KEY` | Backend host (Render) | **Yes** | The demo bots' own model keys, kept apart from the router's. Use keys from other accounts or projects, or the two will share one quota |
 | `BOT_PROVIDER_ORDER`, `BOT_*_MODEL`, `BOT_BUDGET_MAX_*`, `SCAN_STALE_SECONDS` | Backend host (Render) | No | Which model the bots try first, and the hard limits for one scan. Defaults are in `backend/.env.example` |
-| `SETUP_BUDGET_MAX_*`, `SETUP_CHAT_MAX_MESSAGES`, `SETUP_MAX_FOLLOWUPS`, `SETUP_FILE_MAX_*`, `RUN_MAX_ENDPOINT_REQUESTS` | Backend host (Render) | No | Limits for the setup chat, the uploads and a run on your own bot. Defaults are in `backend/.env.example` |
+| `SETUP_BUDGET_MAX_*`, `SETUP_CHAT_MAX_MESSAGES`, `SETUP_MAX_FOLLOWUPS`, `SETUP_FILE_MAX_*`, `RUN_MAX_ENDPOINT_REQUESTS`, `MULTI_TURN_MAX_TURNS`, `JUDGE_ACCURACY_MIN_SAMPLE`, `MCP_MAX_CALLS`, `MCP_CALLS_PER_TOOL` | Backend host (Render) | No | Limits for the setup chat, the uploads and a run on your own bot. Defaults are in `backend/.env.example` |
 | `PUBLIC_BACKEND_HOST` | Backend host (Render) | No | Redflag's own public host name (for example `redflag-8dcv.onrender.com`). An endpoint that points at it is refused |
 | `JUDGE_BUDGET_MAX_REQUESTS`, `JUDGE_BUDGET_MAX_TOKENS`, `JUDGE_BUDGET_MAX_SECONDS` | Backend host (Render) | No | Hard limits for the AI judge in one scan. It uses Redflag's own keys above, so no new keys are needed |
 
@@ -289,7 +297,7 @@ Most problems on the live site come from free-tier behavior, not bugs. Find your
 
 - **Cold starts.** The free backend host sleeps after 15 minutes without traffic and takes about a minute to wake. Neon sleeps after 5 minutes and wakes in a few seconds. The first visit after a quiet spell is slow by design.
 - **Free-tier ceilings.** Render: 750 free instance hours a month. Neon: 0.5 GB of storage and 100 compute-hours a month. Vercel Hobby: non-commercial use, with usage quotas. When a ceiling is hit, that part of the app stops until the quota resets. Limits were last checked on 2026-10-18 and change often.
-- **Your own bot can be scanned by the owner only, over an HTTP chat endpoint.** Permission to test a given server is not checked yet, so this stays locked. MCP servers are not supported. The demo suite runs on the two Acme Store bots, and each test is decided by simple facts (tool log, canary, exact text) and an AI judge, and **the judge has not yet been checked for accuracy**, so it can be wrong in both directions. A pass means no problem was found by these tests, never that a bot is secure. Every scan result says what was not tested.
+- **Your own bot or MCP server can be scanned by the owner only.** Permission to test a given server is not checked yet, so this stays locked. Chat widgets on a website and browser agents are not supported (they need a browser the free host cannot run). The demo suite runs on the two Acme Store bots, and each test is decided by simple facts (tool log, canary, exact text) and an AI judge, and **the judge has not yet been checked for accuracy**, so it can be wrong in both directions. A pass means no problem was found by these tests, never that a bot is secure. Every scan result says what was not tested.
 - **Not complete security.** Even when testing arrives, an OWASP checklist is not proof an app is secure. Reports will always separate tested, untested and inconclusive risks.
 - **No accounts, rate limiting or end-to-end browser tests yet.**
 - **Model providers are free tiers too.** Groq, Gemini and OpenRouter have small quotas that change often (checked 2026-10-18: roughly 30 requests a minute and 1,000 a day on most Groq models, 5 to 15 a minute on Gemini depending on the source, and 20 a minute and 50 a day on OpenRouter's free models, rising to 1,000 a day after $10 of lifetime purchases). The router exists to survive this: fallback, saved answers and hard budgets. When a quota runs out, a request fails visibly. It is never silently passed.
@@ -311,10 +319,10 @@ Built one milestone at a time. Each ends with a live deployment that is checked 
 | M4 | Dashboard and reports | ✅ Done |
 | M5 | AI judge on every test (accuracy checking comes later) | ✅ Done |
 | M6 | Test your own bot: chat setup, generated tests, HTTP endpoint | Built, awaiting live check |
-| M7 | Adaptive and multi-turn attacks | Planned |
-| M8 | External targets: MCP servers and the rest | Planned |
-| M9 | Regression testing and CI gate | Planned |
-| M10 | Launch polish | Planned |
+| M7 | Adaptive and multi-turn attacks | Built (wave 2), awaiting live check |
+| M8 | External targets: MCP servers | Built (wave 2), awaiting live check |
+| M9 | Regression testing and CI gate | Built (wave 2), awaiting live check |
+| M10 | Launch polish | Partly done: audit, copy and docs; ownership proof and accounts still open |
 
 Details: [docs/Redflag_Milestones.md](docs/Redflag_Milestones.md).
 
@@ -341,6 +349,7 @@ Redflag/
 - [M4 dashboard and reports: how it works, how to save the public samples, how to check it](docs/M4-setup.md)
 - [M5 AI judge: how it works, how to check it](docs/M5-setup.md)
 - [M6 test your own bot: how it works, how to check it](docs/M6-setup.md)
+- [Wave 2: variations, multi-turn, CI, quick scan, judge accuracy, MCP checks](docs/Wave2-setup.md)
 - [Milestone plan](docs/Redflag_Milestones.md)
 - [Requirements specification](docs/Redflag_Requirements_Specification.docx)
 - [M0 design](docs/superpowers/specs/2026-10-18-m0-foundation-design.md) and [build plan](docs/superpowers/plans/2026-10-18-m0-foundation-plan.md)
