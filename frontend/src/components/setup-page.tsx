@@ -13,6 +13,7 @@ import {
   type Rule,
   type SetupListItem,
   type SetupView,
+  type Strategy,
 } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
@@ -55,8 +56,8 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
   const [scan, setScan] = useState<ScanDetail | null>(null);
   const [history, setHistory] = useState<ScanListItem[]>([]);
   const stopped = useRef(false);
-  // The confirmed version the tests belong to. Remembered between stages, never drawn.
-  const versionNumber = useRef(1);
+  // The confirmed version the tests belong to.
+  const [version, setVersion] = useState(1);
 
   useEffect(() => {
     stopped.current = false;
@@ -194,6 +195,10 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
           )}
           {stage === "tests" && (
             <TestsStage
+              api={api}
+              setupId={view.setup_id}
+              version={version}
+              onTestsChange={setTests}
               tests={tests}
               ticked={ticked}
               setTicked={setTicked}
@@ -204,7 +209,7 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
                 setProblem(null);
                 const result = await api.call<{ scan_id: number }>(
                   "POST",
-                  `/setups/${view.setup_id}/versions/${versionNumber.current}/runs`,
+                  `/setups/${view.setup_id}/versions/${version}/runs`,
                   { test_ids: tests.filter((t) => ticked.has(t.id)).map((t) => t.id), key: key || null },
                 );
                 if (!result.ok) {
@@ -267,9 +272,6 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
     }
   }
 
-  function setVersion(number: number) {
-    versionNumber.current = number;
-  }
 }
 
 function RunningView({ detail }: { detail: ScanDetail }) {
@@ -941,6 +943,10 @@ function RuleCard({
 // --- the select page ---------------------------------------------------------------------------
 
 function TestsStage({
+  api,
+  setupId,
+  version,
+  onTestsChange,
   tests,
   ticked,
   setTicked,
@@ -949,6 +955,10 @@ function TestsStage({
   onRun,
   setProblem,
 }: {
+  api: SetupApi;
+  setupId: number;
+  version: number;
+  onTestsChange: (tests: GeneratedTest[]) => void;
   tests: GeneratedTest[];
   ticked: Set<string>;
   setTicked: (value: Set<string>) => void;
@@ -958,6 +968,45 @@ function TestsStage({
   setProblem: (value: string | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    api.call<{ strategies: Strategy[] }>("GET", "/strategies").then((result) => {
+      if (!cancelled && result.ok) setStrategies(result.data.strategies);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  // Only ticked attack tests are varied, and a variation is never varied again.
+  const variable = tests.filter((t) => t.kind === "negative" && !t.strategy && ticked.has(t.id));
+
+  async function addVariations() {
+    setProblem(null);
+    const result = await api.call<{ added: GeneratedTest[]; tests: GeneratedTest[] }>(
+      "POST",
+      `/setups/${setupId}/versions/${version}/tests/variations`,
+      { strategies: [...chosen], base_ids: variable.map((t) => t.id) },
+    );
+    if (!result.ok) {
+      setProblem(describeError(result.status, result.data as never));
+      return;
+    }
+    onTestsChange(result.data.tests);
+    setTicked(new Set([...ticked, ...result.data.added.map((t) => t.id)]));
+    setChosen(new Set());
+  }
+
+  function toggleStrategy(id: string) {
+    const next = new Set(chosen);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setChosen(next);
+  }
+
   function toggle(id: string) {
     const next = new Set(ticked);
     if (next.has(id)) next.delete(id);
@@ -986,6 +1035,11 @@ function TestsStage({
             <p className="text-xs">
               {test.kind === "positive" ? "Normal request" : `${test.risk} · severity ${test.severity}`}
             </p>
+            {test.variation_of && (
+              <p className="text-xs">
+                Variation of: {tests.find((t) => t.id === test.variation_of)?.title ?? test.variation_of}
+              </p>
+            )}
             <p>
               <span className="font-semibold">The message we will send:</span> {test.prompt}
             </p>
@@ -1010,6 +1064,38 @@ function TestsStage({
           </li>
         ))}
       </ul>
+      <section aria-label="Add attack variations" role="region" className="space-y-2 rounded border-2 p-3 text-sm">
+        <h3 className="font-semibold">Add attack variations</h3>
+        <p>
+          A real attacker rewrites the same request to get past a refusal. Pick ways to disguise
+          your ticked attack tests. Each pick adds a rewritten copy of every ticked attack test.
+        </p>
+        <ul className="space-y-1">
+          {strategies.map((strategy) => (
+            <li key={strategy.id}>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={chosen.has(strategy.id)}
+                  onChange={() => toggleStrategy(strategy.id)}
+                />
+                <span>
+                  <span className="font-medium">{strategy.name}</span>
+                  <span className="block text-xs">{strategy.description}</span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={addVariations}
+          disabled={chosen.size === 0 || variable.length === 0}
+          className={BUTTON}
+        >
+          Add variations
+        </button>
+      </section>
       <p>
         {ticked.size} of {tests.length} tests ticked
       </p>

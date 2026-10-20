@@ -115,7 +115,12 @@ export type GeneratedTest = {
   real_action: boolean;
   fix: string;
   selected: boolean;
+  // Set on an attack variation: the strategy that rewrote it, and the test it is a copy of.
+  strategy?: string;
+  variation_of?: string;
 };
+
+export type Strategy = { id: string; name: string; description: string };
 
 export type ConnectionResult = {
   status: "ok" | "error";
@@ -158,6 +163,10 @@ export function describeError(status: number, body: ErrorBody | null | undefined
     }
     case "bad_selection":
       return "Pick at least one test to run.";
+    case "test_cap_reached":
+      return "That would make too many tests for one setup. Remove some variations or generate the tests again.";
+    case "unknown_strategy":
+      return "Pick at least one way to vary the attacks.";
     case "no_tests":
       return "Generate the tests first.";
     case "file_type":

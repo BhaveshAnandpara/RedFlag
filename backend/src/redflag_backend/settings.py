@@ -83,8 +83,10 @@ class Settings(BaseSettings):
     setup_max_followups: int = 8
     setup_file_max_bytes: int = 20_000
     setup_file_max_count: int = 5
+    # The most tests one setup version may hold (generated tests plus attack variations).
+    setup_max_tests: int = 200
     # The most requests one run may send to the user's own endpoint.
-    run_max_endpoint_requests: int = 40
+    run_max_endpoint_requests: int = 150
     # Redflag's own public host name (for example redflag-xyz.onrender.com). A bot endpoint that
     # points at it is refused, so Redflag cannot be aimed at itself.
     public_backend_host: str | None = None

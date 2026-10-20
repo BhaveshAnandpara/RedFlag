@@ -191,6 +191,27 @@ class SetupStore:
                     {"s": test_id in ids, "id": row_id},
                 )
 
+    def add_tests(self, setup_id: int, number: int, tests: list[dict[str, Any]]) -> None:
+        """Append tests (for example attack variations) after the existing ones, all selected."""
+        _, _, project_id = self.get_draft(setup_id)
+        with self._engine.begin() as conn:
+            version_id = self._version_id(conn, project_id, number)
+            start = conn.execute(
+                text(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM generated_tests "
+                    "WHERE version_id = :v"
+                ),
+                {"v": version_id},
+            ).scalar_one()
+            for offset, test in enumerate(tests):
+                conn.execute(
+                    text(
+                        "INSERT INTO generated_tests (version_id, position, test, selected) "
+                        "VALUES (:v, :pos, CAST(:test AS jsonb), true)"
+                    ),
+                    {"v": version_id, "pos": int(start) + offset, "test": json.dumps(test)},
+                )
+
     def get_tests(self, setup_id: int, number: int) -> list[dict[str, Any]]:
         _, _, project_id = self.get_draft(setup_id)
         with self._engine.connect() as conn:
