@@ -1,0 +1,53 @@
+/* Redflag scan chat flair: shared by scan.html and quick.html.
+   A failed test raises a red flag on the bot's reply and on the row of flags; a held test settles quietly. */
+
+/* the row of flags, one per test */
+.flagstrip { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; min-height: 24px; }
+.mf { position: relative; width: 11px; height: 22px; flex: none; }
+.mf i { position: absolute; left: 0; bottom: 0; width: 2px; height: 100%; border-radius: 1px; background: #262626;
+  transform-origin: bottom; transition: background-color 300ms ease, transform 400ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mf b { position: absolute; left: 2px; top: 0; width: 10px; height: 7px; background: #ff3b3f;
+  clip-path: polygon(0 0, 100% 0, 76% 50%, 100% 100%, 0 100%); transform-origin: left center; transform: scaleX(0); }
+.mf.now i { background: #8a8a8a; animation: mf-blink 1s ease-in-out infinite; }
+.mf.pass i { background: #4a4a4a; transform: scaleY(0.45); }
+.mf.fail i { background: #f4f4f2; }
+.mf.fail b { animation: mf-raise 650ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+@keyframes mf-blink { 50% { opacity: 0.35; } }
+@keyframes mf-raise { from { transform: scaleX(0) skewY(20deg); } to { transform: scaleX(1) skewY(0); } }
+
+/* the foul on a reply */
+.bubble.bot { position: relative; transition: border-color 400ms ease; }
+.bubble.bot.fouled { border-color: rgba(255, 59, 63, 0.55); animation: rf-flash 1.4s ease-out; }
+@keyframes rf-flash {
+  0% { box-shadow: 0 0 0 1px rgba(255, 59, 63, 0.9), 0 0 36px -6px rgba(255, 59, 63, 0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 59, 63, 0), 0 0 0 0 rgba(255, 59, 63, 0); }
+}
+.bflag { position: absolute; left: -6px; top: -16px; width: 18px; height: 24px; pointer-events: none; }
+.bflag i { position: absolute; left: 0; bottom: 0; width: 2px; height: 100%; border-radius: 1px; background: #f4f4f2; transform-origin: bottom; animation: bf-pole 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.bflag b { position: absolute; left: 2px; top: 0; width: 14px; height: 10px; background: #ff3b3f;
+  clip-path: polygon(0 0, 100% 0, 76% 50%, 100% 100%, 0 100%); transform-origin: left center; animation: mf-raise 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 220ms both; }
+@keyframes bf-pole { from { transform: scaleY(0); } }
+
+/* a held reply: a quiet green settle */
+.bubble.bot.held { animation: rf-held 1.2s ease-out; }
+@keyframes rf-held { 0% { border-color: rgba(63, 192, 122, 0.5); } 100% { border-color: rgba(255, 255, 255, 0.08); } }
+
+/* a soft red pulse through the chat window on a foul */
+.rf-wrap { position: relative; }
+.rf-wrap::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; border-radius: inherit;
+  background: radial-gradient(ellipse at 30% 70%, rgba(255, 59, 63, 0.16), rgba(255, 59, 63, 0) 65%); }
+.rf-wrap.rf-pulse::after { animation: rf-pulse 1.3s ease-out; }
+@keyframes rf-pulse { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+
+/* the counter pops when it goes up */
+.rf-pop { display: inline-block; animation: rf-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes rf-pop { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
+
+/* the badge arrives with a small slide */
+.verdict { animation: rf-in 360ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes rf-in { from { opacity: 0; transform: translateY(4px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mf.now i, .mf.fail b, .bflag i, .bflag b, .bubble.bot.fouled, .bubble.bot.held, .rf-wrap.rf-pulse::after, .rf-pop, .verdict { animation: none; }
+  .mf.fail b, .bflag b { transform: none; }
+}

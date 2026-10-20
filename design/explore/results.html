@@ -146,6 +146,19 @@
     .kv { grid-template-columns: 1fr; } .kv dt { padding-bottom: 0; } .kv dd { border-top: 0; padding-top: 2px; }
     details.item summary { grid-template-columns: auto minmax(0, 1fr); } .chev { display: none; }
   }
+
+  .qpanel { padding: 20px; display: grid; gap: 14px; }
+  .qpanel p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; max-width: 60ch; }
+  .qrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .qin { height: 40px; min-width: 260px; flex: 1; max-width: 380px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: #0c0c0c; color: var(--ink); font: inherit; font-size: 14px; outline: none; }
+  .qin:focus { border-color: rgba(255,255,255,0.4); }
+  .qpanel .btn.solid:disabled { opacity: 0.35; cursor: not-allowed; }
+  .qpanel .btn.small { height: 32px; font-size: 12.5px; }
+  .qstatus { font-size: 13px; color: var(--muted); } .qstatus code, .tokenbox code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .code { margin: 0; padding: 14px 16px; border-radius: 10px; background: #070707; border: 1px solid var(--line); font-family: var(--mono); font-size: 12.5px; color: #d6d6d3; overflow-x: auto; }
+  .tokenbox { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; background: #0d1a12; border: 1px solid rgba(63,192,122,0.3); margin-bottom: 6px; overflow-x: auto; }
+  .tailor { margin: 18px 0 0; font-size: 15px; color: var(--muted); } .tailor a { color: var(--ink); }
+  @media (max-width: 860px) { .qin { min-width: 0; max-width: none; } }
 </style>
 </head>
 <body>
@@ -161,6 +174,7 @@
 <script>
 (() => {
   const q = new URLSearchParams(location.search), key = q.get('scan') === 'hardened' ? 'hardened' : 'weak', other = key === 'weak' ? 'hardened' : 'weak';
+  const quick = q.get('mode') === 'quick'; // a quick scan of the visitor's own bot: the AI judge decides every result
   const M = SCAN_META[key], T = SCAN_DATA[key], label = { weak: 'Weak bot', hardened: 'Protected bot' };
   const RISKS = [['LLM01', 'Prompt injection'], ['LLM02', 'Sensitive information disclosure'], ['LLM03', 'Supply chain'], ['LLM04', 'Data and model poisoning'],
     ['LLM05', 'Improper output handling'], ['LLM06', 'Excessive agency'], ['LLM07', 'System prompt leakage'], ['LLM08', 'Vector and embedding weaknesses'],
@@ -178,6 +192,13 @@
   const harmful = t => tl => t.status === 'fail' && tl.outcome === 'executed' && (t.evidence.includes(tl.tool) || (tl.tool === 'lookup_order' && t.risk === 'LLM02'));
 
   function detail(t) {
+    if (quick) return `<div class="detail">
+      <div class="dl"><span>Message sent</span><div class="quote att">${esc(t.msg)}</div></div>
+      <div class="dl"><span>Your bot's reply</span><div class="quote">${esc(t.reply)}</div></div>
+      <div class="dl"><span>Tool log</span><div class="quote" style="color:var(--faint)">None. Redflag can only see your bot's replies, not what it did behind them.</div></div>
+      <div class="jb"><div class="h">AI judge <span class="badge ${t.status}">${t.status.toUpperCase()}</span></div>${esc(t.evidence.replace(' or the tool log', ''))}<span style="font-size:12px;color:var(--faint)">The AI judge read the reply against your rule. It has not been checked for accuracy. (Prototype: the recorded evidence stands in for the judge's reason.)</span></div>
+      <div class="rulefix"><div><span>Rule</span>${esc(t.rule)}</div><div><span>How to fix</span>${esc(t.fix || '—')}</div></div>
+    </div>`;
     const tools = t.tools.length ? `<div class="toollog">${t.tools.map(tl => `<div class="tl ${harmful(t)(tl) ? 'harm' : ''} ${tl.outcome === 'blocked' ? 'blocked' : ''}"><span class="call">${esc(tl.tool)}(${esc(tl.args)})</span><span class="out">${esc(tl.outcome)}${harmful(t)(tl) ? ' · the harm' : ''}</span>${tl.detail ? `<span class="det">${esc(tl.detail.slice(0, 220))}${tl.detail.length > 220 ? '…' : ''}</span>` : ''}</div>`).join('')}</div>` : '<div class="quote" style="color:var(--faint)">No tools were called.</div>';
     return `<div class="detail">
       <div class="dl"><span>Message sent</span><div class="quote att">${esc(t.msg)}</div></div>
@@ -210,7 +231,7 @@
   const st = M.settings;
   document.getElementById('main').innerHTML = `
     <div class="titlerow rise">
-      <div><div class="crumb"><a href="#">Results</a> / scan #${M.id}</div><h1>${label[key]} · scan #${M.id}</h1></div>
+      <div><div class="crumb"><a href="#">Results</a> / ${quick ? 'quick scan #13' : `scan #${M.id}`}</div><h1>${quick ? 'Your bot · quick scan #13' : `${label[key]} · scan #${M.id}`}</h1></div>
       <div class="actions"><button class="btn ghost" id="copy">Copy link</button><button class="btn solid" id="dl">Download report</button></div>
     </div>
 
@@ -222,7 +243,7 @@
       <div class="vnotes">
         <span>Attack success rate ${pct(failed.length / attacks.length)} (95% range ${pct(lo)} to ${pct(hi)}). Small sample: ${attacks.length} attacks.</span>
         <span>${untested} of 10 OWASP risks were not tested by this suite.</span>
-        <span>No AI judge ran on this scan. Verdicts come from the plain rules.</span>
+        <span>${quick ? 'Every result was decided by the AI judge, which has not been checked for accuracy.' : 'No AI judge ran on this scan. Verdicts come from the plain rules.'}</span>
         <span class="closing">This is not a guarantee of security. It only reports what these tests checked.</span>
       </div>
     </section>
@@ -241,11 +262,11 @@
     </div>
     <section class="card tablewrap rise"><table><thead><tr><th>Result</th><th>Test</th><th class="t-risk">Risk</th><th>Severity</th><th class="t-model">Model</th></tr></thead><tbody id="tbody"></tbody></table></section>
 
-    <section class="card next rise">
+    ${quick ? '' : `<section class="card next rise">
       <div><h3>${key === 'weak' ? 'Now scan the protected bot' : 'See what the weak bot let through'}</h3>
       <p>${key === 'weak' ? 'Same 16 tests, same models (' + M.models.join(', ') + '), with secret protection, order scoping, refund approval and document isolation switched on.' : 'Same 16 tests and the same models answered both scans, so the difference comes from the defenses.'}</p></div>
       <a class="btn solid" href="${key === 'weak' ? 'scan.html?bot=hardened' : 'results.html?scan=weak'}">${key === 'weak' ? 'Scan the protected bot' : 'Open the weak bot report'}</a>
-    </section>
+    </section>`}
 
     <details class="card settings rise"><summary><span>Scan details</span><span class="mono" style="color:var(--faint);font-size:12px">settings this scan ran with</span></summary>
       <dl class="kv">
@@ -257,7 +278,27 @@
         <dt>Budget</dt><dd>${st.budget.requests} requests · ${st.budget.tokens.toLocaleString()} tokens · ${st.budget.seconds / 60} min</dd>
         <dt>Planted secret</dt><dd class="mono">${esc(st.canary)}</dd>
       </dl>
-    </details>`;
+    </details>
+    ${quick ? `
+    <div class="sec-head rise"><h2>Run these tests again</h2><span>after you change your bot</span></div>
+    <section class="card qpanel rise">
+      <p>Same tests, same rules. Use it after a fix to see what changed. Your key is needed again because Redflag never stores it.</p>
+      <div class="qrow"><input class="qin" id="rk" type="password" placeholder="API key for the run" autocomplete="off" aria-label="API key for the run"><button class="btn solid" id="rerun" disabled>Run again</button></div>
+      <span class="qstatus" id="rstatus" role="status"></span>
+    </section>
+    <div class="sec-head rise"><h2>Use this in your builds</h2><span>run these tests in CI</span></div>
+    <section class="card qpanel rise">
+      <p>Create a token, then run these tests on every change with GitHub Actions or from the command line. The token is shown once.</p>
+      <div class="qrow"><input class="qin" id="tname" value="github" aria-label="Token name"><button class="btn ghost" id="mktoken">Create an API token</button></div>
+      <div id="tokenOut" hidden></div>
+      <pre class="code" id="wf">- name: Redflag scan
+  run: npx redflag scan --setup 13 --fail-on critical
+  env:
+    REDFLAG_TOKEN: $\{{ secrets.REDFLAG_TOKEN }}
+    BOT_KEY: $\{{ secrets.BOT_KEY }}</pre>
+      <div class="qrow"><button class="btn ghost small" id="copywf">Copy workflow</button><span class="qstatus">Command line: <code>REDFLAG_TOKEN=… npx redflag scan --setup 13</code></span></div>
+    </section>
+    <p class="tailor rise">Saved as setup #13. <a href="#">Tailor these tests</a> to your bot by describing it in a chat.</p>` : ''}`;
 
   // the table and its filters
   let fRes = 'all';
@@ -284,7 +325,7 @@
       `Recorded ${M.started} · ${M.duration} s · models: ${M.models.join(', ')} · suite v${st.suite_version}`, '',
       '## Failures', ...(failed.length ? failed.flatMap(t => [`### ${t.title} (${t.risk}, ${t.sev})`, `- Evidence: ${t.evidence}`, `- Rule: ${t.rule}`, `- How to fix: ${t.fix}`, '']) : ['None in this scan.', '']),
       '## What was tested', ...RISKS.map(([id, nm]) => { const m = T.filter(t => t.risk === id); return `- ${id} ${nm}: ${m.length ? `${m.filter(t => t.status === 'fail').length} of ${m.length} got through` : 'not tested'}`; }), '',
-      '## The AI judge', 'No AI judge ran on this scan. Verdicts come from the plain rules.', '',
+      '## The AI judge', quick ? 'Every result was decided by the AI judge, which has not been checked for accuracy.' : 'No AI judge ran on this scan. Verdicts come from the plain rules.', '',
       'This is not a guarantee of security. It only reports what these tests checked.'].join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `redflag-scan-${M.id}.md`; a.click(); URL.revokeObjectURL(a.href);
   });
@@ -293,7 +334,19 @@
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.08 });
   document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 70}ms`; io.observe(el); });
   requestAnimationFrame(() => document.getElementById('flagrow').classList.add('live'));
-  document.title = `${label[key]} · scan #${M.id} · Redflag`;
+  document.title = quick ? 'Your bot · quick scan #13 · Redflag' : `${label[key]} · scan #${M.id} · Redflag`;
+  if (quick) {
+    const rk = document.getElementById('rk'), rr = document.getElementById('rerun');
+    rk.addEventListener('input', () => { rr.disabled = !rk.value; });
+    rr.addEventListener('click', () => { document.getElementById('rstatus').textContent = 'Prototype: the real page starts a new scan here and then shows what changed since this run.'; rk.value = ''; rr.disabled = true; });
+    document.getElementById('mktoken').addEventListener('click', () => {
+      const tok = 'rf_demo_' + Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+      const o = document.getElementById('tokenOut'); o.hidden = false;
+      o.innerHTML = `<div class="tokenbox"><code>${tok}</code><button class="btn ghost small" id="copytok">Copy</button></div><span class="qstatus">Copy it now: it will not be shown again. (Prototype token, it does nothing.)</span>`;
+      document.getElementById('copytok').addEventListener('click', async () => { try { await navigator.clipboard.writeText(tok); toast('Token copied'); } catch {} });
+    });
+    document.getElementById('copywf').addEventListener('click', async () => { try { await navigator.clipboard.writeText(document.getElementById('wf').textContent); toast('Workflow copied'); } catch {} });
+  }
 })();
 </script>
 </body>
