@@ -132,7 +132,7 @@ def test_a_poisoned_description_and_an_open_parameter_fail_with_the_tool_named()
     assert "mcp-static-hidden_characters" in found
 
 
-# --- calling the tools -----------------------------------------------------------------------------
+# --- calling the tools ----------------------------------------------------------------------
 
 
 def traversal_server(leak: bool) -> StandIn:
@@ -230,7 +230,7 @@ def test_the_cap_on_calls_stops_the_rest_with_a_clear_note() -> None:
     assert "cap of 3" in next(r for r in dynamic if r["status"] == "error")["evidence"]
 
 
-# --- what is allowed to run --------------------------------------------------------------------------
+# --- what is allowed to run -----------------------------------------------------------------
 
 
 def test_a_tool_that_acts_is_refused_unless_the_owner_confirmed_a_sandbox_and_nothing_is_sent() -> (
