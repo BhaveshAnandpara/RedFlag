@@ -1035,6 +1035,7 @@ function TestsStage({
             <p className="text-xs">
               {test.kind === "positive" ? "Normal request" : `${test.risk} · severity ${test.severity}`}
             </p>
+            {test.multi_turn && <p className="text-xs font-semibold">Several turns</p>}
             {test.variation_of && (
               <p className="text-xs">
                 Variation of: {tests.find((t) => t.id === test.variation_of)?.title ?? test.variation_of}
@@ -1082,6 +1083,11 @@ function TestsStage({
                 <span>
                   <span className="font-medium">{strategy.name}</span>
                   <span className="block text-xs">{strategy.description}</span>
+                  {strategy.multi_turn && (
+                    <span className="block text-xs font-semibold">
+                      Uses several turns and more requests, so it takes longer and uses more quota.
+                    </span>
+                  )}
                 </span>
               </label>
             </li>

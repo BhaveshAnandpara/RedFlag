@@ -376,14 +376,32 @@ function ConversationItem({ result, realBot }: { result: ScanResult; realBot: bo
       </button>
       {open && (
         <div className="space-y-2 text-sm">
-          <div>
-            <p className="text-xs font-semibold uppercase">Message sent</p>
-            <p className="whitespace-pre-wrap">{result.message}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase">Reply</p>
-            <p className="whitespace-pre-wrap">{result.reply || "(no reply)"}</p>
-          </div>
+          {result.turns && result.turns.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase">
+                Conversation: {Math.ceil(result.turns.length / 2)}{" "}
+                {Math.ceil(result.turns.length / 2) === 1 ? "turn" : "turns"}
+              </p>
+              <ul aria-label="Conversation turns" className="space-y-1">
+                {result.turns.map((turn, index) => (
+                  <li key={index} className="whitespace-pre-wrap">
+                    {turn.role === "user" ? "Tester" : "Bot"}: {turn.content}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="text-xs font-semibold uppercase">Message sent</p>
+                <p className="whitespace-pre-wrap">{result.message}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase">Reply</p>
+                <p className="whitespace-pre-wrap">{result.reply || "(no reply)"}</p>
+              </div>
+            </>
+          )}
           <div>
             <p className="text-xs font-semibold uppercase">What the bot did (tool-call log)</p>
             {realBot ? (

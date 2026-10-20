@@ -35,6 +35,8 @@ export type ScanResult = {
   // and are shown as "not rated".
   severity?: Severity | null;
   remediation?: string | null;
+  // Every turn of a multi-turn attack, oldest first. Single-message tests have none.
+  turns?: { role: "user" | "assistant"; content: string }[] | null;
   // The two sides of the combined `status` and `evidence`, saved since M5. Scans from before
   // the judge, and tests that errored or did not apply, have none (null or missing).
   rule_status?: "pass" | "fail" | "inconclusive" | null;

@@ -118,9 +118,11 @@ export type GeneratedTest = {
   // Set on an attack variation: the strategy that rewrote it, and the test it is a copy of.
   strategy?: string;
   variation_of?: string;
+  // A conversation of several turns, not one message.
+  multi_turn?: boolean;
 };
 
-export type Strategy = { id: string; name: string; description: string };
+export type Strategy = { id: string; name: string; description: string; multi_turn?: boolean };
 
 export type ConnectionResult = {
   status: "ok" | "error";

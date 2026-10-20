@@ -126,6 +126,13 @@ export function buildReport(detail: ScanDetail): string {
     lines.push(`### ${r.title}`, "");
     lines.push(`- Severity: ${severityText(r)}`);
     lines.push(`- Evidence: ${r.evidence}`);
+    if (r.turns && r.turns.length > 0) {
+      const count = Math.ceil(r.turns.length / 2);
+      lines.push(`- Conversation (${count} ${count === 1 ? "turn" : "turns"}):`);
+      for (const turn of r.turns) {
+        lines.push(`  - ${turn.role === "user" ? "Tester" : "Bot"}: ${turn.content.replace(/\n/g, " ")}`);
+      }
+    }
     if (judgeState(r) !== "not_run") {
       const rules = ruleOutput(r);
       lines.push(`- Plain rules (${STATUS_WORD[rules.status]}): ${rules.evidence}`);
