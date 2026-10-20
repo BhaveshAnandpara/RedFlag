@@ -75,6 +75,11 @@ def build_quick_router(
     def target(endpoint: Endpoint, key: str | None):  # type: ignore[no-untyped-def]
         return deps.make_target(EndpointConfig(**endpoint.model_dump(), key=key))
 
+    @router.get("/rules")
+    async def rules() -> dict[str, Any]:
+        """The rules a person can tick for each kind of bot. The page shows exactly these."""
+        return {"rules": DEFAULT_RULES}
+
     @router.post("/check", response_model=None)
     async def check(body: CheckBody) -> dict[str, Any] | JSONResponse:
         now = clock()

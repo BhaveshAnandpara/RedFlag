@@ -296,3 +296,11 @@ def test_a_quick_scan_judges_with_the_ai_judge_alone_like_any_real_bot_scan() ->
         scan = wait_for_scan(client, info["scan_id"], timeout=60)
     assert all(r["rule_status"] is None for r in scan["results"])
     assert all(r["judge_status"] is not None for r in scan["results"])
+
+
+def test_the_default_rules_are_served_so_the_page_never_keeps_its_own_copy() -> None:
+    with run_client() as (client, _, _):
+        body = client.get("/quick-scans/rules", headers=OWNER).json()
+        assert body["rules"]["chatbot"] == DEFAULT_RULES["chatbot"]
+        assert body["rules"]["agent"] == DEFAULT_RULES["agent"]
+        assert client.get("/quick-scans/rules").status_code == 401

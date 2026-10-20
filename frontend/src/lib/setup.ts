@@ -169,6 +169,18 @@ export function describeError(status: number, body: ErrorBody | null | undefined
       return "That would make too many tests for one setup. Remove some variations or generate the tests again.";
     case "unknown_strategy":
       return "Pick at least one way to vary the attacks.";
+    case "connection_failed":
+      return `We could not reach your bot: ${body?.error?.message ?? "no answer"}`;
+    case "sandbox_required":
+      return "An agent can only be scanned in a test or sandbox environment. Tick the box to confirm that this is one.";
+    case "purpose_required":
+      return "Say what your bot is for, in one sentence.";
+    case "rules_required":
+      return "Pick at least one thing it must never do, or add your own.";
+    case "bad_bot_type":
+      return "Choose whether your bot is a chatbot or an agent.";
+    case "too_many_checks":
+      return "Too many hello checks in a short time. Wait a few minutes and try again.";
     case "no_tests":
       return "Generate the tests first.";
     case "file_type":

@@ -17,8 +17,7 @@ import {
 } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
-import { CiPanel } from "./ci-panel";
-import { Dashboard } from "./dashboard";
+import { FinishedScan } from "./finished-scan";
 import { StatusBadge, TONE_CLASS } from "./status";
 
 type Stage = "describe" | "rules" | "tests" | "run";
@@ -227,48 +226,18 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
           {stage === "run" && scan && (scan.scan.status === "running" ? (
             <RunningView detail={scan} />
           ) : (
-            <div className="space-y-4">
-              {scan.scan.settings.setup && (
-                <section
-                  aria-label="Run these tests again"
-                  role="region"
-                  className="space-y-2 rounded border-2 p-3 text-sm"
-                >
-                  <h3 className="font-semibold">Run these tests again</h3>
-                  <p>
-                    Same setup version, same tests. Use it after you change your bot, to see what
-                    changed.
-                  </p>
-                  <label className="block space-y-1">
-                    <span className="block font-medium">API key for the run</span>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      value={key}
-                      onChange={(event) => setKey(event.target.value)}
-                      className={FIELD}
-                    />
-                  </label>
-                  <button type="button" onClick={() => void runAgain(scan.scan.id)} className={PRIMARY}>
-                    Run again
-                  </button>
-                </section>
-              )}
-              {scan.scan.settings.setup && (
-                <CiPanel
-                  api={api}
-                  setupId={scan.scan.settings.setup.setup_id}
-                  setProblem={setProblem}
-                />
-              )}
-              <Dashboard
-                detail={scan}
-                history={history}
-                onOpen={(id) => void openScan(id)}
-                loadScan={(id) => fetchScan(id)}
-                previous={previous}
-              />
-            </div>
+            <FinishedScan
+              api={api}
+              scan={scan}
+              history={history}
+              previous={previous}
+              keyValue={key}
+              setKey={setKey}
+              onRunAgain={(id) => void runAgain(id)}
+              onOpen={(id) => void openScan(id)}
+              loadScan={(id) => fetchScan(id)}
+              setProblem={setProblem}
+            />
           ))}
         </div>
       )}
@@ -342,7 +311,7 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
 
 }
 
-function RunningView({ detail }: { detail: ScanDetail }) {
+export function RunningView({ detail }: { detail: ScanDetail }) {
   const { scan, results } = detail;
   return (
     <div className="space-y-3">
