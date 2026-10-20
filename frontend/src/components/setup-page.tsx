@@ -318,7 +318,9 @@ export function RunningView({ detail }: { detail: ScanDetail }) {
       <h2 className="text-xl font-semibold">Scan #{scan.id}</h2>
       <p>{scan.settings.bot_name} · Status: running</p>
       <p>
-        {results.length} of {scan.settings.test_count} tests done
+        {scan.settings.test_count > 0
+          ? `${results.length} of ${scan.settings.test_count} tests done`
+          : `${results.length} tests done so far`}
       </p>
       {results.length > 0 && (
         <ul aria-label="Results so far" className="space-y-2 text-sm">

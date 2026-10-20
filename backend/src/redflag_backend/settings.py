@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     judge_budget_max_requests: int = 200
     # Below this many labeled results, accuracy numbers are called a small sample.
     judge_accuracy_min_sample: int = 20
+    # Limits for checking an MCP server: tool calls in one run, and per tool.
+    mcp_max_calls: int = 60
+    mcp_calls_per_tool: int = 8
     judge_budget_max_tokens: int = 200_000
     judge_budget_max_seconds: float = 1800.0
     # The setup chat, the supervisor and the test generator: how much of Redflag's own model

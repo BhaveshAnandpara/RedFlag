@@ -20,6 +20,8 @@ from redflag_backend.llm.budget import BudgetBook, BudgetCaps
 from redflag_backend.llm.provider import Provider
 from redflag_backend.llm.providers.factory import build_providers
 from redflag_backend.llm.router import Router
+from redflag_backend.mcp.api import McpDeps, build_mcp_router
+from redflag_backend.mcp.runner import McpScanRunner
 from redflag_backend.quick.api import build_quick_router
 from redflag_backend.sandbox.loader import BOTS_DIR, load_bots
 from redflag_backend.scan.api import build_scan_router
@@ -41,6 +43,7 @@ from redflag_backend.targets.http_target import (
     Resolver,
     system_resolver,
 )
+from redflag_backend.targets.mcp_target import McpTarget
 
 
 def create_app(
@@ -182,6 +185,34 @@ def create_app(
         judge_prompt_version=PROMPT_VERSION,
     )
     setup_store = SetupStore(engine, clock=now)
+    app.include_router(
+        build_mcp_router(
+            settings,
+            McpDeps(
+                store=scan_store,
+                runner=McpScanRunner(
+                    scan_store,
+                    judge,
+                    judge_caps,
+                    now,
+                    settings.mcp_max_calls,
+                    settings.mcp_calls_per_tool,
+                ),
+                gate=gate,
+                clock=now,
+                catalog=catalog,
+                make_target=lambda config: McpTarget(
+                    config,
+                    resolver=target_resolver or system_resolver,
+                    transport=target_transport,
+                    blocked_hosts=own_hosts,
+                ),
+                judge_caps=judge_caps,
+                judge_providers=[p.name for p in active_providers if p.configured],
+                max_calls=settings.mcp_max_calls,
+            ),
+        )
+    )
     ci_tokens = CiTokenStore(engine, clock=now)
     app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))
     app.include_router(build_quick_router(settings, setup_store, run_deps, now))

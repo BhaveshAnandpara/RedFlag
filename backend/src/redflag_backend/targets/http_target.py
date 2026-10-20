@@ -162,7 +162,7 @@ class HttpTarget:
         # One pass, so a prompt that itself contains the placeholder is not substituted again.
         return template.replace(PLACEHOLDER, json.dumps(prompt)[1:-1])
 
-    async def _check_address(self) -> tuple[str, str, int, str]:
+    async def check_address(self) -> tuple[str, str, int, str]:
         """The checked address to call: (scheme, host name, port, ip). Raises _Refused."""
         try:
             parts = urlsplit(self._config.url)
@@ -206,7 +206,7 @@ class HttpTarget:
         except ValueError as problem:
             return _Exchange(None, "", str(problem))
         try:
-            scheme, host, port, ip = await self._check_address()
+            scheme, host, port, ip = await self.check_address()
         except _Refused as refused:
             return _Exchange(None, "", str(refused))
 

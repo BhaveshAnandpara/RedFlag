@@ -184,7 +184,11 @@ export function conclusion(scan: ScanDetail): Conclusion {
     );
   }
   details.push(...judgeLines(results));
-  if (isRealBot(scan)) {
+  if (isMcp(scan)) {
+    details.push(
+      "This is a check of an MCP server. The description and schema checks use plain rules that look for known patterns. Redflag only called the tools you ticked, and an AI judge read what each tool sent back.",
+    );
+  } else if (isRealBot(scan)) {
     details.push(
       "No plain rules ran on this bot, so there was no second opinion: every result was decided by an AI judge from the bot's reply alone.",
     );
@@ -199,7 +203,11 @@ export function conclusionText(scan: ScanDetail): string {
 
 /** A scan of the owner's own bot (M6) records the setup version it ran with. */
 export function isRealBot(scan: ScanDetail): boolean {
-  return scan.scan.settings.setup !== undefined;
+  return scan.scan.settings.setup !== undefined || isMcp(scan);
+}
+
+export function isMcp(scan: ScanDetail): boolean {
+  return scan.scan.settings.mcp !== undefined;
 }
 
 export type Comparison = {

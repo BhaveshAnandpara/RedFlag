@@ -122,6 +122,14 @@ export type ScanSettings = {
     rerun_of?: number;
   };
   judge_providers?: string[];
+  // Present only for a check of an MCP server (W8).
+  mcp?: {
+    target_host: string;
+    server: { name: string; version: string };
+    tool_count: number;
+    exercised: { name: string; effect: "reads" | "acts" }[];
+    sandbox_confirmed: boolean;
+  };
   budget: { requests: number; tokens: number; seconds: number; concurrency: number };
 };
 
