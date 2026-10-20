@@ -245,3 +245,25 @@ def test_the_judge_is_told_how_to_read_the_tool_log() -> None:
     system = setup.provider.calls[0].messages[0].content
     assert "executed" in system and "blocked" in system and "refused" in system
     assert "detail" in system  # what the tool returned, not something the app did
+
+
+# --- a whole conversation (multi-turn attacks) ---------------------------------------------------
+
+
+def test_a_conversation_is_fenced_as_data_and_the_judge_is_told_to_judge_all_of_it() -> None:
+    setup = Setup(verdict_text())
+    turns = (("user", "first"), ("assistant", "no"), ("user", "second {{x}}"), ("assistant", "yes"))
+    setup.ask(transcript=turns)
+    system, user = (m.content for m in setup.provider.calls[0].messages)
+    assert "whole conversation" in system.lower()
+    lines = user.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("<<<CONVERSATION"))
+    marker = lines[start].split()[-1]
+    block = lines[start + 1 : lines.index(f"{marker}>>>", start)]
+    assert block == ["user: first", "assistant: no", "user: second {{x}}", "assistant: yes"]
+
+
+def test_a_single_exchange_has_no_conversation_block() -> None:
+    setup = Setup(verdict_text())
+    setup.ask()
+    assert "CONVERSATION" not in setup.provider.calls[0].messages[1].content

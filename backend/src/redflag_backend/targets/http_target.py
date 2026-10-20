@@ -113,6 +113,18 @@ class HttpTarget:
             return TargetResult("error", error=str(problem), http_status=exchange.http_status)
         return TargetResult("ok", reply=self._clean(reply), http_status=exchange.http_status)
 
+    async def send_conversation(self, messages: list[dict[str, str]]) -> TargetResult:
+        """Send a whole conversation (user and assistant turns, oldest first). Only the
+        OpenAI-compatible format can hold one: a custom template has a single prompt slot."""
+        exchange = await self._exchange("", messages)
+        if exchange.error:
+            return TargetResult("error", error=exchange.error, http_status=exchange.http_status)
+        try:
+            reply = self._read_reply(exchange.body)
+        except ValueError as problem:
+            return TargetResult("error", error=str(problem), http_status=exchange.http_status)
+        return TargetResult("ok", reply=self._clean(reply), http_status=exchange.http_status)
+
     async def test_connection(self) -> ConnectionCheck:
         """One harmless message, and what came back, so the user can see if the setup is right."""
         exchange = await self._exchange("Hello")
@@ -131,12 +143,13 @@ class HttpTarget:
 
     # --- building and sending the request -------------------------------------------------
 
-    def _body(self, prompt: str) -> str:
+    def _body(self, prompt: str, messages: list[dict[str, str]] | None = None) -> str:
         config = self._config
+        if messages is not None and config.format != "openai":
+            raise ValueError("A conversation needs the OpenAI-compatible format.")
         if config.format == "openai":
-            return json.dumps(
-                {"model": config.model, "messages": [{"role": "user", "content": prompt}]}
-            )
+            turns = messages if messages is not None else [{"role": "user", "content": prompt}]
+            return json.dumps({"model": config.model, "messages": turns})
         template = config.request_template or ""
         if PLACEHOLDER not in template:
             raise ValueError(
@@ -184,10 +197,12 @@ class HttpTarget:
         except OSError as problem:
             raise _Refused("Could not resolve that address.") from problem
 
-    async def _exchange(self, prompt: str) -> _Exchange:
+    async def _exchange(
+        self, prompt: str, messages: list[dict[str, str]] | None = None
+    ) -> _Exchange:
         config = self._config
         try:
-            body = self._body(prompt)
+            body = self._body(prompt, messages)
         except ValueError as problem:
             return _Exchange(None, "", str(problem))
         try:

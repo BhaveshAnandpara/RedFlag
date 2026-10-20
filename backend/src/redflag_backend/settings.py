@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     bot_budget_max_concurrency: int = 1
     # Hard limits for the AI judge in one scan. The judge runs on Redflag's own keys and models
     # (the ones above), so it never draws on the bots' quota.
-    judge_budget_max_requests: int = 60
+    judge_budget_max_requests: int = 200
     judge_budget_max_tokens: int = 200_000
     judge_budget_max_seconds: float = 1800.0
     # The setup chat, the supervisor and the test generator: how much of Redflag's own model
@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     setup_max_followups: int = 8
     setup_file_max_bytes: int = 20_000
     setup_file_max_count: int = 5
+    # Multi-turn attacks: the most turns in one conversation, and the attacker AI's own limits
+    # for one run (it uses Redflag's own model keys, apart from the judge's budget).
+    multi_turn_max_turns: int = 4
+    attacker_budget_max_requests: int = 100
+    attacker_budget_max_tokens: int = 200_000
+    attacker_budget_max_seconds: float = 1800.0
     # The most tests one setup version may hold (generated tests plus attack variations).
     setup_max_tests: int = 200
     # The most requests one run may send to the user's own endpoint.

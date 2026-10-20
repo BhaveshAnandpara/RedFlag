@@ -8,7 +8,7 @@ from sqlalchemy import Engine, text
 RESULT_COLUMNS = (
     "position, test_id, risk, kind, title, message, status, reply, tool_calls, evidence, rule, "
     "model, provider, attempts, started_at, finished_at, severity, remediation, rule_status, "
-    "rule_evidence, judge_status, judge_reason, judge_model, judge_provider"
+    "rule_evidence, judge_status, judge_reason, judge_model, judge_provider, turns"
 )
 
 
@@ -67,6 +67,7 @@ class ScanStore:
             "scan_id": scan_id,
             "tool_calls": json.dumps(result["tool_calls"]),
             "attempts": json.dumps(result["attempts"]),
+            "turns": json.dumps(result["turns"]) if result.get("turns") is not None else None,
         }
         with self._engine.begin() as conn:
             conn.execute(
@@ -74,12 +75,14 @@ class ScanStore:
                     "INSERT INTO scan_results (scan_id, position, test_id, risk, kind, title, "
                     "message, status, reply, tool_calls, evidence, rule, model, provider, "
                     "attempts, started_at, finished_at, severity, remediation, rule_status, "
-                    "rule_evidence, judge_status, judge_reason, judge_model, judge_provider) "
+                    "rule_evidence, judge_status, judge_reason, judge_model, judge_provider, "
+                    "turns) "
                     "VALUES (:scan_id, :position, :test_id, "
                     ":risk, :kind, :title, :message, :status, :reply, CAST(:tool_calls AS jsonb), "
                     ":evidence, :rule, :model, :provider, CAST(:attempts AS jsonb), :started_at, "
                     ":finished_at, :severity, :remediation, :rule_status, :rule_evidence, "
-                    ":judge_status, :judge_reason, :judge_model, :judge_provider)"
+                    ":judge_status, :judge_reason, :judge_model, :judge_provider, "
+                    "CAST(:turns AS jsonb))"
                 ),
                 values,
             )

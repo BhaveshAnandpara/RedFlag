@@ -27,8 +27,8 @@ IDS = [
 # --- the strategies on their own -----------------------------------------------------------
 
 
-def test_there_are_eight_strategies_each_with_a_name_and_a_plain_description() -> None:
-    assert list(STRATEGIES) == IDS
+def test_there_are_nine_strategies_each_with_a_name_and_a_plain_description() -> None:
+    assert list(STRATEGIES) == [*IDS, "escalate"]  # eight rewrites and the multi-turn one
     for strategy in STRATEGIES.values():
         assert strategy.name and strategy.description
 
@@ -85,7 +85,7 @@ def test_the_strategies_are_listed_for_the_owner_only() -> None:
     with with_tests() as client:
         assert client.get("/strategies").status_code == 401
         listing = client.get("/strategies", headers=OWNER).json()["strategies"]
-        assert [s["id"] for s in listing] == IDS
+        assert [s["id"] for s in listing] == [*IDS, "escalate"]
         assert all(s["name"] and s["description"] for s in listing)
 
 

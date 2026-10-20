@@ -27,7 +27,12 @@ def add_variation_routes(router: APIRouter, settings: Settings, store: SetupStor
     async def list_strategies() -> dict[str, Any]:
         return {
             "strategies": [
-                {"id": s.id, "name": s.name, "description": s.description}
+                {
+                    "id": s.id,
+                    "name": s.name,
+                    "description": s.description,
+                    "multi_turn": s.multi_turn,
+                }
                 for s in STRATEGIES.values()
             ]
         }

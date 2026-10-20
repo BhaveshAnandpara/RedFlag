@@ -64,11 +64,12 @@ def run_client(
     judge: TitleJudge | None = None,
     stand_in: StandIn | httpx.AsyncBaseTransport | None = None,
     bot_providers: list[Any] | None = None,
+    roles: RoleModel | None = None,
     **settings: Any,
 ) -> Iterator[tuple[TestClient, TitleJudge, Any]]:
     the_judge = judge or TitleJudge()
     endpoint = stand_in or StandIn()
-    roles = RoleModel(interviewer=[interviewer_with()], generator=[GOOD])
+    roles = roles or RoleModel(interviewer=[interviewer_with()], generator=[GOOD])
     values: dict[str, Any] = {
         "database_url": TEST_DB_URL,
         "frontend_origin": "http://localhost:3000",

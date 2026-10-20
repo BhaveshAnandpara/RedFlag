@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from redflag_backend.attacks.attacker import Attacker
 from redflag_backend.judge.judge import PROMPT_VERSION, Judge
 from redflag_backend.llm.api import build_llm_router
 from redflag_backend.llm.budget import BudgetBook, BudgetCaps
@@ -157,6 +158,17 @@ def create_app(
             judge_caps=judge_caps,
             clock=now,
             max_requests=settings.run_max_endpoint_requests,
+            attacker=Attacker(
+                Router(active_providers, clock=now),
+                BudgetCaps(
+                    requests=settings.attacker_budget_max_requests,
+                    tokens=settings.attacker_budget_max_tokens,
+                    seconds=settings.attacker_budget_max_seconds,
+                    concurrency=1,
+                ),
+                now,
+            ),
+            max_turns=settings.multi_turn_max_turns,
         ),
         gate=gate,
         clock=now,
