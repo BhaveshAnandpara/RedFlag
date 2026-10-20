@@ -1,0 +1,24 @@
+{
+  "source": "https://atlas.mitre.org/techniques",
+  "version": "ATLAS data 5.6.0",
+  "checked": "2026-10-20",
+  "note": "Redflag's own best match between each OWASP LLM Top 10 (2025) risk and MITRE ATLAS techniques. The two lists do not line up one to one, so a risk may have several techniques or none. An empty list means no good match was found, not that the risk is covered. The technique names are as published in the ATLAS data file checked on the date above; that file was marked as no longer updated, so check atlas.mitre.org before relying on a name or an ID.",
+  "map": {
+    "LLM01": [
+      { "id": "AML.T0051", "name": "LLM Prompt Injection" },
+      { "id": "AML.T0054", "name": "LLM Jailbreak" }
+    ],
+    "LLM02": [{ "id": "AML.T0057", "name": "LLM Data Leakage" }],
+    "LLM03": [{ "id": "AML.T0010", "name": "AI Supply Chain Compromise" }],
+    "LLM04": [{ "id": "AML.T0020", "name": "Poison Training Data" }],
+    "LLM05": [{ "id": "AML.T0067", "name": "LLM Trusted Output Components Manipulation" }],
+    "LLM06": [{ "id": "AML.T0053", "name": "AI Agent Tool Invocation" }],
+    "LLM07": [{ "id": "AML.T0056", "name": "Extract LLM System Prompt" }],
+    "LLM08": [{ "id": "AML.T0070", "name": "RAG Poisoning" }],
+    "LLM09": [],
+    "LLM10": [
+      { "id": "AML.T0029", "name": "Denial of AI Service" },
+      { "id": "AML.T0034", "name": "Cost Harvesting" }
+    ]
+  }
+}

@@ -38,6 +38,7 @@ export type RiskBar = {
   tone: Tone;
   fullyGreen: boolean;
   tests: number;
+  atlas?: { id: string; name: string }[];
   segments: { pass: number; fail: number; unclear: number; not_applicable: number };
 };
 
@@ -75,6 +76,7 @@ export function riskBars(risks: RiskSummary[]): RiskBar[] {
       tone,
       fullyGreen: risk.tests > 0 && risk.passed === risk.tests,
       tests: risk.tests,
+      atlas: risk.atlas,
       segments,
     };
   });

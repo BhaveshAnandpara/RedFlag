@@ -170,6 +170,22 @@ export function buildReport(detail: ScanDetail): string {
     );
   }
 
+  if (summary.atlas) {
+    lines.push("## Framework tags", "");
+    lines.push(
+      `Each OWASP risk with the MITRE ATLAS techniques that best match it (${summary.atlas.version}, checked ${summary.atlas.checked}, ${summary.atlas.source}). This is Redflag's own best match, not a coverage claim.`,
+      "",
+    );
+    for (const risk of summary.risks) {
+      const tags =
+        risk.atlas && risk.atlas.length > 0
+          ? risk.atlas.map((t) => `${t.id} ${t.name}`).join(", ")
+          : "no close ATLAS match";
+      lines.push(`- ${risk.id} ${risk.name}: ${tags}`);
+    }
+    lines.push("");
+  }
+
   lines.push("## Risks not tested", "");
   const untested = summary.risks.filter((risk) => risk.state !== "tested");
   if (untested.length === 0) lines.push("Every risk in the list had at least one pass or fail result.", "");

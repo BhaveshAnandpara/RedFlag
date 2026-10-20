@@ -8,6 +8,7 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
+from redflag_backend.scan.atlas import ATLAS
 from redflag_backend.scan.catalog import Catalog
 
 STATUSES = ("pass", "fail", "inconclusive", "error", "not_applicable")
@@ -37,6 +38,8 @@ def summarize(results: Sequence[dict[str, Any]], catalog: Catalog) -> dict[str, 
             {
                 "id": risk.id,
                 "name": risk.name,
+                # MITRE ATLAS techniques that best match this risk (empty when none does)
+                "atlas": ATLAS.tags(risk.id),
                 "state": state,
                 "tests": tests,
                 "passed": mine["pass"],
@@ -58,5 +61,6 @@ def summarize(results: Sequence[dict[str, Any]], catalog: Catalog) -> dict[str, 
         },
         "catalog_version": catalog.version,
         "catalog_source": catalog.source,
+        "atlas": ATLAS.meta(),
         "disclaimer": DISCLAIMER,
     }

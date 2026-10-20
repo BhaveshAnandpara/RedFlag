@@ -116,6 +116,14 @@ export function RiskBars({ bars }: { bars: RiskBar[] }) {
               )}
             </div>
             <div>{bar.tests === 0 ? "No tests" : counts}</div>
+            {bar.atlas && (
+              <div className="text-xs">
+                ATLAS:{" "}
+                {bar.atlas.length > 0
+                  ? bar.atlas.map((t) => `${t.id} ${t.name}`).join(", ")
+                  : "no close match"}
+              </div>
+            )}
           </li>
         );
       })}

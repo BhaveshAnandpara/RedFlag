@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from redflag_backend.llm.provider import Provider
 from redflag_backend.sandbox.loader import BotRegistry
+from redflag_backend.scan.atlas import ATLAS
 from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.gate import ScanGate
 from redflag_backend.scan.runner import ScanRunner, new_canary
@@ -70,8 +71,15 @@ def build_scan_router(
             "source": catalog.source,
             "retrieved": catalog.retrieved,
             "risks": [
-                {"id": r.id, "name": r.name, "description": r.description} for r in catalog.risks
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "description": r.description,
+                    "atlas": ATLAS.tags(r.id),
+                }
+                for r in catalog.risks
             ],
+            "atlas": ATLAS.meta(),
         }
 
     @router.post("/scans", status_code=202, response_model=None)

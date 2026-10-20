@@ -20,6 +20,7 @@ import {
   UNCHECKED_JUDGE_LINE,
 } from "@/lib/analytics";
 import { buildReport } from "@/lib/report";
+import { reportHtml } from "@/lib/report-html";
 import type { ScanDetail, ScanListItem, ScanResult, Status } from "@/lib/scan";
 
 import { Donut, RiskBars } from "./dashboard-charts";
@@ -64,6 +65,7 @@ export function Dashboard({
   previous,
 }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("Overview");
+  const [printNote, setPrintNote] = useState<string | null>(null);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   function move(next: Tab) {
@@ -79,6 +81,21 @@ export function Dashboard({
     else if (event.key === "End") move(TABS[TABS.length - 1]);
     else return;
     event.preventDefault();
+  }
+
+  function printReport() {
+    setPrintNote(null);
+    const win = window.open("", "_blank");
+    if (!win) {
+      setPrintNote(
+        "Your browser blocked the print window. Allow pop-ups for this site, or use Download report.",
+      );
+      return;
+    }
+    win.document.write(reportHtml(buildReport(detail), `Redflag scan #${detail.scan.id}`));
+    win.document.close();
+    win.focus();
+    win.print();
   }
 
   function downloadReport() {
@@ -104,9 +121,15 @@ export function Dashboard({
           </p>
           {scan.note && <p>{scan.note}</p>}
         </div>
-        <button type="button" onClick={downloadReport} className="rounded border-2 px-3 py-2 text-sm">
-          Download report
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={downloadReport} className="rounded border-2 px-3 py-2 text-sm">
+            Download report
+          </button>
+          <button type="button" onClick={printReport} className="rounded border-2 px-3 py-2 text-sm">
+            Print or save as PDF
+          </button>
+        </div>
+        {printNote && <p role="status" className="basis-full text-sm">{printNote}</p>}
       </header>
 
       <div role="tablist" aria-label="Scan results" className="flex flex-wrap gap-2">
@@ -213,6 +236,17 @@ function Overview({ detail, previous }: { detail: ScanDetail; previous: ScanDeta
       <section aria-label="Risks" className="space-y-2">
         <h3 className="font-semibold">What this scan checked and did not check</h3>
         <RiskBars bars={bars} />
+        {detail.summary.atlas && (
+          <p role="note" aria-label="About the ATLAS tags" className="text-xs">
+            ATLAS tags are Redflag&apos;s own best match between each OWASP risk and MITRE ATLAS
+            techniques, not a claim of coverage ({detail.summary.atlas.version}, checked{" "}
+            {detail.summary.atlas.checked},{" "}
+            <a href={detail.summary.atlas.source} className="underline">
+              atlas.mitre.org
+            </a>
+            ).
+          </p>
+        )}
       </section>
 
       <section

@@ -59,6 +59,8 @@ export type RiskSummary = {
   errors: number;
   inconclusive: number;
   not_applicable: number;
+  // MITRE ATLAS techniques that best match this risk. Missing on scans saved before the tags.
+  atlas?: { id: string; name: string }[];
 };
 
 export type Counts = Record<Status, number>;
@@ -110,6 +112,8 @@ export type ScanDetail = {
     normal_requests: { tests: number; passed: number; failed: number; errors: number };
     catalog_version: string;
     catalog_source: string;
+    // Where the ATLAS tags came from. Missing on scans saved before the tags.
+    atlas?: { source: string; version: string; checked: string; note: string };
     disclaimer: string;
   };
 };
