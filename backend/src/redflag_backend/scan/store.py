@@ -145,6 +145,19 @@ class ScanStore:
             )
         return {"scan": dict(scan), "results": [dict(r) for r in results]}
 
+    def previous_scan_id(self, scan_id: int) -> int | None:
+        """The latest completed scan of the same project before this one, if there is one."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT p.id FROM scans p JOIN scans s ON s.project_id = p.project_id "
+                    "WHERE s.id = :id AND p.id < s.id AND p.status = 'completed' "
+                    "ORDER BY p.id DESC LIMIT 1"
+                ),
+                {"id": scan_id},
+            ).first()
+        return int(row[0]) if row else None
+
     def list_scans(self, bot_id: str | None, limit: int) -> list[dict[str, Any]]:
         """Newest first, each with how many results ended each way."""
         with self._engine.connect() as conn:

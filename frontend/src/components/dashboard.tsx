@@ -16,6 +16,7 @@ import {
   overallTone,
   riskBars,
   ruleOutput,
+  runDelta,
   UNCHECKED_JUDGE_LINE,
 } from "@/lib/analytics";
 import { buildReport } from "@/lib/report";
@@ -50,9 +51,18 @@ export type DashboardProps = {
   loadScan: (scanId: number) => Promise<ScanDetail>;
   // A scan the Compare tab opens already compared with (the public page uses it).
   defaultCompareId?: number;
+  // The scan before this one, to show what changed since the last run.
+  previous?: ScanDetail | null;
 };
 
-export function Dashboard({ detail, history, onOpen, loadScan, defaultCompareId }: DashboardProps) {
+export function Dashboard({
+  detail,
+  history,
+  onOpen,
+  loadScan,
+  defaultCompareId,
+  previous,
+}: DashboardProps) {
   const [tab, setTab] = useState<Tab>("Overview");
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -124,7 +134,7 @@ export function Dashboard({ detail, history, onOpen, loadScan, defaultCompareId 
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "Overview" && <Overview detail={detail} />}
+        {tab === "Overview" && <Overview detail={detail} previous={previous ?? null} />}
         {tab === "Tests" && <TestsTable results={detail.results} risks={detail.summary.risks} />}
         {tab === "Conversations" && (
           <Conversations results={detail.results} realBot={isRealBot(detail)} />
@@ -143,7 +153,7 @@ export function Dashboard({ detail, history, onOpen, loadScan, defaultCompareId 
   );
 }
 
-function Overview({ detail }: { detail: ScanDetail }) {
+function Overview({ detail, previous }: { detail: ScanDetail; previous: ScanDetail | null }) {
   const text = conclusion(detail);
   const tone = overallTone(detail);
   const critical = criticalFailures(detail.results);
@@ -167,6 +177,8 @@ function Overview({ detail }: { detail: ScanDetail }) {
         )}
         <p className="text-sm font-semibold">{text.closing}</p>
       </div>
+
+      {previous && <SinceLastRun detail={detail} previous={previous} />}
 
       <p role="note" aria-label="About the AI judge" className="rounded border-2 p-3 text-sm">
         {judgeSummary(detail.results).ran
@@ -482,6 +494,43 @@ function JudgeBlocks({ result }: { result: ScanResult }) {
         </p>
       )}
     </div>
+  );
+}
+
+function SinceLastRun({ detail, previous }: { detail: ScanDetail; previous: ScanDetail }) {
+  const delta = runDelta(detail, previous);
+  const groups: [string, { id: string; title: string }[], string][] = [
+    ["Fixed", delta.fixed, "green"],
+    ["New problems", delta.newProblems, "red"],
+    ["Still failing", delta.stillFailing, "red"],
+    ["Now unclear", delta.unclearNow, "yellow"],
+    ["No longer run", delta.noLongerRun, "grey"],
+  ];
+  return (
+    <section
+      aria-label="Since the last run"
+      role="region"
+      className="space-y-2 rounded border-2 p-4 text-sm"
+    >
+      <h3 className="font-semibold">{delta.summary}</h3>
+      <p className="text-xs">
+        A fixed test only means it passed this time. A model can answer differently each run.
+      </p>
+      {groups
+        .filter(([, items]) => items.length > 0)
+        .map(([name, items, tone]) => (
+          <div key={name} className="space-y-1">
+            <p className="font-medium">{name}</p>
+            <ul aria-label={name} className="list-disc pl-5">
+              {items.map((item) => (
+                <li key={item.id} data-tone={tone}>
+                  {item.title}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+    </section>
   );
 }
 

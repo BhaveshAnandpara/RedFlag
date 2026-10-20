@@ -115,6 +115,7 @@ def build_scan_router(
             raise HTTPException(status_code=404, detail="no such scan")
         scan, results = found["scan"], found["results"]
         scan["models_used"] = sorted({r["model"] for r in results if r["model"]})
+        scan["previous_scan_id"] = await asyncio.to_thread(store.previous_scan_id, scan_id)
         return {"scan": scan, "results": results, "summary": summarize(results, catalog)}
 
     return router

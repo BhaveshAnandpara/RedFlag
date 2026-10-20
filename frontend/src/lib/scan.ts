@@ -82,6 +82,8 @@ export type ScanSettings = {
     selected_test_ids: string[];
     target_host: string;
     rules: { text: string; kind: string; status: string }[];
+    // Set when this scan is a run-again of an earlier one.
+    rerun_of?: number;
   };
   judge_providers?: string[];
   budget: { requests: number; tokens: number; seconds: number; concurrency: number };
@@ -97,6 +99,8 @@ export type ScanDetail = {
     finished_at: number | null;
     last_progress_at: number;
     models_used: string[];
+    // The latest completed scan of the same project before this one (null for the first).
+    previous_scan_id?: number | null;
     settings: ScanSettings;
   };
   results: ScanResult[];

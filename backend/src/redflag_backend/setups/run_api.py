@@ -52,8 +52,13 @@ def _error(status: int, kind: str) -> JSONResponse:
 
 
 def add_run_routes(router: APIRouter, store: SetupStore, deps: RunDeps) -> None:
-    @router.post("/setups/{setup_id}/versions/{number}/runs", status_code=202, response_model=None)
-    async def start_run(setup_id: int, number: int, body: RunBody) -> dict[str, int] | JSONResponse:
+    async def launch(
+        setup_id: int,
+        number: int,
+        ids: list[str] | None,
+        key: str | None,
+        rerun_of: int | None,
+    ) -> dict[str, int] | JSONResponse:
         try:
             version = await asyncio.to_thread(store.get_version, setup_id, number)
             ref = await asyncio.to_thread(store.version_ref, setup_id, number)
@@ -63,7 +68,6 @@ def add_run_routes(router: APIRouter, store: SetupStore, deps: RunDeps) -> None:
         if not tests:
             return _error(409, "no_tests")
         known = {t["id"] for t in tests}
-        ids = body.test_ids
         if not ids or len(set(ids)) != len(ids) or not set(ids) <= known:
             return _error(422, "bad_selection")
         if deps.gate.busy():
@@ -108,6 +112,7 @@ def add_run_routes(router: APIRouter, store: SetupStore, deps: RunDeps) -> None:
                 "selected_test_ids": ids,
                 "target_host": host,
                 "rules": rules,
+                **({"rerun_of": rerun_of} if rerun_of is not None else {}),
             },
         }
         scan_id = await asyncio.to_thread(
@@ -118,8 +123,29 @@ def add_run_routes(router: APIRouter, store: SetupStore, deps: RunDeps) -> None:
             ref["version_id"],
         )
         # The key lives only inside this object, for the length of the run.
-        target = deps.make_target(EndpointConfig(**endpoint.model_dump(), key=body.key))
+        target = deps.make_target(EndpointConfig(**endpoint.model_dump(), key=key))
         deps.gate.start(
             deps.runner.run(scan_id, chosen, target, render_judge_context(context), tools, host)
         )
         return {"scan_id": scan_id}
+
+    @router.post("/setups/{setup_id}/versions/{number}/runs", status_code=202, response_model=None)
+    async def start_run(setup_id: int, number: int, body: RunBody) -> dict[str, int] | JSONResponse:
+        return await launch(setup_id, number, body.test_ids, body.key, None)
+
+    @router.post("/scans/{scan_id}/rerun", status_code=202, response_model=None)
+    async def rerun(scan_id: int, body: RunBody) -> dict[str, int] | JSONResponse:
+        """Run a finished real-bot scan again: the same setup version and the same tests."""
+        found = await asyncio.to_thread(deps.scan_store.get_scan, scan_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such scan")
+        setup = found["scan"]["settings"].get("setup")
+        if not setup:
+            return _error(422, "not_a_setup_scan")
+        return await launch(
+            int(setup["setup_id"]),
+            int(setup["version"]),
+            list(setup["selected_test_ids"]),
+            body.key,
+            scan_id,
+        )

@@ -55,6 +55,8 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [scan, setScan] = useState<ScanDetail | null>(null);
   const [history, setHistory] = useState<ScanListItem[]>([]);
+  // The scan before the one on screen, to show what changed since the last run.
+  const [previous, setPrevious] = useState<ScanDetail | null>(null);
   const stopped = useRef(false);
   // The confirmed version the tests belong to.
   const [version, setVersion] = useState(1);
@@ -224,12 +226,41 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
           {stage === "run" && scan && (scan.scan.status === "running" ? (
             <RunningView detail={scan} />
           ) : (
-            <Dashboard
-              detail={scan}
-              history={history}
-              onOpen={(id) => void openScan(id)}
-              loadScan={(id) => fetchScan(id)}
-            />
+            <div className="space-y-4">
+              {scan.scan.settings.setup && (
+                <section
+                  aria-label="Run these tests again"
+                  role="region"
+                  className="space-y-2 rounded border-2 p-3 text-sm"
+                >
+                  <h3 className="font-semibold">Run these tests again</h3>
+                  <p>
+                    Same setup version, same tests. Use it after you change your bot, to see what
+                    changed.
+                  </p>
+                  <label className="block space-y-1">
+                    <span className="block font-medium">API key for the run</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={key}
+                      onChange={(event) => setKey(event.target.value)}
+                      className={FIELD}
+                    />
+                  </label>
+                  <button type="button" onClick={() => void runAgain(scan.scan.id)} className={PRIMARY}>
+                    Run again
+                  </button>
+                </section>
+              )}
+              <Dashboard
+                detail={scan}
+                history={history}
+                onOpen={(id) => void openScan(id)}
+                loadScan={(id) => fetchScan(id)}
+                previous={previous}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -244,9 +275,37 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
     return result.data;
   }
 
+  async function loadPrevious(detail: ScanDetail) {
+    const id = detail.scan.previous_scan_id;
+    if (!id) {
+      setPrevious(null);
+      return;
+    }
+    try {
+      setPrevious(await fetchScan(id));
+    } catch {
+      setPrevious(null); // the comparison is a convenience; the scan itself is still shown
+    }
+  }
+
+  async function runAgain(scanId: number) {
+    setProblem(null);
+    const result = await api!.call<{ scan_id: number }>("POST", `/scans/${scanId}/rerun`, {
+      key: key || null,
+    });
+    if (!result.ok) {
+      setProblem(describeError(result.status, result.data as never));
+      return;
+    }
+    setPrevious(null);
+    await follow(result.data.scan_id);
+  }
+
   async function openScan(scanId: number) {
     try {
-      setScan(await fetchScan(scanId));
+      const opened = await fetchScan(scanId);
+      setScan(opened);
+      await loadPrevious(opened);
     } catch {
       setProblem(describeError(0, null));
     }
@@ -263,6 +322,7 @@ export function SetupPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: 
             `/scans?bot_id=${view?.project_slug ?? ""}`,
           );
           if (listed.ok) setHistory(listed.data.scans);
+          await loadPrevious(body);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, pollMs));

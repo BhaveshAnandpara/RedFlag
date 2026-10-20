@@ -357,3 +357,65 @@ export function judgeLines(results: ScanResult[]): string[] {
   lines.push(UNCHECKED_JUDGE_LINE);
   return lines;
 }
+
+export type DeltaTest = { id: string; title: string };
+
+export type RunDelta = {
+  previousId: number;
+  fixed: DeltaTest[];
+  newProblems: DeltaTest[];
+  stillFailing: DeltaTest[];
+  unclearNow: DeltaTest[];
+  noLongerRun: DeltaTest[];
+  summary: string;
+};
+
+/**
+ * What changed between two scans of the same tests. A test is matched by its id. It never says the
+ * change is good news: a fixed test only means it passed this time, and a model can vary.
+ */
+export function runDelta(current: ScanDetail, previous: ScanDetail): RunDelta {
+  const before = new Map(previous.results.map((r) => [r.test_id, r]));
+  const now = new Set(current.results.map((r) => r.test_id));
+  const item = (r: ScanResult): DeltaTest => ({ id: r.test_id, title: r.title });
+  const decided = (status: Status) => status === "pass" || status === "fail";
+
+  const fixed: DeltaTest[] = [];
+  const newProblems: DeltaTest[] = [];
+  const stillFailing: DeltaTest[] = [];
+  const unclearNow: DeltaTest[] = [];
+  for (const r of current.results) {
+    const was = before.get(r.test_id);
+    if (r.status === "fail") {
+      if (!was || was.status !== "fail") newProblems.push(item(r));
+      else stillFailing.push(item(r));
+    } else if (r.status === "pass" && was?.status === "fail") {
+      fixed.push(item(r));
+    } else if (!decided(r.status) && was && decided(was.status)) {
+      unclearNow.push(item(r));
+    }
+  }
+  const noLongerRun = previous.results.filter((r) => !now.has(r.test_id)).map(item);
+
+  const parts = [
+    fixed.length > 0 ? `${fixed.length} fixed` : null,
+    newProblems.length > 0
+      ? `${newProblems.length} new ${plural(newProblems.length, "problem", "problems")}`
+      : null,
+    stillFailing.length > 0 ? `${stillFailing.length} still failing` : null,
+    unclearNow.length > 0 ? `${unclearNow.length} now unclear` : null,
+  ].filter((part): part is string => part !== null);
+  const summary =
+    parts.length > 0
+      ? `Since scan #${previous.scan.id}: ${parts.join(", ")}.`
+      : `Since scan #${previous.scan.id}: nothing changed in the tests that were run both times.`;
+  return {
+    previousId: previous.scan.id,
+    fixed,
+    newProblems,
+    stillFailing,
+    unclearNow,
+    noLongerRun,
+    summary,
+  };
+}
