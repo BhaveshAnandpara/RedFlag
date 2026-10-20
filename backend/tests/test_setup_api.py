@@ -340,3 +340,28 @@ def test_the_owner_can_list_their_setups_most_recently_changed_first() -> None:
         assert listing[0]["purpose"] == "A travel agent." and listing[1]["purpose"] == ""
         assert {"project_slug", "updated_at", "versions"} <= set(listing[0])
         assert client.get("/setups").status_code == 401
+
+
+def test_the_page_is_allowed_to_use_put_and_delete_on_the_setup_api() -> None:
+    """A browser asks first (a preflight). Without this, saving the endpoint is blocked."""
+    with setup_client() as client:
+        for method, path in [
+            ("PUT", "/setups/1/endpoint"),
+            ("PUT", "/setups/1/purpose"),
+            ("PUT", "/setups/1/rules/r-1"),
+            ("DELETE", "/setups/1/rules/r-1"),
+            ("DELETE", "/setups/1/files/skills.md"),
+            ("PUT", "/setups/1/contexts/tester/notes"),
+            ("POST", "/setups/1/versions/1/runs"),
+        ]:
+            response = client.options(
+                path,
+                headers={
+                    "Origin": "http://localhost:3000",
+                    "Access-Control-Request-Method": method,
+                    "Access-Control-Request-Headers": "X-Owner-Token,Content-Type",
+                },
+            )
+            assert response.status_code == 200, (method, path)
+            allowed = response.headers["access-control-allow-methods"]
+            assert method in allowed, (method, path, allowed)

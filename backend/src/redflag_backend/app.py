@@ -69,7 +69,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["X-Owner-Token", "Content-Type"],
     )
     active_providers = build_providers(settings) if providers is None else providers
