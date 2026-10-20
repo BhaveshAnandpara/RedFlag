@@ -84,8 +84,11 @@ All optional, with the defaults in `backend/src/redflag_backend/settings.py`:
 | `ATTACKER_BUDGET_MAX_REQUESTS`, `_TOKENS`, `_SECONDS` | see settings | The attacker's own budget per run |
 | `SETUP_MAX_TESTS` | 200 | Tests in one setup version, including variations |
 | `QUICK_CHECKS_PER_WINDOW`, `QUICK_CHECK_WINDOW_SECONDS` | 20, 600 | Limit on hello checks |
+| `OPEN_QUICK_AND_MCP` | false | When true, `/quick` and `/mcp` work with no owner password: only the hello check, the rule list, the MCP tool listing, starting a scan and reading it back with the secret view key that start returned are open; everything else stays owner-only. See the warning below |
 | `JUDGE_ACCURACY_MIN_SAMPLE` | 20 | Labeled results needed before accuracy is not called a small sample |
 | `MCP_MAX_CALLS`, `MCP_CALLS_PER_TOOL` | 60, 8 | Limits on tool calls in an MCP check |
+
+**Warning about `OPEN_QUICK_AND_MCP`.** Proof that the person owns the server they test is not built. With the setting on, anyone with the link can make Redflag send attack traffic to any public address (private and internal addresses are still refused) and use the judge's model quota. The existing limits still apply (one scan at a time, request and token budgets, a cap on hello checks), but there is no per-visitor limit. The finished page on the open pages is the dashboard only; Run again, CI tokens and Label mode need the owner password.
 
 One new migration: `judge_labels` (and `ci_tokens` earlier in the wave). Run `alembic upgrade head` (the host does this on deploy).
 

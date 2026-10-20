@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     judge_budget_max_requests: int = 200
     # Below this many labeled results, accuracy numbers are called a small sample.
     judge_accuracy_min_sample: int = 20
+    # Open the quick scan and the MCP check to anyone, with no owner password. Only the calls
+    # those two pages need are opened; everything else stays behind the owner password.
+    open_quick_and_mcp: bool = False
     # Limits for checking an MCP server: tool calls in one run, and per tool.
     mcp_max_calls: int = 60
     mcp_calls_per_tool: int = 8

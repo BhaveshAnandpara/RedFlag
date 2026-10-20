@@ -28,6 +28,7 @@ from redflag_backend.scan.api import build_scan_router
 from redflag_backend.scan.bot_models import bot_budget_caps, build_bot_providers, build_bot_router
 from redflag_backend.scan.catalog import load_catalog
 from redflag_backend.scan.gate import ScanGate
+from redflag_backend.scan.open_api import build_open_scan_router
 from redflag_backend.scan.runner import ScanRunner
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.suite import load_suite
@@ -126,6 +127,8 @@ def create_app(
             gate,
         )
     )
+
+    app.include_router(build_open_scan_router(settings, scan_store, catalog))
 
     # Setups: what the owner tells Redflag about their own bot. Never calls an address inside.
     setup_llm = SetupLLM(
