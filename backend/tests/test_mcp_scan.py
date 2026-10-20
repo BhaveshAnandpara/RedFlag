@@ -72,11 +72,9 @@ def test_the_check_lists_the_tools_and_only_calls_a_tool_read_only_if_the_server
     assert calls_made(fake) == []
 
 
-def test_the_check_says_why_a_server_could_not_be_reached_and_is_owner_only() -> None:
+def test_the_check_says_why_a_server_could_not_be_reached() -> None:
     with run_client(stand_in=StandIn(lambda request: httpx.Response(500))) as (client, _, _):
         response = check(client)
-        assert client.post("/mcp-scans/check", json=body()).status_code == 401
-        assert client.post("/mcp-scans", json=body()).status_code == 401
     assert response.status_code == 422
     assert response.json()["error"]["kind"] == "connection_failed"
     assert "status 500" in response.json()["error"]["message"]

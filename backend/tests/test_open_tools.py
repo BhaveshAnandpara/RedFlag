@@ -1,9 +1,9 @@
-"""Quick scan and the MCP check without the owner password (OPEN_QUICK_AND_MCP).
+"""Quick scan and the MCP check without the owner password.
 
-When the setting is on, only the calls those two pages need are open: the hello check, the rule
-list, starting a scan, and reading back the scan you started with the secret view key that start
-returned. Everything else stays behind the owner password. A scan nobody started through these
-pages cannot be read without the owner password, and the key to the target is saved nowhere.
+Only the calls those two pages need are open: the hello check, the rule list, starting a scan,
+and reading back the scan you started with the secret view key that start returned. Everything
+else stays behind the owner password. A scan nobody started through these pages cannot be read
+without the owner password, and the key to the target is saved nowhere.
 """
 
 import json
@@ -39,17 +39,8 @@ def read_open(client: TestClient, scan_id: int, view_key: str, timeout: float = 
         time.sleep(0.05)
 
 
-def test_the_setting_is_off_by_default_so_nothing_opens_by_accident() -> None:
+def test_the_quick_scan_works_without_the_password() -> None:
     with run_client() as (client, _, _):
-        assert client.get("/quick-scans/rules").status_code == 401
-        assert client.post("/quick-scans/check", json={}).status_code == 401
-        assert client.post("/quick-scans", json=QUICK_BODY).status_code == 401
-        assert client.post("/mcp-scans/check", json={"url": MCP_URL}).status_code == 401
-        assert client.get("/open-scans/1", params={"key": "x"}).status_code == 404
-
-
-def test_with_the_setting_on_the_quick_scan_works_without_the_password() -> None:
-    with run_client(open_quick_and_mcp=True) as (client, _, _):
         assert client.get("/quick-scans/rules").status_code == 200
         hello = client.post("/quick-scans/check", json={"endpoint": ENDPOINT, "key": KEY})
         assert hello.status_code == 200 and hello.json()["status"] == "ok"
@@ -65,7 +56,7 @@ def test_with_the_setting_on_the_quick_scan_works_without_the_password() -> None
 
 
 def test_a_scan_can_only_be_read_with_its_own_view_key() -> None:
-    with run_client(open_quick_and_mcp=True) as (client, _, _):
+    with run_client() as (client, _, _):
         first = client.post("/quick-scans", json=QUICK_BODY).json()
         read_open(client, first["scan_id"], first["view_key"])
         assert client.get(f"/open-scans/{first['scan_id']}").status_code == 422
@@ -77,7 +68,7 @@ def test_a_scan_can_only_be_read_with_its_own_view_key() -> None:
 
 
 def test_the_view_key_and_the_target_key_never_appear_in_what_is_read_back() -> None:
-    with run_client(open_quick_and_mcp=True) as (client, _, _):
+    with run_client() as (client, _, _):
         started = client.post("/quick-scans", json=QUICK_BODY).json()
         text = read_open(client, started["scan_id"], started["view_key"]).text
     assert started["view_key"] not in text
@@ -87,7 +78,7 @@ def test_the_view_key_and_the_target_key_never_appear_in_what_is_read_back() -> 
 
 def test_a_scan_started_any_other_way_is_never_readable_this_way() -> None:
     # A run the owner started from the setup page has no view key in its settings.
-    with run_client(open_quick_and_mcp=True) as (client, _, _):
+    with run_client() as (client, _, _):
         setup_id = ready(client)
         started = run(client, setup_id, ["g-1"])
         assert started.status_code == 202, started.text
@@ -97,8 +88,8 @@ def test_a_scan_started_any_other_way_is_never_readable_this_way() -> None:
             assert client.get(f"/open-scans/{scan_id}", params={"key": key}).status_code == 404
 
 
-def test_everything_else_stays_behind_the_owner_password_when_the_setting_is_on() -> None:
-    with run_client(open_quick_and_mcp=True) as (client, _, _):
+def test_everything_else_stays_behind_the_owner_password() -> None:
+    with run_client() as (client, _, _):
         for method, path in [
             ("get", "/bots"),
             ("get", "/scans"),
@@ -117,7 +108,7 @@ def test_everything_else_stays_behind_the_owner_password_when_the_setting_is_on(
 
 def test_the_mcp_check_works_without_the_password_and_its_scan_is_read_with_a_view_key() -> None:
     fake = traversal_server(leak=False)
-    with run_client(stand_in=fake, open_quick_and_mcp=True) as (client, _, _):
+    with run_client(stand_in=fake) as (client, _, _):
         listed = client.post("/mcp-scans/check", json={"url": MCP_URL, "key": KEY})
         assert listed.status_code == 200
         started = client.post("/mcp-scans", json={"url": MCP_URL, "key": KEY})

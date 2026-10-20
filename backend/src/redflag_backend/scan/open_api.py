@@ -1,8 +1,8 @@
 """Reading back a scan started from the open quick scan or MCP page.
 
 Only a scan that was started through those pages has a secret view key in its settings, and only
-that key reads it. The key is never returned, and neither are the owner's labels. Without
-OPEN_QUICK_AND_MCP the route does not exist.
+that key reads it. The key is never returned, and neither are the owner's labels. No other scan
+can be read this way.
 """
 
 import asyncio
@@ -23,8 +23,6 @@ def build_open_scan_router(settings: Settings, store: ScanStore, catalog: Catalo
 
     @router.get("/open-scans/{scan_id}")
     async def read(scan_id: int, key: str) -> dict[str, Any]:
-        if not settings.open_quick_and_mcp:
-            raise HTTPException(status_code=404, detail="no such scan")
         found = await asyncio.to_thread(store.get_scan, scan_id)
         expected = found["scan"]["settings"].get("view_key") if found else None
         if not found or not expected or not hmac.compare_digest(str(expected), key):

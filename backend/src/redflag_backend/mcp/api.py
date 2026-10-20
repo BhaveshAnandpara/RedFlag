@@ -1,6 +1,6 @@
 """The MCP API: look at a server's tools, then run the checks.
 
-Owner-only unless OPEN_QUICK_AND_MCP is on.
+Open to anyone (no owner password).
 
 The key arrives in the request, goes into the target for this one run and is never saved, logged
 or returned. A tool that changes things is only exercised when the owner says the server is a
@@ -8,14 +8,13 @@ sandbox and ticks that tool.
 """
 
 import asyncio
-import hmac
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -77,14 +76,7 @@ def _config(server: Server) -> McpConfig:
 
 
 def build_mcp_router(settings: Settings, deps: McpDeps) -> APIRouter:
-    def require_owner(x_owner_token: str | None = Header(default=None)) -> None:
-        if settings.open_quick_and_mcp:
-            return
-        expected = settings.owner_token
-        if not expected or not x_owner_token or not hmac.compare_digest(x_owner_token, expected):
-            raise HTTPException(status_code=401, detail="owner token required")
-
-    router = APIRouter(dependencies=[Depends(require_owner)])
+    router = APIRouter()
 
     @router.post("/mcp-scans/check", response_model=None)
     async def check(body: Server) -> dict[str, Any] | JSONResponse:

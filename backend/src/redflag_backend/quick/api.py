@@ -1,18 +1,17 @@
 """The quick scan: a hello check, and one call that sets a bot up and runs the starter pack.
 
-Owner-only unless OPEN_QUICK_AND_MCP is on. There is no select step: the pack is fixed, so
+Open to anyone (no owner password). There is no select step: the pack is fixed, so
 nothing needs choosing. The endpoint key arrives with the request, goes into the target for the
 run, and is saved nowhere.
 """
 
 import asyncio
-import hmac
 import secrets
 from collections import deque
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -65,14 +64,7 @@ def build_quick_router(
     deps: RunDeps,
     clock: Callable[[], float],
 ) -> APIRouter:
-    def require_owner(x_owner_token: str | None = Header(default=None)) -> None:
-        if settings.open_quick_and_mcp:
-            return
-        expected = settings.owner_token
-        if not expected or not x_owner_token or not hmac.compare_digest(x_owner_token, expected):
-            raise HTTPException(status_code=401, detail="owner token required")
-
-    router = APIRouter(prefix="/quick-scans", dependencies=[Depends(require_owner)])
+    router = APIRouter(prefix="/quick-scans")
     recent: deque[float] = deque()
 
     def target(endpoint: Endpoint, key: str | None):  # type: ignore[no-untyped-def]
