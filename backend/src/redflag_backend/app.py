@@ -213,6 +213,7 @@ def create_app(
                 judge_caps=judge_caps,
                 judge_providers=[p.name for p in active_providers if p.configured],
                 max_calls=settings.mcp_max_calls,
+                per_tool=settings.mcp_calls_per_tool,
             ),
         )
     )

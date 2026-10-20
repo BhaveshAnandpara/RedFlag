@@ -1,102 +1,150 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { parseConnection } from "@/lib/connect-parse";
-import type { ScanDetail } from "@/lib/scan";
-import { describeError, type Endpoint } from "@/lib/setup";
+import { hostOf, problemFor, readOpenScan, reportPath } from "@/lib/open-api";
+import type { ScanDetail, ScanResult } from "@/lib/scan";
+import type { Endpoint } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
-import { Dashboard } from "./dashboard";
-import { RunningView } from "./setup-page";
+import { CountUp } from "./design/count-up";
+import { FlagStrip, RaisedFlag, lookOf } from "./design/flags";
+import { Step, type StepState } from "./design/step";
 
-type Platform = "openai" | "flowise" | "paste" | "other";
-type BotType = "chatbot" | "agent";
-type Hello = { sig: string; status: "ok" | "error"; reply: string; error: string };
+type Kind = "chatbot" | "agent";
+type Rule = { t: string; on: boolean; own?: boolean };
+type Hello = { sig: string; ok: boolean; reply: string; error: string };
+type Format = { id: "flowise" | "openwebui" | "openai" | "unknown"; label: string };
 
-const FIELD = "w-full rounded border-2 border-zinc-500 bg-white p-2 text-black";
-const BUTTON = "rounded border-2 px-3 py-1 text-sm disabled:opacity-50";
-const PRIMARY =
-  "rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-black";
-
-const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
-  { id: "openai", label: "OpenAI-compatible", hint: "OpenAI, Groq, Open WebUI, Ollama and similar" },
-  { id: "flowise", label: "Flowise", hint: "A chatflow with a prediction address" },
-  { id: "paste", label: "Paste anything", hint: "A link, a key, a code sample or a curl command" },
-  { id: "other", label: "Other (custom)", hint: "Fill in the details yourself" },
-];
-
-const TYPES: { id: BotType; label: string }[] = [
-  { id: "chatbot", label: "A chatbot that answers questions" },
-  { id: "agent", label: "An agent that can also take actions" },
-];
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}) {
-  return (
-    <label className="block space-y-1">
-      <span className="block text-sm font-medium">{label}</span>
-      <input
-        type={type}
-        value={value}
-        autoComplete="off"
-        onChange={(event) => onChange(event.target.value)}
-        className={FIELD}
-      />
-    </label>
-  );
+/** Reads the address to tell which kind of bot it points at, so the person never picks a platform. */
+export function detect(address: string): Format | null {
+  if (!address) return null;
+  if (/\/prediction\/[\w-]+/i.test(address))
+    return { id: "flowise", label: "Looks like a Flowise chatflow. We'll send your messages to it." };
+  if (/\/api\/?$|openwebui|open-webui/i.test(address))
+    return { id: "openwebui", label: "Looks like Open WebUI. We'll use its chat address." };
+  if (/\/v1\/?(chat\/completions)?$|openai|groq|ollama|together|openrouter/i.test(address))
+    return { id: "openai", label: "Looks like an OpenAI-style address. We'll add /chat/completions." };
+  return {
+    id: "unknown",
+    label:
+      'We don\'t recognise this format yet. Say hello to try it, or set it up under "My bot is built differently".',
+  };
 }
 
-/** Plain words for a refusal. A 401 means the backend has not opened this page yet. */
-function problemFor(status: number, body: unknown): string {
-  if (status === 401) return "This tool is not open yet. Please try again later.";
-  return describeError(status, body as never);
+type Fields = {
+  addr: string;
+  model: string;
+  customOpen: boolean;
+  customFormat: "chat" | "custom";
+  tmpl: string;
+  rpath: string;
+  headerName: string;
+  headerPrefix: string;
+};
+
+function buildEndpoint(f: Fields): Endpoint {
+  const addr = f.addr.trim().replace(/\/+$/, "");
+  const header = {
+    header_name: f.headerName.trim() || "Authorization",
+    header_prefix: f.headerPrefix,
+  };
+  if (f.customOpen && f.customFormat === "custom") {
+    return {
+      url: addr,
+      format: "custom",
+      model: "default",
+      ...header,
+      request_template: f.tmpl.trim(),
+      reply_path: f.rpath.trim(),
+    };
+  }
+  const kind = detect(addr)?.id;
+  if (kind === "flowise") {
+    return {
+      url: addr,
+      format: "custom",
+      model: "default",
+      ...header,
+      request_template: '{"question": "{{prompt}}"}',
+      reply_path: "text",
+    };
+  }
+  const url =
+    (kind === "openai" || kind === "openwebui") && !/\/chat\/completions$/.test(addr)
+      ? `${addr}/chat/completions`
+      : addr;
+  return {
+    url,
+    format: "openai",
+    model: f.model.trim() || "default",
+    ...header,
+    request_template: null,
+    reply_path: null,
+  };
+}
+
+const NO_MODEL = "Enter the model name your bot uses, such as llama-3.1-8b-instant.";
+const SANDBOX_REQUIRED =
+  "An agent can only be scanned in a test or sandbox environment. Tick the box to confirm that this is one.";
+
+function focusFirst(ids: (string | null)[]) {
+  const id = ids.find(Boolean);
+  if (!id) return;
+  const el = document.getElementById(id);
+  el?.focus();
+  el?.scrollIntoView?.({ block: "center", behavior: "smooth" });
 }
 
 export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: number }) {
-  // No password: the backend opens the quick scan calls when it is set up to. A scan is read back
-  // with the secret view key that starting it returned, kept only here in memory.
+  // No password: the backend answers these calls openly. A scan is read back with the secret view
+  // key that starting it returned, kept only here in memory.
   const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [rules, setRules] = useState<Record<BotType, string[]>>({ chatbot: [], agent: [] });
+  const [stage, setStage] = useState<1 | 2 | 3>(1);
 
-  const [platform, setPlatform] = useState<Platform | null>(null);
-  const [address, setAddress] = useState("");
+  // step 1
+  const [addr, setAddr] = useState("");
   const [model, setModel] = useState("");
-  const [chatflow, setChatflow] = useState("");
   // The key lives only here, in memory: sent with the hello check and the run, never stored.
   const [key, setKey] = useState("");
-  const [format, setFormat] = useState<"openai" | "custom">("openai");
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [pasteNote, setPasteNote] = useState<{ text: string; bad: boolean } | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customFormat, setCustomFormat] = useState<"chat" | "custom">("chat");
+  const [tmpl, setTmpl] = useState("");
+  const [rpath, setRpath] = useState("");
   const [headerName, setHeaderName] = useState("Authorization");
   const [headerPrefix, setHeaderPrefix] = useState("Bearer ");
-  const [template, setTemplate] = useState("");
-  const [replyPath, setReplyPath] = useState("");
-  const [pasted, setPasted] = useState("");
-  const [readNote, setReadNote] = useState<string | null>(null);
-
+  const [attemptedHello, setAttemptedHello] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [hello, setHello] = useState<Hello | null>(null);
-  const [confirmedSig, setConfirmedSig] = useState<string | null>(null);
-  const [deniedSig, setDeniedSig] = useState<string | null>(null);
+  const [denied, setDenied] = useState<string | null>(null);
+  const [helloProblem, setHelloProblem] = useState<string | null>(null);
 
-  const [botType, setBotType] = useState<BotType | null>(null);
+  // step 2
+  const [ruleLists, setRuleLists] = useState<Record<Kind, string[]>>({ chatbot: [], agent: [] });
+  const [rulesProblem, setRulesProblem] = useState<string | null>(null);
+  const [kind, setKind] = useState<Kind | null>(null);
   const [purpose, setPurpose] = useState("");
-  const [unticked, setUnticked] = useState<Set<string>>(new Set());
-  const [custom, setCustom] = useState<string[]>([]);
-  const [draftRule, setDraftRule] = useState("");
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [newRule, setNewRule] = useState("");
   const [sandbox, setSandbox] = useState(false);
+  const [attemptedRun, setAttemptedRun] = useState(false);
+  const [runProblem, setRunProblem] = useState<string | null>(null);
 
+  // step 3
   const [scan, setScan] = useState<ScanDetail | null>(null);
+  const [scanId, setScanId] = useState<number | null>(null);
+  const [testCount, setTestCount] = useState(0);
+  const [scanProblem, setScanProblem] = useState<string | null>(null);
   const viewKey = useRef("");
+  const [viewKeyShown, setViewKeyShown] = useState("");
   const stopped = useRef(false);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     stopped.current = false;
@@ -107,372 +155,779 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
 
   useEffect(() => {
     let alive = true;
-    api
-      .call<{ rules: Record<BotType, string[]> }>("GET", "/quick-scans/rules")
-      .then((listed) => {
-        if (!alive) return;
-        if (listed.ok) setRules(listed.data.rules);
-        else setProblem(problemFor(listed.status, listed.data));
-      });
+    api.call<{ rules: Record<Kind, string[]> }>("GET", "/quick-scans/rules").then((listed) => {
+      if (!alive) return;
+      if (listed.ok) setRuleLists(listed.data.rules);
+      else setRulesProblem(problemFor(listed.status, listed.data));
+    });
     return () => {
       alive = false;
     };
   }, [api]);
 
-  // --- the connection ----------------------------------------------------------------------
-
-  function endpoint(): Endpoint {
-    const base = address.trim().replace(/\/+$/, "");
-    if (platform === "flowise") {
-      return {
-        url: `${base}/api/v1/prediction/${chatflow.trim()}`,
-        format: "custom",
-        model: "default",
-        header_name: "Authorization",
-        header_prefix: "Bearer ",
-        request_template: '{"question": "{{prompt}}"}',
-        reply_path: "text",
-      };
-    }
-    const isOpenAI = platform === "openai" || format === "openai";
-    const url = isOpenAI && !/\/chat\/completions$/.test(base) ? `${base}/chat/completions` : base;
-    return {
-      url,
-      format: isOpenAI ? "openai" : "custom",
-      model: model.trim() || "default",
-      header_name: platform === "openai" ? "Authorization" : headerName.trim() || "Authorization",
-      header_prefix: platform === "openai" ? "Bearer " : headerPrefix,
-      request_template: isOpenAI ? null : template.trim() || null,
-      reply_path: isOpenAI ? null : replyPath.trim() || null,
-    };
-  }
-
-  const signature = JSON.stringify([endpoint(), key]);
-  const canSayHello = address.trim() !== "" && (platform !== "flowise" || chatflow.trim() !== "");
-  const confirmed = confirmedSig === signature;
+  // ---------- step 1: connect ----------
+  const fields: Fields = { addr, model, customOpen, customFormat, tmpl, rpath, headerName, headerPrefix };
+  const address = addr.trim();
+  const format = detect(address);
+  const needsModel =
+    (format?.id === "openai" || format?.id === "openwebui") &&
+    !(customOpen && customFormat === "custom");
+  const asCustom = customOpen && customFormat === "custom";
+  const helloErrors = {
+    addr: !address
+      ? "Enter your bot's address."
+      : !/^https?:\/\//i.test(address)
+        ? "Enter the full address, starting with https://."
+        : "",
+    model: needsModel && !model.trim() ? NO_MODEL : "",
+    tmpl: asCustom
+      ? !tmpl.trim()
+        ? "Enter the request template."
+        : !tmpl.includes("{{prompt}}")
+          ? "The template must contain {{prompt}} where the message goes."
+          : ""
+      : "",
+    rpath: asCustom && !rpath.trim() ? "Enter where the reply is found, such as output.text." : "",
+  };
+  const showHello = attemptedHello ? helloErrors : { addr: "", model: "", tmpl: "", rpath: "" };
+  const signature = JSON.stringify([buildEndpoint(fields), key]);
   const shownHello = hello && hello.sig === signature ? hello : null;
 
   function readPasted() {
     const parsed = parseConnection(pasted);
-    setPasted("");
+    setPasted(""); // a pasted key never stays on screen
     if (parsed.found.length === 0) {
-      setReadNote("We could not find a bot address in that. Paste a link or a curl command, or fill the details in below.");
+      setPasteNote({
+        text: "We could not find a bot address in that. Paste a link or a curl command, or fill the details in below.",
+        bad: true,
+      });
       return;
     }
-    if (parsed.url) setAddress(parsed.url);
+    if (parsed.url) setAddr(parsed.url.replace(/\/chat\/completions\/?$/, ""));
     if (parsed.key) setKey(parsed.key);
     if (parsed.model) setModel(parsed.model);
-    if (parsed.format) setFormat(parsed.format);
+    if (parsed.format === "custom") {
+      setCustomOpen(true);
+      setCustomFormat("custom");
+    }
+    if (parsed.requestTemplate) setTmpl(parsed.requestTemplate);
+    if (parsed.replyPath) setRpath(parsed.replyPath);
     if (parsed.headerName) setHeaderName(parsed.headerName);
     if (parsed.headerPrefix !== undefined) setHeaderPrefix(parsed.headerPrefix);
-    if (parsed.requestTemplate) setTemplate(parsed.requestTemplate);
-    if (parsed.replyPath) setReplyPath(parsed.replyPath);
     const missing = parsed.missing.length ? ` Still needed: ${parsed.missing.join(", ")}.` : "";
-    setReadNote(`We found: ${parsed.found.join(", ")}.${missing}`);
+    setPasteNote({ text: `We found: ${parsed.found.join(", ")}.${missing}`, bad: false });
   }
 
   async function sayHello() {
-    setProblem(null);
+    setAttemptedHello(true);
+    const bad = Object.entries(helloErrors).filter(([, m]) => m);
+    if (bad.length) {
+      focusFirst(bad.map(([id]) => (id === "addr" ? "addr" : id)));
+      return;
+    }
+    setBusy(true);
+    setHelloProblem(null);
     const sig = signature;
     const result = await api.call<{ status: "ok" | "error"; parsed_reply: string; error: string }>(
       "POST",
       "/quick-scans/check",
-      { endpoint: endpoint(), key: key || null },
+      { endpoint: buildEndpoint(fields), key: key || null },
     );
+    setBusy(false);
     if (!result.ok) {
-      setProblem(problemFor(result.status, result.data));
+      setHelloProblem(problemFor(result.status, result.data));
       return;
     }
     setHello({
       sig,
-      status: result.data.status,
+      ok: result.data.status === "ok",
       reply: result.data.parsed_reply,
       error: result.data.error,
     });
   }
 
-  // --- the rules ----------------------------------------------------------------------------
-
-  const baseRules = botType ? rules[botType] : [];
-  const allRules = [...baseRules, ...custom];
-  const chosen = allRules.filter((rule) => !unticked.has(rule));
-  const ready =
-    botType !== null &&
-    purpose.trim() !== "" &&
-    chosen.length > 0 &&
-    (botType === "chatbot" || sandbox);
-
-  function toggle(rule: string) {
-    setUnticked((current) => {
-      const next = new Set(current);
-      if (next.has(rule)) next.delete(rule);
-      else next.add(rule);
-      return next;
-    });
+  // ---------- step 2: describe ----------
+  function chooseKind(next: Kind) {
+    setKind(next);
+    const own = rules.filter((r) => r.own);
+    setRules([...ruleLists[next].map((t) => ({ t, on: true })), ...own]);
   }
+  const onCount = rules.filter((r) => r.on).length;
+  const runErrors = {
+    kind: !kind ? "Choose whether your bot is a chatbot or an agent." : "",
+    purpose: !purpose.trim() ? "Say what your bot is for, in one sentence." : "",
+    rules:
+      kind && onCount === 0 ? "Pick at least one thing it must never do, or add your own." : "",
+    sandbox: kind === "agent" && !sandbox ? SANDBOX_REQUIRED : "",
+  };
+  const showRun = attemptedRun ? runErrors : { kind: "", purpose: "", rules: "", sandbox: "" };
 
   function addRule() {
-    const text = draftRule.trim();
-    if (!text || allRules.includes(text)) return;
-    setCustom([...custom, text]);
-    setDraftRule("");
+    const t = newRule.trim();
+    if (!t) return;
+    setRules([...rules, { t, on: true, own: true }]);
+    setNewRule("");
   }
 
-  // --- the run --------------------------------------------------------------------------------
-
-  async function fetchScan(scanId: number): Promise<ScanDetail> {
-    const result = await api.call<ScanDetail>(
-      "GET",
-      `/open-scans/${scanId}?key=${encodeURIComponent(viewKey.current)}`,
+  async function runScan() {
+    setAttemptedRun(true);
+    const bad = Object.entries(runErrors).filter(([, m]) => m);
+    if (bad.length) {
+      focusFirst(bad.map(([id]) => (id === "kind" ? "kind-chatbot" : id === "rules" ? "rule-0" : id)));
+      return;
+    }
+    setRunProblem(null);
+    const started = await api.call<{ scan_id: number; view_key: string; test_count: number }>(
+      "POST",
+      "/quick-scans",
+      {
+        endpoint: buildEndpoint(fields),
+        key: key || null,
+        bot_type: kind,
+        purpose: purpose.trim(),
+        must_never: rules.filter((r) => r.on).map((r) => r.t),
+        sandbox_confirmed: kind === "agent" && sandbox,
+      },
     );
-    if (!result.ok) throw new Error(`scan request failed with ${result.status}`);
-    return result.data;
+    if (!started.ok) {
+      setRunProblem(problemFor(started.status, started.data));
+      return;
+    }
+    viewKey.current = started.data.view_key;
+    setViewKeyShown(started.data.view_key);
+    setScanId(started.data.scan_id);
+    setTestCount(started.data.test_count);
+    setScan(null);
+    setStage(3);
+    void follow(started.data.scan_id);
   }
 
-  async function follow(scanId: number) {
+  // ---------- step 3: the live scan ----------
+  async function follow(id: number) {
     try {
       while (!stopped.current) {
-        const body = await fetchScan(scanId);
+        const body = await readOpenScan(api, id, viewKey.current);
         setScan(body);
         if (body.scan.status !== "running") return;
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
     } catch {
-      setProblem(describeError(0, null));
+      setScanProblem("Could not reach the backend. It may still be waking up.");
     }
   }
 
-  async function run() {
-    if (!botType) return;
-    setProblem(null);
-    const started = await api.call<{ scan_id: number; view_key: string }>("POST", "/quick-scans", {
-      endpoint: endpoint(),
-      key: key || null,
-      bot_type: botType,
-      purpose: purpose.trim(),
-      must_never: chosen,
-      sandbox_confirmed: botType === "agent" && sandbox,
-    });
-    if (!started.ok) {
-      setProblem(problemFor(started.status, started.data));
-      return;
-    }
-    viewKey.current = started.data.view_key;
-    await follow(started.data.scan_id);
-  }
+  const results = scan?.results ?? [];
+  const finished = scan !== null && scan.scan.status !== "running";
+  const fails = results.filter((r) => r.status === "fail").length;
 
-  // --- the page -------------------------------------------------------------------------------
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [results.length]);
+
+  // a soft red pulse through the window each time a test fails
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || fails === 0) return;
+    box.classList.remove("rf-pulse");
+    void box.offsetWidth;
+    box.classList.add("rf-pulse");
+  }, [fails]);
+
+  const attacks = results.filter((r) => r.kind === "negative");
+  const attackFails = attacks.filter((r) => r.status === "fail").length;
+  const total = testCount || scan?.scan.settings.test_count || 0;
+
+  const state = (n: number): StepState => (n < stage ? "done" : n === stage ? "active" : "locked");
+  const running = stage === 3 && !finished && !scanProblem;
 
   return (
-    <section className="space-y-6">
-      <h1 className="text-3xl font-semibold">Quick scan</h1>
+    <main className="d-quick">
+      <div className="intro">
+        <h1>Quick scan</h1>
+        <p>
+          A starter pack of tests, run on your bot in one go. It is a first check, not proof that
+          your bot is secure.
+        </p>
+      </div>
 
-      {scan ? (
-        <div className="space-y-4">
-          {problem && <p role="alert">{problem}</p>}
-          {scan.scan.status === "running" ? (
-            <RunningView detail={scan} />
-          ) : (
-            <Dashboard
-              detail={scan}
-              history={[]}
-              onOpen={() => undefined}
-              loadScan={fetchScan}
-            />
-          )}
+      {rulesProblem && (
+        <div className="alert" role="alert" style={{ marginTop: 24 }}>
+          {rulesProblem}
         </div>
-      ) : (
-        <div className="space-y-8">
-          <p>
-            A starter pack of tests, run on your bot in one go. It is a first check, not proof that
-            your bot is secure.
+      )}
+
+      <div className="steps">
+        <Step
+          n={1}
+          id="s1"
+          title="Connect your bot"
+          state={state(1)}
+          summary={`${hostOf(address)} · answered hello`}
+          onChange={running ? undefined : () => setStage(1)}
+        >
+          <p className="legend">
+            Fields marked <span className="req">*</span> are required.
           </p>
-          {problem && <p role="alert">{problem}</p>}
+          <label className="f">
+            <span className="lab">
+              <span>
+                Your bot&apos;s address<span className="req" aria-hidden="true">*</span>
+              </span>
+            </span>
+            <input
+              className="in"
+              id="addr"
+              type="url"
+              required
+              placeholder="https://api.example.com/v1"
+              autoComplete="off"
+              spellCheck={false}
+              value={addr}
+              aria-invalid={showHello.addr ? "true" : "false"}
+              aria-describedby="e-addr"
+              onChange={(e) => setAddr(e.target.value)}
+            />
+            {format && (
+              <span className={`detect ${format.id === "unknown" ? "unknown" : ""}`}>
+                <i />
+                <span>{format.label}</span>
+              </span>
+            )}
+            {showHello.addr && (
+              <span className="err" id="e-addr">
+                {showHello.addr}
+              </span>
+            )}
+          </label>
 
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold">1. Connect your bot</h2>
-            <div role="radiogroup" aria-label="How is your bot built?" className="grid gap-2 sm:grid-cols-2">
-              {PLATFORMS.map((item) => (
-                <label key={item.id} className="flex items-start gap-2 rounded border-2 p-3">
-                  <input
-                    type="radio"
-                    name="platform"
-                    checked={platform === item.id}
-                    onChange={() => setPlatform(item.id)}
-                  />
+          {needsModel && (
+            <div className="row2">
+              <label className="f">
+                <span className="lab">
                   <span>
-                    <span className="block font-medium">{item.label}</span>
-                    <span className="block text-sm">{item.hint}</span>
+                    Model name<span className="req" aria-hidden="true">*</span>
                   </span>
-                </label>
-              ))}
-              <label className="flex items-start gap-2 rounded border-2 border-dashed p-3 opacity-60">
-                <input type="radio" name="platform" disabled />
-                <span>A chat window on my website — coming soon</span>
+                </span>
+                <input
+                  className="in"
+                  id="model"
+                  placeholder="llama-3.1-8b-instant"
+                  spellCheck={false}
+                  value={model}
+                  aria-invalid={showHello.model ? "true" : "false"}
+                  aria-describedby="e-model"
+                  onChange={(e) => setModel(e.target.value)}
+                />
+                {showHello.model && (
+                  <span className="err" id="e-model">
+                    {showHello.model}
+                  </span>
+                )}
               </label>
+              <span />
             </div>
+          )}
 
-            {platform === "paste" && (
-              <div className="space-y-2">
-                <label className="block space-y-1">
-                  <span className="block text-sm font-medium">
-                    Paste a link, a key, a code sample or a curl command
-                  </span>
-                  <textarea
-                    value={pasted}
-                    onChange={(event) => setPasted(event.target.value)}
-                    rows={4}
-                    className={FIELD}
-                  />
-                </label>
-                <button type="button" onClick={readPasted} disabled={!pasted.trim()} className={BUTTON}>
+          <label className="f">
+            <span className="lab">
+              <span>
+                Its key <small>optional</small>
+              </span>
+              <small>used for this scan only, never stored</small>
+            </span>
+            <input
+              className="in"
+              id="key"
+              type="password"
+              placeholder="sk-…"
+              autoComplete="off"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+            />
+          </label>
+
+          <div className="links">
+            <button type="button" onClick={() => setPasteOpen(!pasteOpen)}>
+              I have a code snippet instead
+            </button>
+            <button type="button" onClick={() => setCustomOpen(!customOpen)}>
+              My bot is built differently
+            </button>
+          </div>
+
+          {pasteOpen && (
+            <div className="panel">
+              <label className="f">
+                <span className="lab">Paste a link, a key, a code sample or a curl command</span>
+                <textarea
+                  className="in"
+                  spellCheck={false}
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                />
+              </label>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={!pasted.trim()}
+                  onClick={readPasted}
+                >
                   Read it
                 </button>
-                {readNote && <p role="status">{readNote}</p>}
+                {pasteNote && (
+                  <span className={`status ${pasteNote.bad ? "bad" : "ok"}`} role="status">
+                    {pasteNote.text}
+                  </span>
+                )}
               </div>
-            )}
+            </div>
+          )}
 
-            {platform === "flowise" && (
-              <div className="space-y-2">
-                <Field label="Flowise address" value={address} onChange={setAddress} />
-                <Field label="Chatflow ID" value={chatflow} onChange={setChatflow} />
-                <Field
-                  label="Access key (if the chatflow has one)"
-                  value={key}
-                  onChange={setKey}
-                  type="password"
-                />
-              </div>
-            )}
-
-            {platform === "openai" && (
-              <div className="space-y-2">
-                <Field label="API address" value={address} onChange={setAddress} />
-                <Field label="Model name" value={model} onChange={setModel} />
-                <Field label="Access key" value={key} onChange={setKey} type="password" />
-              </div>
-            )}
-
-            {(platform === "paste" || platform === "other") && (
-              <div className="space-y-2">
-                <Field label="API address" value={address} onChange={setAddress} />
-                <label className="block space-y-1">
-                  <span className="block text-sm font-medium">Message format</span>
-                  <select
-                    value={format}
-                    onChange={(event) => setFormat(event.target.value as "openai" | "custom")}
-                    className={FIELD}
-                  >
-                    <option value="openai">Chat completions style</option>
-                    <option value="custom">Custom body</option>
-                  </select>
+          {customOpen && (
+            <div className="panel">
+              <label className="f">
+                <span className="lab">Message format</span>
+                <select
+                  className="in"
+                  value={customFormat}
+                  onChange={(e) => setCustomFormat(e.target.value as "chat" | "custom")}
+                >
+                  <option value="chat">Chat completions style</option>
+                  <option value="custom">Custom body</option>
+                </select>
+              </label>
+              {customFormat === "custom" && (
+                <div className="row2">
+                  <label className="f">
+                    <span className="lab">
+                      <span>
+                        Request template<span className="req" aria-hidden="true">*</span>
+                      </span>
+                      <small>must contain {"{{prompt}}"}</small>
+                    </span>
+                    <input
+                      className="in"
+                      id="tmpl"
+                      placeholder='{"input": "{{prompt}}"}'
+                      spellCheck={false}
+                      value={tmpl}
+                      aria-invalid={showHello.tmpl ? "true" : "false"}
+                      aria-describedby="e-tmpl"
+                      onChange={(e) => setTmpl(e.target.value)}
+                    />
+                    {showHello.tmpl && (
+                      <span className="err" id="e-tmpl">
+                        {showHello.tmpl}
+                      </span>
+                    )}
+                  </label>
+                  <label className="f">
+                    <span className="lab">
+                      <span>
+                        Reply path<span className="req" aria-hidden="true">*</span>
+                      </span>
+                    </span>
+                    <input
+                      className="in"
+                      id="rpath"
+                      placeholder="output.text"
+                      spellCheck={false}
+                      value={rpath}
+                      aria-invalid={showHello.rpath ? "true" : "false"}
+                      aria-describedby="e-rpath"
+                      onChange={(e) => setRpath(e.target.value)}
+                    />
+                    {showHello.rpath && (
+                      <span className="err" id="e-rpath">
+                        {showHello.rpath}
+                      </span>
+                    )}
+                  </label>
+                </div>
+              )}
+              <div className="row2">
+                <label className="f">
+                  <span className="lab">
+                    <span>
+                      Key header name <small>optional</small>
+                    </span>
+                  </span>
+                  <input
+                    className="in"
+                    spellCheck={false}
+                    value={headerName}
+                    onChange={(e) => setHeaderName(e.target.value)}
+                  />
                 </label>
-                {format === "openai" ? (
-                  <Field label="Model name" value={model} onChange={setModel} />
-                ) : (
-                  <>
-                    <Field label="Request template" value={template} onChange={setTemplate} />
-                    <Field label="Reply path" value={replyPath} onChange={setReplyPath} />
-                  </>
-                )}
-                <Field label="Key header name" value={headerName} onChange={setHeaderName} />
-                <Field label="Key header prefix" value={headerPrefix} onChange={setHeaderPrefix} />
-                <Field label="Access key" value={key} onChange={setKey} type="password" />
+                <label className="f">
+                  <span className="lab">
+                    <span>
+                      Key header prefix <small>optional</small>
+                    </span>
+                  </span>
+                  <input
+                    className="in"
+                    spellCheck={false}
+                    value={headerPrefix}
+                    onChange={(e) => setHeaderPrefix(e.target.value)}
+                  />
+                </label>
               </div>
-            )}
+            </div>
+          )}
 
-            {platform && (
-              <>
-                <button type="button" onClick={sayHello} disabled={!canSayHello} className={BUTTON}>
-                  Say hello
-                </button>
-                {shownHello?.status === "error" && <p role="status">{shownHello.error}</p>}
-                {shownHello?.status === "ok" && !confirmed && deniedSig !== signature && (
-                  <div className="space-y-2">
-                    <p>Your bot answered: “{shownHello.reply}”</p>
-                    <p>Is this your bot&apos;s answer?</p>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => setConfirmedSig(signature)} className={BUTTON}>
-                        Yes, that&apos;s my bot&apos;s answer
-                      </button>
-                      <button type="button" onClick={() => setDeniedSig(signature)} className={BUTTON}>
-                        No, that&apos;s not right
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {deniedSig === signature && (
-                  <p role="status">
-                    Then check the address, the key and the model name, and say hello again.
-                  </p>
-                )}
-              </>
+          <div className="actions">
+            <button type="button" className="btn solid" disabled={busy} onClick={sayHello}>
+              {busy ? (
+                <>
+                  <span className="spin" />
+                  Saying hello…
+                </>
+              ) : shownHello ? (
+                "Say hello again"
+              ) : (
+                "Say hello"
+              )}
+            </button>
+            {helloProblem && (
+              <span className="status bad" role="status">
+                {helloProblem}
+              </span>
+            )}
+            {shownHello && !shownHello.ok && (
+              <span className="status bad" role="status">
+                {shownHello.error}
+              </span>
+            )}
+            {shownHello?.ok && denied === signature && (
+              <span className="status" role="status">
+                Then check the address, the key and the model name, and say hello again.
+              </span>
             )}
           </div>
 
-          {confirmed && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold">What kind of bot is it?</h2>
-              <div role="radiogroup" aria-label="Kind of bot" className="grid gap-2 sm:grid-cols-2">
-                {TYPES.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2 rounded border-2 p-3">
-                    <input
-                      type="radio"
-                      name="bot-type"
-                      checked={botType === item.id}
-                      onChange={() => setBotType(item.id)}
+          {shownHello?.ok && denied !== signature && (
+            <div className="hello">
+              <span className="who r">Redflag</span>
+              <div className="bubble me">Hello</div>
+              <span className="who">your bot</span>
+              <div className="bubble bot">{shownHello.reply}</div>
+              <div className="confirm">
+                <b>Is this your bot&apos;s answer?</b>
+                <div className="actions">
+                  <button type="button" className="btn solid small" onClick={() => setStage(2)}>
+                    Yes, that&apos;s my bot&apos;s answer
+                  </button>
+                  <button type="button" className="btn ghost small" onClick={() => setDenied(signature)}>
+                    No, that&apos;s not right
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Step>
+
+        <Step
+          n={2}
+          id="s2"
+          title="Tell us about it"
+          state={state(2)}
+          summary={`${kind === "agent" ? "Agent" : "Chatbot"} · ${onCount} rule${onCount === 1 ? "" : "s"}`}
+          onChange={running ? undefined : () => setStage(2)}
+        >
+          <div role="radiogroup" aria-label="What does your bot do?" className="f" style={{ display: "grid", gap: 10 }}>
+            <span className="lab">
+              <span>
+                What does your bot do?<span className="req" aria-hidden="true">*</span>
+              </span>
+            </span>
+            <div className={`kinds ${showRun.kind ? "invalid" : ""}`}>
+              <button
+                type="button"
+                id="kind-chatbot"
+                className="kind"
+                role="radio"
+                aria-checked={kind === "chatbot"}
+                onClick={() => chooseKind("chatbot")}
+              >
+                <b>Answers questions</b>
+                <span>A chatbot. It talks, but it can&apos;t do anything on its own.</span>
+              </button>
+              <button
+                type="button"
+                className="kind"
+                role="radio"
+                aria-checked={kind === "agent"}
+                onClick={() => chooseKind("agent")}
+              >
+                <b>Takes actions too</b>
+                <span>An agent. It can book, refund, send emails or change things.</span>
+              </button>
+            </div>
+            {showRun.kind && <span className="err">{showRun.kind}</span>}
+          </div>
+
+          <label className="f">
+            <span className="lab">
+              <span>
+                What is it for?<span className="req" aria-hidden="true">*</span>
+              </span>
+              <small>one sentence</small>
+            </span>
+            <input
+              className="in"
+              id="purpose"
+              required
+              placeholder="A customer support assistant for Acme Bank that answers questions about accounts, cards and fees."
+              value={purpose}
+              aria-invalid={showRun.purpose ? "true" : "false"}
+              aria-describedby="e-purpose"
+              onChange={(e) => setPurpose(e.target.value)}
+            />
+            {showRun.purpose && (
+              <span className="err" id="e-purpose">
+                {showRun.purpose}
+              </span>
+            )}
+          </label>
+
+          {kind && (
+            <div>
+              <div className="lab" style={{ marginBottom: 6 }}>
+                <span>
+                  What must it never do?<span className="req" aria-hidden="true">*</span>
+                </span>
+                <small>
+                  {onCount} of {rules.length} on
+                </small>
+              </div>
+              <div className="rules">
+                {rules.map((rule, i) => (
+                  <div key={`${i}-${rule.t}`} className={`rule ${rule.on ? "" : "off"}`}>
+                    <span>
+                      {rule.t}
+                      {rule.own && <span className="mine">your rule</span>}
+                    </span>
+                    <button
+                      type="button"
+                      id={`rule-${i}`}
+                      className="sw"
+                      role="switch"
+                      aria-checked={rule.on}
+                      aria-label={rule.t}
+                      onClick={() =>
+                        setRules(rules.map((r, k) => (k === i ? { ...r, on: !r.on } : r)))
+                      }
                     />
-                    {item.label}
-                  </label>
+                  </div>
                 ))}
               </div>
-
-              <Field label="What is it for? (one sentence)" value={purpose} onChange={setPurpose} />
-
-              {botType && (
-                <fieldset className="space-y-2">
-                  <legend className="font-medium">What must it never do?</legend>
-                  {allRules.map((rule) => (
-                    <label key={rule} className="flex items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={!unticked.has(rule)}
-                        onChange={() => toggle(rule)}
-                      />
-                      {rule}
-                    </label>
-                  ))}
-                  <div className="flex items-end gap-2">
-                    <div className="grow">
-                      <Field label="Add your own rule" value={draftRule} onChange={setDraftRule} />
-                    </div>
-                    <button type="button" onClick={addRule} className={BUTTON}>
-                      Add rule
-                    </button>
-                  </div>
-                </fieldset>
-              )}
-
-              {botType === "agent" && (
-                <label className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={sandbox}
-                    onChange={(event) => setSandbox(event.target.checked)}
-                  />
-                  This is a test or sandbox environment, not production
-                </label>
-              )}
+              {showRun.rules && <span className="err">{showRun.rules}</span>}
+              <div className="addrule">
+                <input
+                  className="in"
+                  aria-label="Add your own rule"
+                  placeholder="Add your own, e.g. It must never promise a refund."
+                  value={newRule}
+                  onChange={(e) => setNewRule(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addRule();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={!newRule.trim()}
+                  onClick={addRule}
+                >
+                  Add rule
+                </button>
+              </div>
             </div>
           )}
 
-          {confirmed && (
-            <button type="button" onClick={run} disabled={!ready} className={PRIMARY}>
-              Run starter pack
-            </button>
+          {kind === "agent" && (
+            <>
+              <div
+                id="sandbox"
+                className={`sandbox ${sandbox ? "on" : ""} ${showRun.sandbox ? "invalid" : ""}`}
+                role="checkbox"
+                aria-checked={sandbox}
+                tabIndex={0}
+                onClick={() => setSandbox(!sandbox)}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    setSandbox(!sandbox);
+                  }
+                }}
+              >
+                <span className="box" />
+                <div>
+                  <b>
+                    This is a test copy of my bot, not the live one.
+                    <span className="req" aria-hidden="true">*</span>
+                  </b>
+                  <span>
+                    An agent can take real actions, so Redflag only scans it in a test or sandbox
+                    environment.
+                  </span>
+                </div>
+              </div>
+              {showRun.sandbox && <span className="err">{showRun.sandbox}</span>}
+            </>
           )}
-        </div>
-      )}
-    </section>
+
+          {runProblem && (
+            <div className="alert" role="alert">
+              {runProblem}
+            </div>
+          )}
+          <div className="actions">
+            <button type="button" className="btn solid" onClick={runScan}>
+              Run my scan
+            </button>
+          </div>
+        </Step>
+
+        <Step n={3} id="s3" title="Watch the scan" state={state(3)}>
+          <div className="scanbox rf-wrap" ref={boxRef}>
+            <div className="scanhead">
+              <b style={{ fontWeight: 500 }}>Scan #{scanId}</b>
+              <span style={{ color: "var(--muted)" }}>{hostOf(address)}</span>
+              <span className={`state ${finished ? "done" : ""}`}>
+                <i />
+                <span>{finished ? "finished" : "running"}</span>
+              </span>
+            </div>
+            <div className="bar">
+              <i style={{ width: total ? `${Math.min(100, (results.length / total) * 100)}%` : "0%" }} />
+            </div>
+            <FlagStrip
+              className="qstrip"
+              looks={results.map((r) => lookOf(r.status))}
+              total={total}
+              running={running}
+            />
+            <div className="thread" ref={threadRef} aria-live="polite">
+              {results.map((r, i) => (
+                <TestBubbles key={r.test_id} result={r} index={i} total={total || results.length} />
+              ))}
+              {running && (
+                <div className="test">
+                  <div className="dots" aria-label="Next test running">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="scanfoot">
+              <span>
+                {results.length} of {total || results.length} tests done
+              </span>
+              <span>
+                <span className="f" key={fails}>
+                  {fails}
+                </span>{" "}
+                got through
+              </span>
+            </div>
+          </div>
+          {scanProblem && (
+            <div className="alert" role="alert">
+              {scanProblem}
+            </div>
+          )}
+          {finished && scan && scanId !== null && (
+            <div className="donecard">
+              <h3>
+                <span className="bad">
+                  <CountUp to={attackFails} /> of {attacks.length}
+                </span>{" "}
+                attacks got through.
+              </h3>
+              <FlagStrip className="qstrip" looks={results.map((r) => lookOf(r.status))} />
+              {scan.scan.status !== "completed" && (
+                <p>{scan.scan.note ?? "The scan stopped before it finished."}</p>
+              )}
+              <p>
+                Every result was decided by the AI judge, which has not been checked for accuracy.
+                This is not a guarantee of security. It only reports what these tests checked.
+              </p>
+              <div className="actions">
+                <Link
+                  className="btn solid small"
+                  href={reportPath(scanId, viewKeyShown)}
+                  style={{ textDecoration: "none" }}
+                >
+                  Open the report
+                </Link>
+              </div>
+            </div>
+          )}
+        </Step>
+      </div>
+    </main>
   );
 }
+
+function TestBubbles({ result, index, total }: { result: ScanResult; index: number; total: number }) {
+  const fail = result.status === "fail";
+  const turns = result.turns && result.turns.length > 0 ? result.turns : null;
+  const reason = (result.judge_reason ?? result.evidence).replace(" or the tool log", "");
+  return (
+    <div className="test">
+      <div className="tmeta">
+        test {index + 1} of {total} ·{" "}
+        {result.kind === "positive" ? (
+          "normal request"
+        ) : (
+          <>
+            <em>attack</em> · {result.risk}
+          </>
+        )}{" "}
+        · {result.title}
+      </div>
+      {turns ? (
+        turns.map((t, i) =>
+          t.role === "user" ? (
+            <div key={i} className="bubble me">
+              {t.content}
+            </div>
+          ) : (
+            <Reply key={i} fail={fail && i === turns.length - 1} text={t.content} />
+          ),
+        )
+      ) : (
+        <>
+          <div className="bubble me">{result.message}</div>
+          <Reply fail={fail} text={result.reply || "(no reply)"} />
+        </>
+      )}
+      <div className="verdict">
+        <span className={`badge ${lookOf(result.status)}`}>{badgeWord(result.status)}</span>
+        <span className="judgeby">AI judge</span>
+        <span className="why">{reason}</span>
+      </div>
+    </div>
+  );
+}
+
+function Reply({ fail, text }: { fail: boolean; text: string }) {
+  return (
+    <div className={`bubble bot ${fail ? "fouled" : "held"}`}>
+      {fail && <RaisedFlag />}
+      {text}
+    </div>
+  );
+}
+
+const badgeWord = (status: ScanResult["status"]): string =>
+  ({ pass: "PASS", fail: "FAIL", inconclusive: "UNCLEAR", error: "ERROR", not_applicable: "N/A" })[status];

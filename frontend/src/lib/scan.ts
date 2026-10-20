@@ -127,6 +127,9 @@ export type ScanSettings = {
     target_host: string;
     server: { name: string; version: string };
     tool_count: number;
+    // Every tool name and the limits, saved since the report page. Older scans have neither.
+    tools?: string[];
+    limits?: { calls_per_tool: number; calls_per_run: number };
     exercised: { name: string; effect: "reads" | "acts" }[];
     sandbox_confirmed: boolean;
   };

@@ -107,6 +107,8 @@ def test_with_nothing_ticked_it_runs_the_static_checks_only_and_never_calls_a_to
     assert all(r["status"] == "pass" for r in results)
     assert all("not mean the tool is safe" in r["evidence"] for r in results)
     assert scan["scan"]["settings"]["mcp"]["exercised"] == []
+    assert scan["scan"]["settings"]["mcp"]["tools"] == ["add"]
+    assert scan["scan"]["settings"]["mcp"]["limits"] == {"calls_per_tool": 8, "calls_per_run": 60}
 
 
 def test_a_poisoned_description_and_an_open_parameter_fail_with_the_tool_named() -> None:

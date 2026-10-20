@@ -40,6 +40,7 @@ class McpDeps:
     judge_caps: BudgetCaps
     judge_providers: list[str]
     max_calls: int
+    per_tool: int
 
 
 class Server(BaseModel):
@@ -140,6 +141,9 @@ def build_mcp_router(settings: Settings, deps: McpDeps) -> APIRouter:
                 "target_host": host,
                 "server": {"name": listed.server_name, "version": listed.server_version},
                 "tool_count": len(listed.tools),
+                # Every tool name, so the report can say which were only read.
+                "tools": [t.name for t in listed.tools],
+                "limits": {"calls_per_tool": deps.per_tool, "calls_per_run": deps.max_calls},
                 "exercised": [
                     {"name": name, "effect": effect} for name, effect in exercise.items()
                 ],
