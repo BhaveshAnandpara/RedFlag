@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check an MCP server · Redflag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="flair.css">
+<style>
+  :root { --bg: #050505; --ink: #f4f4f2; --muted: #a3a3a3; --faint: #6f6f6f; --line: rgba(255,255,255,0.08); --red: #ff3b3f; --red-ink: #ff5a5f;
+    --pass: #3fc07a; --amber: #f2b33d; --panel: #0b0b0b; --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --ease: cubic-bezier(0.22, 1, 0.36, 1); }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; padding: 0; }
+  a { color: inherit; }
+  code, .mono { font-family: var(--mono); }
+
+  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 36px; height: 64px; padding: 0 24px; border-bottom: 1px solid var(--line); background: rgba(5,5,5,0.88); backdrop-filter: blur(8px); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; letter-spacing: -0.02em; text-decoration: none; }
+  .brand svg { width: 15px; height: 17px; }
+  nav { display: flex; gap: 28px; font-size: 14px; } nav a { color: var(--muted); text-decoration: none; } nav a[aria-current] { color: var(--ink); }
+  .proto { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--amber); border: 1px solid rgba(242,179,61,0.3); padding: 4px 10px; border-radius: 999px; }
+
+  main { max-width: 860px; margin: 0 auto; padding: 48px 24px 140px; }
+  .intro h1 { margin: 0; font-size: clamp(34px, 4vw, 48px); font-weight: 500; letter-spacing: -0.04em; }
+  .intro p { margin: 12px 0 0; font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 40em; }
+
+  .steps { margin-top: 40px; display: grid; }
+  .step { position: relative; padding: 0 0 28px 52px; }
+  .step::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 0; width: 1px; background: var(--line); }
+  .step:last-child::before { display: none; }
+  .dot { position: absolute; left: 0; top: 0; width: 31px; height: 31px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 12.5px;
+    border: 1px solid rgba(255,255,255,0.18); color: var(--muted); background: var(--bg); transition: all 300ms ease; }
+  .step.active .dot { background: var(--ink); color: #000; border-color: var(--ink); }
+  .step.done .dot { background: #12291b; color: var(--pass); border-color: rgba(63,192,122,0.4); }
+  .step-head { display: flex; align-items: center; gap: 12px; min-height: 31px; }
+  .step-head h2 { margin: 0; font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
+  .step-head .sum { font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .step-head .edit { margin-left: auto; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .step.locked .step-head h2 { color: var(--faint); }
+  .body { margin-top: 18px; display: grid; gap: 18px; animation: open 400ms var(--ease); }
+  @keyframes open { from { opacity: 0; transform: translateY(8px); } }
+  .step:not(.active) .body { display: none; }
+
+  label.f { display: grid; gap: 8px; }
+  .lab { font-size: 14px; font-weight: 500; display: flex; justify-content: space-between; gap: 12px; }
+  .lab small { font-weight: 400; color: var(--faint); font-size: 12.5px; }
+  .lab > span:first-child small { margin-left: 6px; }
+  .req { color: var(--red-ink); margin-left: 3px; font-weight: 500; }
+  .legend { margin: 0; font-size: 12.5px; color: var(--faint); } .legend .req { margin: 0 2px; }
+  .in { height: 48px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: #0c0c0c; font-size: 15px; outline: none; transition: border-color 160ms ease; width: 100%; }
+  .in:focus { border-color: rgba(255,255,255,0.45); }
+  .in::placeholder { color: #5c5c5c; }
+  .in[aria-invalid="true"] { border-color: rgba(255,90,95,0.75); background: #120909; }
+  .err { font-size: 13px; color: var(--red-ink); line-height: 1.45; } .err::before { content: "! "; font-weight: 600; }
+  .hint { font-size: 12.5px; color: var(--faint); line-height: 1.5; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  details.keyhow { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+  details.keyhow summary { cursor: pointer; padding: 12px 16px; font-size: 13.5px; color: var(--muted); list-style: none; }
+  details.keyhow summary::-webkit-details-marker { display: none; }
+  details.keyhow summary::before { content: "› "; display: inline-block; transition: transform 200ms ease; }
+  details.keyhow[open] summary::before { transform: rotate(90deg); }
+  details.keyhow .inner { padding: 0 16px 16px; display: grid; gap: 12px; }
+
+  .btn { height: 46px; padding: 0 22px; border-radius: 999px; font-weight: 500; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: transform 140ms var(--ease), opacity 160ms ease; text-decoration: none; }
+  .btn.solid { background: var(--ink); color: #000; } .btn.solid:active { transform: scale(0.98); }
+  .btn.solid:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.ghost { border: 1px solid rgba(255,255,255,0.18); }
+  .btn.small { height: 34px; padding: 0 14px; font-size: 13px; }
+  .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .status { font-size: 13.5px; color: var(--muted); } .status.bad { color: var(--red-ink); }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.25); border-top-color: #000; animation: sp 700ms linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  /* step 2: the tools */
+  .toolhead h3 { margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.02em; } .toolhead h3 span { color: var(--muted); font-weight: 400; }
+  .toolhead p { margin: 6px 0 0; font-size: 14px; color: var(--muted); line-height: 1.55; max-width: 60ch; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+  .search { flex: 1; min-width: 220px; height: 38px; font-size: 14px; }
+  .chip { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--ink); color: #000; border-color: var(--ink); }
+  .chip b { font-weight: 500; margin-left: 4px; font-family: var(--mono); font-size: 11.5px; }
+  .tools { display: grid; gap: 8px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
+  .tool { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 14px; align-items: start; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel);
+    transition: border-color 160ms ease, background-color 160ms ease; }
+  .tool.on { border-color: rgba(255,255,255,0.4); background: #101010; }
+  .tick { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid #555; display: grid; place-items: center; margin-top: 1px; cursor: pointer; transition: all 160ms ease; }
+  .tool.on .tick { background: var(--ink); border-color: var(--ink); } .tool.on .tick::after { content: "✓"; color: #000; font-size: 13px; font-weight: 600; }
+  .tname { font-family: var(--mono); font-size: 14px; } .tname small { font-family: var(--sans); font-size: 12px; color: var(--faint); margin-left: 8px; }
+  .tdesc { grid-column: 2; font-size: 13.5px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+  .tdesc.none { font-style: italic; color: var(--faint); }
+  .effect { grid-column: 3; grid-row: 1; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: #0c0c0c; font-size: 12.5px; }
+  .effect.changes { border-color: rgba(242,179,61,0.4); color: var(--amber); }
+  .nomatch { padding: 18px; font-size: 14px; color: var(--muted); }
+  .sandbox { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; padding: 16px; border-radius: 12px; border: 1px solid rgba(242,179,61,0.35); background: #120f06; cursor: pointer; }
+  .sandbox.on { border-color: rgba(63,192,122,0.45); background: #08130c; }
+  .sandbox.invalid { border-color: rgba(255,90,95,0.75); background: #140809; }
+  .sandbox .box { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--amber); display: grid; place-items: center; margin-top: 1px; }
+  .sandbox.on .box { background: var(--pass); border-color: var(--pass); } .sandbox.on .box::after { content: "✓"; color: #000; font-size: 14px; font-weight: 600; }
+  .sandbox b { font-weight: 500; display: block; } .sandbox span { font-size: 13.5px; color: var(--muted); }
+  .plan { font-size: 13.5px; color: var(--muted); } .plan b { color: var(--ink); font-weight: 500; }
+
+  /* step 3: running */
+  .runbox { border-radius: 14px; border: 1px solid var(--line); background: #080808; overflow: hidden; }
+  .runhead { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .runhead .state { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  .runhead .state i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: blink 1s ease-in-out infinite; }
+  .runhead .state.done i { background: var(--pass); animation: none; }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  .mstrip { padding: 12px 16px 6px; border-bottom: 1px solid var(--line); }
+  .stream { max-height: 420px; overflow-y: auto; padding: 8px 0; }
+  .rrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 16px; font-size: 13.5px; animation: open 300ms var(--ease); }
+  .rrow .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rrow .k { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .rrow.fail { background: rgba(255,59,63,0.06); }
+  .runfoot { display: flex; justify-content: space-between; padding: 10px 16px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .runfoot .f { color: var(--red-ink); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 21px; padding: 0 7px; border-radius: 4px; font-family: var(--mono); font-size: 11px; font-weight: 500; white-space: nowrap; flex: none; }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.pass { color: var(--pass); background: rgba(63,192,122,0.12); } .badge.fail { color: var(--red-ink); background: rgba(255,59,63,0.13); }
+  .badge.unclear { color: var(--amber); background: rgba(242,179,61,0.12); } .badge.na { color: var(--muted); background: #1c1c1c; }
+
+  /* the end card */
+  .mdone { margin-top: 16px; padding: 22px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 12px; animation: open 500ms var(--ease); }
+  .mdone h3 { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: -0.03em; } .mdone h3 .bad { color: var(--red); }
+  .mdone p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; }
+  .mdone .flagstrip { margin: 2px 0 4px; }
+  .mdone .cd { font-size: 13px; color: var(--faint); } .mdone .cd button { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; font-size: 13px; }
+  .allbtn { font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; margin-left: auto; }
+
+  @media (max-width: 720px) {
+    header { gap: 16px; padding: 0 16px; } nav { display: none; }
+    main { padding: 32px 16px 120px; }
+    .step { padding-left: 42px; } .dot { width: 27px; height: 27px; font-size: 11.5px; } .step::before { left: 13px; top: 30px; }
+    .row2 { grid-template-columns: 1fr; }
+    .step-head .sum { display: none; }
+    .tool { grid-template-columns: auto minmax(0, 1fr); } .effect { grid-column: 2; grid-row: auto; justify-self: start; }
+    .tools { max-height: none; }
+    .search { flex-basis: 100%; } .toolbar { gap: 8px; } .chips { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; width: 100%; } .chip { flex: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .body, .rrow, .mdone { animation: none; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="home.html"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</a>
+  <nav aria-label="Main"><a href="home.html#scene">How it works</a><a href="quick.html">Quick scan</a><a href="#" aria-current="page">MCP check</a><a href="results.html">Results</a></nav>
+  <span class="proto" title="Looking at the tools and the checks are simulated with a made-up server">prototype · simulated server</span>
+</header>
+
+<main>
+  <div class="intro">
+    <h1>Check an MCP server</h1>
+    <p>Tool descriptions are always checked for hidden instructions, invisible characters and open-ended inputs. Tools are only called if you tick them. A clean result is not proof that a server is safe.</p>
+  </div>
+
+  <div class="steps">
+    <section class="step active" id="s1" aria-labelledby="s1h">
+      <span class="dot">1</span>
+      <div class="step-head"><h2 id="s1h">Connect</h2><span class="sum" id="s1sum"></span><button class="edit" id="s1edit" hidden>Change</button></div>
+      <div class="body">
+        <p class="legend">Fields marked <span class="req">*</span> are required.</p>
+        <label class="f"><span class="lab"><span>Server address<span class="req" aria-hidden="true">*</span></span><small>streamable HTTP, usually ending /mcp</small></span>
+          <input class="in" id="url" type="url" placeholder="https://tools.example.com/mcp" autocomplete="off" spellcheck="false" required aria-describedby="e-url">
+          <span class="err" id="e-url" hidden></span>
+          <span class="hint">Must be a public https address. Private and internal addresses are refused.</span>
+        </label>
+        <label class="f"><span class="lab"><span>Access key <small>optional</small></span><small>used for this check only, never stored</small></span>
+          <input class="in" id="key" type="password" autocomplete="off">
+        </label>
+        <details class="keyhow"><summary>How the key is sent</summary>
+          <div class="inner">
+            <div class="row2">
+              <label class="f"><span class="lab"><span>Key header name <small>optional</small></span></span><input class="in" id="hname" value="Authorization" spellcheck="false"></label>
+              <label class="f"><span class="lab"><span>Key header prefix <small>optional</small></span></span><input class="in" id="hpre" value="Bearer " spellcheck="false"></label>
+            </div>
+            <span class="hint">For a server that uses <code>X-Api-Key</code>, set the name to that and clear the prefix.</span>
+          </div>
+        </details>
+        <div class="actions"><button class="btn solid" id="look" disabled>Look at the tools</button><span class="status" id="lookStatus" role="status"></span></div>
+        <span class="hint">This lists the tools only. It calls no tool.</span>
+      </div>
+    </section>
+
+    <section class="step locked" id="s2" aria-labelledby="s2h">
+      <span class="dot">2</span>
+      <div class="step-head"><h2 id="s2h">Choose what to call</h2><span class="sum" id="s2sum"></span><button class="edit" id="s2edit" hidden>Change</button></div>
+      <div class="body">
+        <div class="toolhead"><div style="display:flex;align-items:baseline;gap:12px"><h3 id="toolCount"></h3><button class="allbtn" id="allbtn"></button></div>
+          <p>Tick a tool to have Redflag call it with manipulated text. Say whether it only reads or changes things: a tool that changes things is only called on a test or sandbox server.</p></div>
+        <div class="toolbar">
+          <input class="in search" id="search" type="search" placeholder="Search tools" aria-label="Search tools">
+          <div class="chips"><button class="chip" data-f="all" aria-pressed="true">All<b id="nAll"></b></button>
+          <button class="chip" data-f="ticked" aria-pressed="false">Ticked<b id="nTicked"></b></button>
+          <button class="chip" data-f="reads" aria-pressed="false">Only reads<b id="nReads"></b></button>
+          <button class="chip" data-f="changes" aria-pressed="false">Changes things<b id="nChanges"></b></button></div>
+        </div>
+        <div class="tools" id="tools" role="list" aria-label="Tools on this server"></div>
+        <div class="sandbox" id="sandbox" role="checkbox" aria-checked="false" tabindex="0" hidden>
+          <span class="box"></span><div><b>This server is a test or sandbox, not production.<span class="req" aria-hidden="true">*</span></b><span>You ticked a tool that changes things. Redflag only calls those on a test or sandbox server.</span></div>
+        </div>
+        <span class="err" id="e-sandbox" hidden></span>
+        <div class="actions"><button class="btn solid" id="run">Run checks</button><span class="plan" id="plan"></span></div>
+      </div>
+    </section>
+
+    <section class="step locked" id="s3" aria-labelledby="s3h">
+      <span class="dot">3</span>
+      <div class="step-head"><h2 id="s3h">Results</h2></div>
+      <div class="body" id="s3body"></div>
+    </section>
+  </div>
+</main>
+
+<script src="flair.js"></script>
+<script src="mcp-data.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+
+  const SERVER = MCP.SERVER; // simulated (prototype only): what POST /mcp-scans/check would return
+
+  // ---------- step 1 ----------
+  const FIELD = { 'e-url': 'url', 'e-sandbox': 'sandbox' };
+  function setErr(id, msg) { const e = $(id); e.textContent = msg || ''; e.hidden = !msg; const f = $(FIELD[id]); if (id === 'e-sandbox') f.classList.toggle('invalid', !!msg); else f.setAttribute('aria-invalid', msg ? 'true' : 'false'); }
+  const PRIVATE = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0|\[?::1\]?)/i;
+  function urlProblem(u) {
+    if (!u) return 'Enter the server address.';
+    let host; try { const x = new URL(u); if (x.protocol !== 'https:') return 'Use a public https address.'; host = x.hostname; } catch { return 'Enter the full address, starting with https://.'; }
+    if (PRIVATE.test(host)) return 'That address is not allowed: it points to a private or internal address.';
+    return '';
+  }
+  let S = { tools: [], filter: 'all', q: '', sandbox: false, looked: false };
+  $('url').addEventListener('input', () => { if (!running) $('look').disabled = !$('url').value.trim(); if (!$('url').value.trim() || !urlProblem($('url').value.trim())) setErr('e-url', ''); if (S.looked) { S.looked = false; lock(2); $('lookStatus').className = 'status'; $('lookStatus').textContent = 'You changed the address, so look at the tools again.'; } });
+  $('look').addEventListener('click', async () => {
+    const u = $('url').value.trim(), p = urlProblem(u);
+    if (p) { setErr('e-url', p); $('url').focus(); return; }
+    setErr('e-url', '');
+    const btn = $('look'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Looking…'; $('lookStatus').textContent = '';
+    await sleep(1200); btn.disabled = false; btn.textContent = 'Look again';
+    if (/401/.test(u)) { $('lookStatus').className = 'status bad'; $('lookStatus').textContent = 'We could not reach your bot: The server answered with status 401.'; return; }
+    S.looked = true;
+    S.tools = SERVER.tools.map(t => ({ ...t, params: Object.keys(t.input_schema?.properties || {}), on: true, effect: t.readOnly ? 'reads' : 'changes' }));
+    done(1, `${new URL(u).host} · ${S.tools.length} tools`); open(2); renderTools();
+  });
+
+  // ---------- step 2 ----------
+  function counts() {
+    $('nAll').textContent = S.tools.length; $('nTicked').textContent = S.tools.filter(t => t.on).length;
+    $('nReads').textContent = S.tools.filter(t => t.effect === 'reads').length; $('nChanges').textContent = S.tools.filter(t => t.effect === 'changes').length;
+  }
+  function renderTools() {
+    $('toolCount').innerHTML = `${S.tools.length} tools <span>on ${esc(SERVER.name)}</span>`;
+    const q = S.q.toLowerCase();
+    const shown = S.tools.filter(t => (S.filter === 'all' || (S.filter === 'ticked' ? t.on : t.effect === S.filter)) && (!q || t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)));
+    $('tools').innerHTML = shown.length ? shown.map(t => {
+      const i = S.tools.indexOf(t), d = t.description.slice(0, 500);
+      return `<div class="tool ${t.on ? 'on' : ''}" role="listitem">
+        <span class="tick" role="checkbox" tabindex="0" aria-checked="${t.on}" aria-label="Call this tool: ${t.name}" data-i="${i}"></span>
+        <span class="tname">${esc(t.name)}${t.params.length ? `<small>${t.params.join(', ')}</small>` : '<small>no inputs</small>'}</span>
+        <select class="effect ${t.effect}" data-i="${i}" aria-label="What does ${t.name} do?"><option value="reads" ${t.effect === 'reads' ? 'selected' : ''}>Only reads</option><option value="changes" ${t.effect === 'changes' ? 'selected' : ''}>Changes things</option></select>
+        <span class="tdesc ${d ? '' : 'none'}">${d ? esc(d) : 'No description.'}</span>
+      </div>`; }).join('') : '<div class="nomatch">No tools match.</div>';
+    $('tools').querySelectorAll('.tick').forEach(x => {
+      const flip = () => { const t = S.tools[+x.dataset.i]; t.on = !t.on; renderTools(); };
+      x.addEventListener('click', flip); x.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } });
+    });
+    $('tools').querySelectorAll('.effect').forEach(x => x.addEventListener('change', () => { S.tools[+x.dataset.i].effect = x.value; renderTools(); }));
+    counts(); plan();
+    const all = S.tools.every(t => t.on); $('allbtn').textContent = all ? 'Untick all' : 'Tick all';
+  }
+  function plan() {
+    const ticked = S.tools.filter(t => t.on), risky = ticked.some(t => t.effect === 'changes');
+    $('sandbox').hidden = !risky; if (!risky || S.sandbox) setErr('e-sandbox', '');
+    $('plan').innerHTML = ticked.length ? `<b>${ticked.length}</b> ${ticked.length === 1 ? 'tool' : 'tools'} called, <b>${S.tools.length}</b> described` : `No tool ticked: only the <b>${S.tools.length}</b> descriptions are checked.`;
+  }
+  $('allbtn').addEventListener('click', () => { const on = !S.tools.every(t => t.on); S.tools.forEach(t => { t.on = on; }); renderTools(); });
+  $('search').addEventListener('input', () => { S.q = $('search').value; renderTools(); });
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { S.filter = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === c)); renderTools(); }));
+  const toggleSandbox = () => { S.sandbox = !S.sandbox; $('sandbox').classList.toggle('on', S.sandbox); $('sandbox').setAttribute('aria-checked', S.sandbox); if (S.sandbox) setErr('e-sandbox', ''); };
+  $('sandbox').addEventListener('click', toggleSandbox);
+  $('sandbox').addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleSandbox(); } });
+  $('run').addEventListener('click', () => {
+    const ticked = S.tools.filter(t => t.on);
+    if (ticked.some(t => t.effect === 'changes') && !S.sandbox) { setErr('e-sandbox', 'A tool that changes things can only be called on a test or sandbox server. Tick the box to confirm that this is one.'); $('sandbox').focus(); return; }
+    done(2, ticked.length ? `${ticked.length} called · ${S.tools.length} described` : 'descriptions only'); open(3); runChecks(ticked);
+  });
+
+  // ---------- step flow ----------
+  function open(n) { const s = $('s' + n); s.className = 'step active'; const e = $('s' + n + 'edit'); if (e) e.hidden = true; s.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }); }
+  function done(n, sum) { $('s' + n).className = 'step done'; $('s' + n + 'sum').textContent = sum; $('s' + n + 'edit').hidden = false; }
+  function lock(n) { for (let i = n; i <= 3; i++) { $('s' + i).className = 'step locked'; const sm = $('s' + i + 'sum'); if (sm) sm.textContent = ''; const e = $('s' + i + 'edit'); if (e) e.hidden = true; } }
+  let running = false;
+  $('s1edit').addEventListener('click', () => { if (!running) { clearInterval(timer); $('s1').className = 'step active'; $('s1edit').hidden = true; lock(2); } });
+  $('s2edit').addEventListener('click', () => { if (!running) { clearInterval(timer); $('s2').className = 'step active'; $('s2edit').hidden = true; lock(3); renderTools(); } });
+
+  // ---------- step 3: run the checks, then open the report ----------
+  const BADGE = { pass: ['pass', 'PASS'], fail: ['fail', 'FAIL'], inconclusive: ['unclear', 'UNCLEAR'], not_applicable: ['na', 'N/A'], error: ['na', 'ERROR'] };
+  let timer = null;
+  async function runChecks(ticked) {
+    running = true; clearInterval(timer);
+    const called = Object.fromEntries(ticked.map(t => [t.name, t.effect]));
+    const all = MCP.run(called), href = 'results.html?' + MCP.encode(called);
+    $('s3body').innerHTML = `<div class="runbox rf-wrap"><div class="runhead"><b style="font-weight:500">MCP check #${MCP.META.id}</b><span style="color:var(--muted)">${esc(SERVER.name)}</span><span class="state" id="mstate"><i></i><span>running</span></span></div>
+      <div class="flagstrip mstrip" id="mflags" aria-hidden="true"></div><div class="stream" id="stream" aria-live="polite"></div>
+      <div class="runfoot"><span id="mdone">0 tests done so far</span><span><span class="f" id="mfail">0</span> problems found</span></div></div>`;
+    RF.strip($('mflags'), all.length);
+    let n = 0, fails = 0;
+    for (const [i, r] of all.entries()) {
+      RF.now($('mflags'), i);
+      await sleep(r.group === 'static' ? 160 : 380);
+      const [cls, word] = BADGE[r.status];
+      const row = document.createElement('div'); row.className = `rrow ${r.status === 'fail' ? 'fail' : ''}`;
+      row.innerHTML = `<span class="badge ${cls}">${word}</span><span class="t">${esc(r.title)}</span><span class="k">${r.group === 'static' ? 'read' : 'called'}</span>`;
+      $('stream').appendChild(row); $('stream').scrollTop = $('stream').scrollHeight;
+      n++; if (r.status === 'fail') fails++;
+      $('mdone').textContent = `${n} tests done so far`; $('mfail').textContent = fails;
+      RF.result({ strip: $('mflags'), i, status: r.status, bubble: document.createElement('div'), wrap: document.querySelector('.runbox'), counter: $('mfail') });
+    }
+    running = false;
+    $('mstate').classList.add('done'); $('mstate').querySelector('span').textContent = 'finished';
+    const counted = all.filter(r => r.status === 'pass' || r.status === 'fail').length, crit = all.filter(r => r.status === 'fail' && r.severity === 'critical').length;
+    const card = document.createElement('div'); card.className = 'mdone';
+    card.innerHTML = `<h3>${fails ? `<span class="bad"><span id="mcount">0</span> of ${counted}</span> checks failed.` : `0 of ${counted} checks failed.`}</h3>
+      <p>${fails ? `${crit} ${crit === 1 ? 'was' : 'were'} critical. ` : ''}The report shows what was found, what each tool sent back and how to fix it.</p>
+      <div class="actions"><a class="btn solid" href="${href}">Open the report</a><span class="cd" id="cd">Opening in <b id="cdn">6</b> s · <button id="stay">Stay here</button></span></div>`;
+    $('s3body').appendChild(card);
+    card.insertBefore(RF.clone($('mflags')), card.querySelector('p'));
+    if (fails) RF.countUp($('mcount'), fails);
+    card.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    let left = 6;
+    timer = setInterval(() => { left--; if ($('cdn')) $('cdn').textContent = left; if (left <= 0) { clearInterval(timer); location.href = href; } }, 1000);
+    $('stay').addEventListener('click', () => { clearInterval(timer); $('cd').textContent = 'The report stays one click away.'; });
+  }
+})();
+</script>
+</body>
+</html>
