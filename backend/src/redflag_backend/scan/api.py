@@ -3,7 +3,7 @@
 import asyncio
 import hmac
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from redflag_backend.llm.provider import Provider
 from redflag_backend.sandbox.loader import BotRegistry
+from redflag_backend.scan.accuracy import accuracy
 from redflag_backend.scan.atlas import ATLAS
 from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.gate import ScanGate
@@ -22,6 +23,10 @@ from redflag_backend.settings import Settings
 
 class StartScan(BaseModel):
     bot_id: str
+
+
+class LabelBody(BaseModel):
+    correct: Literal["pass", "fail"]
 
 
 def _error(status: int, kind: str) -> JSONResponse:
@@ -124,6 +129,28 @@ def build_scan_router(
         scan, results = found["scan"], found["results"]
         scan["models_used"] = sorted({r["model"] for r in results if r["model"]})
         scan["previous_scan_id"] = await asyncio.to_thread(store.previous_scan_id, scan_id)
+        labels = await asyncio.to_thread(store.labels, scan_id)
+        for r in results:
+            r["label"] = labels.get(r["test_id"])
         return {"scan": scan, "results": results, "summary": summarize(results, catalog)}
+
+    @router.put("/scans/{scan_id}/results/{test_id}/label", response_model=None)
+    async def set_label(
+        scan_id: int, test_id: str, body: LabelBody
+    ) -> dict[str, str] | JSONResponse:
+        if not await asyncio.to_thread(store.has_result, scan_id, test_id):
+            return _error(404, "no_such_result")
+        await asyncio.to_thread(store.set_label, scan_id, test_id, body.correct, runner.clock())
+        return {"correct": body.correct}
+
+    @router.delete("/scans/{scan_id}/results/{test_id}/label")
+    async def clear_label(scan_id: int, test_id: str) -> dict[str, bool]:
+        await asyncio.to_thread(store.clear_label, scan_id, test_id)
+        return {"ok": True}
+
+    @router.get("/judge-accuracy")
+    async def judge_accuracy() -> dict[str, Any]:
+        rows = await asyncio.to_thread(store.labeled_results)
+        return accuracy(rows, settings.judge_accuracy_min_sample)
 
     return router

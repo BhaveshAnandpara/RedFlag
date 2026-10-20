@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     # Hard limits for the AI judge in one scan. The judge runs on Redflag's own keys and models
     # (the ones above), so it never draws on the bots' quota.
     judge_budget_max_requests: int = 200
+    # Below this many labeled results, accuracy numbers are called a small sample.
+    judge_accuracy_min_sample: int = 20
     judge_budget_max_tokens: int = 200_000
     judge_budget_max_seconds: float = 1800.0
     # The setup chat, the supervisor and the test generator: how much of Redflag's own model

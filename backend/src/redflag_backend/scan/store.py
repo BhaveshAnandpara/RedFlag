@@ -180,3 +180,53 @@ class ScanStore:
                 .all()
             )
         return [dict(r) for r in rows]
+
+    # --- judge labels ------------------------------------------------------------------------
+
+    def has_result(self, scan_id: int, test_id: str) -> bool:
+        with self._engine.connect() as conn:
+            found = conn.execute(
+                text("SELECT 1 FROM scan_results WHERE scan_id = :s AND test_id = :t"),
+                {"s": scan_id, "t": test_id},
+            ).first()
+        return found is not None
+
+    def set_label(self, scan_id: int, test_id: str, correct: str, now: float) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO judge_labels (scan_id, test_id, correct, labeled_at) "
+                    "VALUES (:s, :t, :c, :now) ON CONFLICT (scan_id, test_id) "
+                    "DO UPDATE SET correct = :c, labeled_at = :now"
+                ),
+                {"s": scan_id, "t": test_id, "c": correct, "now": now},
+            )
+
+    def clear_label(self, scan_id: int, test_id: str) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM judge_labels WHERE scan_id = :s AND test_id = :t"),
+                {"s": scan_id, "t": test_id},
+            )
+
+    def labels(self, scan_id: int) -> dict[str, str]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT test_id, correct FROM judge_labels WHERE scan_id = :s"),
+                {"s": scan_id},
+            ).all()
+        return {str(r[0]): str(r[1]) for r in rows}
+
+    def labeled_results(self) -> list[dict[str, Any]]:
+        with self._engine.connect() as conn:
+            rows = (
+                conn.execute(
+                    text(
+                        "SELECT r.risk, r.judge_status, l.correct FROM judge_labels l "
+                        "JOIN scan_results r ON r.scan_id = l.scan_id AND r.test_id = l.test_id"
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(r) for r in rows]

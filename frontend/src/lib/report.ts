@@ -10,7 +10,7 @@ import {
   ruleOutput,
   type JudgeState,
 } from "@/lib/analytics";
-import type { ScanDetail, ScanResult, Status } from "@/lib/scan";
+import type { JudgeAccuracy, ScanDetail, ScanResult, Status } from "@/lib/scan";
 
 const STATUS_WORD: Record<Status, string> = {
   pass: "PASS",
@@ -38,7 +38,7 @@ function when(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
-export function buildReport(detail: ScanDetail): string {
+export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null): string {
   const { scan, results, summary } = detail;
   const { settings } = scan;
   const text = conclusion(detail);
@@ -105,6 +105,17 @@ export function buildReport(detail: ScanDetail): string {
       `- ${judge.disagreements} ${judge.disagreements === 1 ? "test" : "tests"} where the plain rules and the AI judge disagreed (judge failed ${judge.judgeCaught} the rules passed, rules failed ${judge.rulesCaught} the judge passed)`,
     );
     lines.push("", UNCHECKED_JUDGE_LINE, "");
+  }
+
+  if (accuracy && accuracy.agreement !== null) {
+    lines.push("## Judge accuracy", "");
+    lines.push(
+      `Measured against the owner's own labels: the judge agreed on ${accuracy.agree} of ${accuracy.counted} labeled results (${Math.round(accuracy.agreement * 100)}%), with ${accuracy.false_alarms} false alarms and ${accuracy.misses} misses.`,
+    );
+    if (accuracy.small_sample) {
+      lines.push(`This is a small sample (fewer than ${accuracy.min_sample} labeled results), so treat it as a hint, not a measure.`);
+    }
+    lines.push("", accuracy.note, "");
   }
 
   lines.push("## What was tested", "");

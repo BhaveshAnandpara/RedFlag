@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { BotInfo, ScanDetail, ScanListItem } from "@/lib/scan";
+import { SetupApi } from "@/lib/setup-api";
 
 import { Dashboard } from "./dashboard";
+import { labelingFor } from "./finished-scan";
 import { StatusBadge } from "./status";
 
 const UNREACHABLE = "Could not reach the backend. It may still be waking up.";
@@ -241,6 +243,7 @@ export function ScanPage({
                 history={earlier}
                 onOpen={openScan}
                 loadScan={(scanId) => fetchScan(scanId, token)}
+                labeling={labelingFor(new SetupApi(apiUrl, token), detail.scan.id)}
               />
             ))}
 

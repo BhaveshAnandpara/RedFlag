@@ -21,7 +21,14 @@ import {
 } from "@/lib/analytics";
 import { buildReport } from "@/lib/report";
 import { reportHtml } from "@/lib/report-html";
-import type { ScanDetail, ScanListItem, ScanResult, Status } from "@/lib/scan";
+import type {
+  JudgeAccuracy,
+  Labeling,
+  ScanDetail,
+  ScanListItem,
+  ScanResult,
+  Status,
+} from "@/lib/scan";
 
 import { Donut, RiskBars } from "./dashboard-charts";
 import { JUDGE_WORD, JudgeBadge, STATUS_WORD, StatusBadge, TONE_CLASS } from "./status";
@@ -54,6 +61,8 @@ export type DashboardProps = {
   defaultCompareId?: number;
   // The scan before this one, to show what changed since the last run.
   previous?: ScanDetail | null;
+  // Saving the owner's labels of the judge's verdicts. Without it there is no Label mode.
+  labeling?: Labeling;
 };
 
 export function Dashboard({
@@ -63,6 +72,7 @@ export function Dashboard({
   loadScan,
   defaultCompareId,
   previous,
+  labeling,
 }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("Overview");
   const [printNote, setPrintNote] = useState<string | null>(null);
@@ -83,7 +93,16 @@ export function Dashboard({
     event.preventDefault();
   }
 
-  function printReport() {
+  async function accuracyForReport(): Promise<JudgeAccuracy | null> {
+    if (!labeling) return null;
+    try {
+      return await labeling.loadAccuracy();
+    } catch {
+      return null;
+    }
+  }
+
+  async function printReport() {
     setPrintNote(null);
     const win = window.open("", "_blank");
     if (!win) {
@@ -92,14 +111,19 @@ export function Dashboard({
       );
       return;
     }
-    win.document.write(reportHtml(buildReport(detail), `Redflag scan #${detail.scan.id}`));
+    const accuracy = await accuracyForReport();
+    win.document.write(
+      reportHtml(buildReport(detail, accuracy), `Redflag scan #${detail.scan.id}`),
+    );
     win.document.close();
     win.focus();
     win.print();
   }
 
-  function downloadReport() {
-    const blob = new Blob([buildReport(detail)], { type: "text/markdown" });
+  async function downloadReport() {
+    const blob = new Blob([buildReport(detail, await accuracyForReport())], {
+      type: "text/markdown",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -122,10 +146,10 @@ export function Dashboard({
           {scan.note && <p>{scan.note}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={downloadReport} className="rounded border-2 px-3 py-2 text-sm">
+          <button type="button" onClick={() => void downloadReport()} className="rounded border-2 px-3 py-2 text-sm">
             Download report
           </button>
-          <button type="button" onClick={printReport} className="rounded border-2 px-3 py-2 text-sm">
+          <button type="button" onClick={() => void printReport()} className="rounded border-2 px-3 py-2 text-sm">
             Print or save as PDF
           </button>
         </div>
@@ -160,7 +184,11 @@ export function Dashboard({
         {tab === "Overview" && <Overview detail={detail} previous={previous ?? null} />}
         {tab === "Tests" && <TestsTable results={detail.results} risks={detail.summary.risks} />}
         {tab === "Conversations" && (
-          <Conversations results={detail.results} realBot={isRealBot(detail)} />
+          <Conversations
+            results={detail.results}
+            realBot={isRealBot(detail)}
+            labeling={labeling}
+          />
         )}
         {tab === "Compare" && (
           <Compare
@@ -402,7 +430,55 @@ function TestsTable({
   );
 }
 
-function ConversationItem({ result, realBot }: { result: ScanResult; realBot: boolean }) {
+function LabelControls({
+  result,
+  label,
+  onLabel,
+}: {
+  result: ScanResult;
+  label: "pass" | "fail" | null;
+  onLabel: (correct: "pass" | "fail" | null) => void;
+}) {
+  const verdict = result.judge_status;
+  if (verdict !== "pass" && verdict !== "fail") {
+    return <p className="text-sm">The judge gave no verdict here, so there is nothing to label.</p>;
+  }
+  const opposite = verdict === "pass" ? "fail" : "pass";
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      {label === null ? (
+        <>
+          <span>Was the judge&apos;s verdict ({verdict}) right?</span>
+          <button type="button" onClick={() => onLabel(verdict)} className="rounded border-2 px-3 py-1">
+            Judge was right
+          </button>
+          <button type="button" onClick={() => onLabel(opposite)} className="rounded border-2 px-3 py-1">
+            Judge was wrong
+          </button>
+        </>
+      ) : (
+        <>
+          <span>You marked the judge {label === verdict ? "right" : "wrong"}.</span>
+          <button type="button" onClick={() => onLabel(null)} className="rounded border-2 px-3 py-1">
+            Clear label
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ConversationItem({
+  result,
+  realBot,
+  label,
+  onLabel,
+}: {
+  result: ScanResult;
+  realBot: boolean;
+  label?: "pass" | "fail" | null;
+  onLabel?: (correct: "pass" | "fail" | null) => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <li aria-label={`Test result: ${result.title}`} className="space-y-2 rounded border-2 p-3">
@@ -412,6 +488,7 @@ function ConversationItem({ result, realBot }: { result: ScanResult; realBot: bo
         <span className="text-xs">{result.risk ?? "normal request"}</span>
         <span className="text-xs">{severityText(result)}</span>
       </div>
+      {onLabel && <LabelControls result={result} label={label ?? null} onLabel={onLabel} />}
       <button
         type="button"
         aria-expanded={open}
@@ -588,13 +665,126 @@ function JudgeBlock({ result, state }: { result: ScanResult; state: JudgeState }
   );
 }
 
-function Conversations({ results, realBot }: { results: ScanResult[]; realBot: boolean }) {
+function Conversations({
+  results,
+  realBot,
+  labeling,
+}: {
+  results: ScanResult[];
+  realBot: boolean;
+  labeling?: Labeling;
+}) {
+  const [labels, setLabels] = useState<Record<string, "pass" | "fail" | null>>(() =>
+    Object.fromEntries(results.map((r) => [r.test_id, r.label ?? null])),
+  );
+  const [accuracy, setAccuracy] = useState<JudgeAccuracy | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function refresh() {
+    if (!labeling) return;
+    try {
+      setAccuracy(await labeling.loadAccuracy());
+    } catch {
+      setFailed(true);
+    }
+  }
+
+  useEffect(() => {
+    let alive = true;
+    labeling
+      ?.loadAccuracy()
+      .then((loaded) => alive && setAccuracy(loaded))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+    // The page passes a new object each render; loading once per opening of the tab is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save(testId: string, correct: "pass" | "fail" | null) {
+    if (!labeling) return;
+    try {
+      await labeling.setLabel(testId, correct);
+      setLabels((current) => ({ ...current, [testId]: correct }));
+      await refresh();
+    } catch {
+      setFailed(true);
+    }
+  }
+
   return (
-    <ul aria-label="Conversations" className="space-y-3">
-      {results.map((result) => (
-        <ConversationItem key={result.test_id} result={result} realBot={realBot} />
-      ))}
-    </ul>
+    <div className="space-y-4">
+      {labeling && <AccuracyPanel accuracy={accuracy} failed={failed} />}
+      <ul aria-label="Conversations" className="space-y-3">
+        {results.map((result) => (
+          <ConversationItem
+            key={result.test_id}
+            result={result}
+            realBot={realBot}
+            label={labels[result.test_id] ?? null}
+            onLabel={labeling ? (correct) => void save(result.test_id, correct) : undefined}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+
+function AccuracyPanel({ accuracy, failed }: { accuracy: JudgeAccuracy | null; failed: boolean }) {
+  return (
+    <section aria-label="Judge accuracy" role="region" className="space-y-2 rounded border-2 p-3 text-sm">
+      <h3 className="font-semibold">Judge accuracy</h3>
+      {failed && <p>Could not save or load labels. Nothing was changed.</p>}
+      {accuracy === null ? (
+        <p>Loading…</p>
+      ) : accuracy.agreement === null ? (
+        <p>{accuracy.note}</p>
+      ) : (
+        <>
+          <p>
+            Agreed with you on {accuracy.agree} of {accuracy.counted} labeled results (
+            {percent(accuracy.agreement)})
+          </p>
+          <p>
+            False alarms: {accuracy.false_alarms} (the judge failed a reply you say was fine).
+            Misses: {accuracy.misses} (the judge passed a reply you say broke the rule).
+          </p>
+          {accuracy.small_sample && (
+            <p>
+              This is a small sample (fewer than {accuracy.min_sample} labeled results), so treat
+              it as a hint, not a measure.
+            </p>
+          )}
+          <table className="w-full text-left">
+            <thead>
+              <tr>
+                <th className="p-1">Risk</th>
+                <th className="p-1">Agreed</th>
+                <th className="p-1">False alarms</th>
+                <th className="p-1">Misses</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accuracy.risks.map((risk) => (
+                <tr key={risk.risk}>
+                  <td className="p-1">{risk.risk}</td>
+                  <td className="p-1">
+                    {risk.agree} of {risk.counted}
+                    {risk.small_sample ? " (small sample)" : ""}
+                  </td>
+                  <td className="p-1">{risk.false_alarms}</td>
+                  <td className="p-1">{risk.misses}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p>{accuracy.note}</p>
+        </>
+      )}
+    </section>
   );
 }
 

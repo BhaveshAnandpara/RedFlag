@@ -45,6 +45,40 @@ export type ScanResult = {
   judge_reason?: string | null;
   judge_model?: string | null;
   judge_provider?: string | null;
+  // What the owner says the right verdict was (W7). Null or missing when not labeled.
+  label?: "pass" | "fail" | null;
+};
+
+export type AccuracyRisk = {
+  risk: string;
+  labeled: number;
+  counted: number;
+  agree: number;
+  false_alarms: number;
+  misses: number;
+  agreement: number;
+  small_sample: boolean;
+};
+
+/** How often the judge agrees with the owner's labels (GET /judge-accuracy). */
+export type JudgeAccuracy = {
+  labeled: number;
+  unjudged: number;
+  counted: number;
+  agree: number;
+  false_alarms: number;
+  misses: number;
+  agreement: number | null;
+  small_sample: boolean;
+  min_sample: number;
+  risks: AccuracyRisk[];
+  note: string;
+};
+
+/** The way a page saves labels. Pages that cannot (the saved samples) pass none. */
+export type Labeling = {
+  setLabel: (testId: string, correct: "pass" | "fail" | null) => Promise<void>;
+  loadAccuracy: () => Promise<JudgeAccuracy>;
 };
 
 export type Severity = "critical" | "high" | "medium";

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ScanDetail, ScanListItem } from "@/lib/scan";
+import type { JudgeAccuracy, Labeling, ScanDetail, ScanListItem } from "@/lib/scan";
 import type { SetupApi } from "@/lib/setup-api";
 
 import { CiPanel } from "./ci-panel";
@@ -9,6 +9,25 @@ import { Dashboard } from "./dashboard";
 const FIELD = "w-full rounded border-2 border-zinc-500 bg-white p-2 text-black";
 const PRIMARY =
   "rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-black";
+
+/** Saving labels and reading the accuracy through the owner-only API. */
+export function labelingFor(api: SetupApi, scanId: number): Labeling {
+  return {
+    async setLabel(testId, correct) {
+      const path = `/scans/${scanId}/results/${encodeURIComponent(testId)}/label`;
+      const result =
+        correct === null
+          ? await api.call("DELETE", path)
+          : await api.call("PUT", path, { correct });
+      if (!result.ok) throw new Error(`label request failed with ${result.status}`);
+    },
+    async loadAccuracy() {
+      const result = await api.call<JudgeAccuracy>("GET", "/judge-accuracy");
+      if (!result.ok) throw new Error(`accuracy request failed with ${result.status}`);
+      return result.data;
+    },
+  };
+}
 
 /** A finished scan of a saved setup: run it again, run it from a build, and read the results. */
 export function FinishedScan({
@@ -35,6 +54,7 @@ export function FinishedScan({
   setProblem: (value: string | null) => void;
 }) {
   const setup = scan.scan.settings.setup;
+  const labeling = labelingFor(api, scan.scan.id);
   return (
     <div className="space-y-4">
       {setup && (
@@ -69,6 +89,7 @@ export function FinishedScan({
         onOpen={onOpen}
         loadScan={loadScan}
         previous={previous}
+        labeling={labeling}
       />
     </div>
   );
