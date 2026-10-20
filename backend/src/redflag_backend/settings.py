@@ -75,7 +75,8 @@ class Settings(BaseSettings):
     # Below this many labeled results, accuracy numbers are called a small sample.
     judge_accuracy_min_sample: int = 20
     # Limits for checking an MCP server: tool calls in one run, and per tool.
-    mcp_max_calls: int = 60
+    # Raised from 60 to cover all 46 tools on the Excel sandbox server in one run; change back after.
+    mcp_max_calls: int = 400
     mcp_calls_per_tool: int = 8
     judge_budget_max_tokens: int = 200_000
     judge_budget_max_seconds: float = 1800.0
