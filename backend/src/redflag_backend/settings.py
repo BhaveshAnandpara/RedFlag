@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     attacker_budget_max_requests: int = 100
     attacker_budget_max_tokens: int = 200_000
     attacker_budget_max_seconds: float = 1800.0
+    # The quick scan's hello check: how many one owner may make in a window, so it cannot be
+    # used to hammer someone's server.
+    quick_checks_per_window: int = 20
+    quick_check_window_seconds: float = 600.0
     # The most tests one setup version may hold (generated tests plus attack variations).
     setup_max_tests: int = 200
     # The most requests one run may send to the user's own endpoint.

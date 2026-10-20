@@ -20,6 +20,7 @@ from redflag_backend.llm.budget import BudgetBook, BudgetCaps
 from redflag_backend.llm.provider import Provider
 from redflag_backend.llm.providers.factory import build_providers
 from redflag_backend.llm.router import Router
+from redflag_backend.quick.api import build_quick_router
 from redflag_backend.sandbox.loader import BOTS_DIR, load_bots
 from redflag_backend.scan.api import build_scan_router
 from redflag_backend.scan.bot_models import bot_budget_caps, build_bot_providers, build_bot_router
@@ -183,6 +184,7 @@ def create_app(
     setup_store = SetupStore(engine, clock=now)
     ci_tokens = CiTokenStore(engine, clock=now)
     app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))
+    app.include_router(build_quick_router(settings, setup_store, run_deps, now))
     app.include_router(
         build_setup_router(
             settings,
