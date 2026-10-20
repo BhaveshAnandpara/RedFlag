@@ -1,17 +1,17 @@
 """The quick scan: a hello check, and one call that sets a bot up and runs the starter pack.
 
-Owner-only for now. There is no select step: the pack is fixed, so nothing needs choosing. The
-endpoint key arrives with the request, goes into the target for the run, and is saved nowhere.
+Open to anyone (no owner password). There is no select step: the pack is fixed, so
+nothing needs choosing. The endpoint key arrives with the request, goes into the target for the
+run, and is saved nowhere.
 """
 
 import asyncio
-import hmac
 import secrets
 from collections import deque
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -64,12 +64,7 @@ def build_quick_router(
     deps: RunDeps,
     clock: Callable[[], float],
 ) -> APIRouter:
-    def require_owner(x_owner_token: str | None = Header(default=None)) -> None:
-        expected = settings.owner_token
-        if not expected or not x_owner_token or not hmac.compare_digest(x_owner_token, expected):
-            raise HTTPException(status_code=401, detail="owner token required")
-
-    router = APIRouter(prefix="/quick-scans", dependencies=[Depends(require_owner)])
+    router = APIRouter(prefix="/quick-scans")
     recent: deque[float] = deque()
 
     def target(endpoint: Endpoint, key: str | None):  # type: ignore[no-untyped-def]
@@ -143,8 +138,15 @@ def build_quick_router(
         await asyncio.to_thread(store.update_draft, setup_id, fill)
         number = await asyncio.to_thread(store.confirm, setup_id)
         await asyncio.to_thread(store.save_tests, setup_id, number, tests)
+        view_key = secrets.token_urlsafe(18)
         started = await launch_run(
-            store, deps, setup_id, number, [t["id"] for t in tests], body.key
+            store,
+            deps,
+            setup_id,
+            number,
+            [t["id"] for t in tests],
+            body.key,
+            view_key=view_key,
         )
         if isinstance(started, JSONResponse):
             return started
@@ -153,6 +155,7 @@ def build_quick_router(
             "version": number,
             "scan_id": started["scan_id"],
             "test_count": len(tests),
+            "view_key": view_key,
         }
 
     return router

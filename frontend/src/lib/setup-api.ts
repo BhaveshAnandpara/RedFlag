@@ -14,7 +14,8 @@ export class SetupApi {
       const response = await fetch(`${this.apiUrl}${path}`, {
         method,
         headers: {
-          "X-Owner-Token": this.token,
+          // The open pages have no password, so they send no owner header at all.
+          ...(this.token ? { "X-Owner-Token": this.token } : {}),
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),

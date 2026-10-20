@@ -158,7 +158,7 @@ def test_the_hello_check_says_why_it_failed_and_refuses_internal_addresses() -> 
         assert failed["status"] == "error" and failed["http_status"] == 401
         inside = check(client, url="http://127.0.0.1:9000/chat").json()
         assert inside["status"] == "error" and "not allowed" in inside["error"]
-        assert client.post("/quick-scans/check", json={"endpoint": ENDPOINT}).status_code == 401
+        assert client.post("/quick-scans/check", json={"endpoint": ENDPOINT}).status_code == 200
 
 
 def test_the_hello_check_has_a_limit_so_it_cannot_be_used_to_hammer_a_server() -> None:
@@ -252,7 +252,7 @@ def test_bad_requests_are_refused_and_create_nothing() -> None:
         assert quick(client, purpose="  ").json()["error"]["kind"] == "purpose_required"
         assert quick(client, bot_type="robot").json()["error"]["kind"] == "bad_bot_type"
         assert quick(client, must_never=[]).json()["error"]["kind"] == "rules_required"
-        assert client.post("/quick-scans", json={}).status_code == 401
+        assert client.post("/quick-scans", json={}).status_code == 422
         assert client.get("/setups", headers=OWNER).json()["setups"] == []
         assert requests_seen(endpoint) == []
 
@@ -303,4 +303,4 @@ def test_the_default_rules_are_served_so_the_page_never_keeps_its_own_copy() -> 
         body = client.get("/quick-scans/rules", headers=OWNER).json()
         assert body["rules"]["chatbot"] == DEFAULT_RULES["chatbot"]
         assert body["rules"]["agent"] == DEFAULT_RULES["agent"]
-        assert client.get("/quick-scans/rules").status_code == 401
+        assert client.get("/quick-scans/rules").status_code == 200  # no password needed

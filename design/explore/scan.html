@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="flair.css">
 <style>
   :root { --bg: #050505; --ink: #f4f4f2; --muted: #a3a3a3; --faint: #6f6f6f; --line: rgba(255,255,255,0.08); --red: #ff3b3f; --red-ink: #ff5a5f;
     --pass: #3fc07a; --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --ease: cubic-bezier(0.22, 1, 0.36, 1); }
@@ -129,6 +130,9 @@
 
   .big-run { width: auto; height: 52px; padding: 0 30px; margin-top: 26px; font-size: 16px; }
   .empty .again { margin: 22px 0 0; font-size: 13.5px; } .empty .again a { color: var(--ink); }
+
+  .done .flagstrip { margin: 2px 0 4px; }
+  #sflags { flex-wrap: nowrap; gap: 0; justify-content: space-between; }
 </style>
 </head>
 <body>
@@ -158,6 +162,7 @@
 
       <div class="progress" id="progress" hidden>
         <div class="bar"><i id="bar"></i></div>
+        <div class="flagstrip" id="sflags" aria-hidden="true"></div>
         <div class="counts"><span id="c-done">0 of 16</span><span><span class="f" id="c-fail">0</span> got through</span></div>
       </div>
 
@@ -167,7 +172,7 @@
       </div>
     </aside>
 
-    <section class="chatwrap" aria-label="Scan conversation">
+    <section class="chatwrap rf-wrap" aria-label="Scan conversation">
       <div class="chat-head">
         <span class="avatar">A</span>
         <div><div id="bot-name">Acme Store support bot (weak)</div><div class="sub">gemini-3.5-flash-lite · tools: lookup_order, issue_refund, send_email, lookup_article</div></div>
@@ -182,6 +187,7 @@
   </div>
 </div>
 
+<script src="flair.js"></script>
 <script src="scan-data.js"></script>
 <script>
 (() => {
@@ -251,7 +257,9 @@
     $('state').classList.add('live'); $('state').querySelector('span').textContent = 'Scan running';
     $('composer-text').textContent = 'Redflag is sending the attacks. Chat is off during a scan.';
     const tests = SCAN_DATA[bot], done = []; let fails = 0;
+    RF.strip($('sflags'), tests.length);
     for (const [i, t] of tests.entries()) {
+      RF.now($('sflags'), i);
       const box = document.createElement('div'); box.className = 'test';
       const label = t.kind === 'positive' ? 'normal request' : `<em>attack</em> · ${t.risk}`;
       box.innerHTML = `<div class="tmeta">test ${i + 1} of 16 · ${label} · ${esc(t.title)}</div><div class="bubble att"><span class="tx"></span><span class="caret"></span></div>`;
@@ -272,6 +280,7 @@
       box.appendChild(v); scrollDown();
       done.push(i); if (t.status === 'fail') fails++;
       $('bar').style.width = `${(done.length / 16) * 100}%`; $('c-done').textContent = `${done.length} of 16`; $('c-fail').textContent = fails;
+      RF.result({ strip: $('sflags'), i, status: t.status, bubble: reply, wrap: document.querySelector('.chatwrap'), counter: $('c-fail') });
       riskList(done);
       await sleep(500);
     }
@@ -283,11 +292,12 @@
     $('state').classList.remove('live'); $('state').querySelector('span').textContent = 'Scan complete';
     $('composer-text').textContent = 'Scan complete. Chat stays off for demo bots.';
     const attacks = 13, crit = SCAN_DATA[bot].filter(t => t.status === 'fail' && t.sev === 'critical').length;
-    const head = fails ? `<span class="bad">${fails} of ${attacks}</span> attacks got through. ${crit} ${crit === 1 ? 'was' : 'were'} critical.` : `0 of ${attacks} attacks got through. 5 of 10 risks were not tested.`;
+    const head = fails ? `<span class="bad"><span id="dcount">0</span> of ${attacks}</span> attacks got through. ${crit} ${crit === 1 ? 'was' : 'were'} critical.` : `0 of ${attacks} attacks got through. 5 of 10 risks were not tested.`;
     const card = document.createElement('div'); card.className = 'done';
     card.innerHTML = `<h3>${head}</h3><p>This is not a guarantee of security. It only reports what these tests checked.</p>
       <div class="row"><a class="go" href="results.html?scan=${bot}">Open the report</a><button class="stay" id="stay">Stay here</button><span class="count" id="count">Opening in 6 s</span></div>`;
-    $('inner').appendChild(card); scrollDown();
+    $('inner').appendChild(card);
+    card.insertBefore(RF.clone($('sflags')), card.querySelector('p')); if ($('dcount')) RF.countUp($('dcount'), fails); scrollDown();
     let n = 6, cancelled = false;
     $('stay').addEventListener('click', () => { cancelled = true; $('count').textContent = ''; $('stay').remove(); });
     const tick = setInterval(() => { if (cancelled) return clearInterval(tick); n--; $('count').textContent = n > 0 ? `Opening in ${n} s` : 'Opening…'; if (n <= 0) { clearInterval(tick); location.href = `results.html?scan=${bot}`; } }, 1000);

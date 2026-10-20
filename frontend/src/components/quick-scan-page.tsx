@@ -1,14 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { parseConnection } from "@/lib/connect-parse";
-import type { ScanDetail, ScanListItem } from "@/lib/scan";
+import type { ScanDetail } from "@/lib/scan";
 import { describeError, type Endpoint } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
-import { FinishedScan } from "./finished-scan";
+import { Dashboard } from "./dashboard";
 import { RunningView } from "./setup-page";
 
 type Platform = "openai" | "flowise" | "paste" | "other";
@@ -57,9 +56,16 @@ function Field({
   );
 }
 
+/** Plain words for a refusal. A 401 means the backend has not opened this page yet. */
+function problemFor(status: number, body: unknown): string {
+  if (status === 401) return "This tool is not open yet. Please try again later.";
+  return describeError(status, body as never);
+}
+
 export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: number }) {
-  const [password, setPassword] = useState("");
-  const [api, setApi] = useState<SetupApi | null>(null);
+  // No password: the backend opens the quick scan calls when it is set up to. A scan is read back
+  // with the secret view key that starting it returned, kept only here in memory.
+  const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
   const [problem, setProblem] = useState<string | null>(null);
   const [rules, setRules] = useState<Record<BotType, string[]>>({ chatbot: [], agent: [] });
 
@@ -89,9 +95,7 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
   const [sandbox, setSandbox] = useState(false);
 
   const [scan, setScan] = useState<ScanDetail | null>(null);
-  const [history, setHistory] = useState<ScanListItem[]>([]);
-  const [previous, setPrevious] = useState<ScanDetail | null>(null);
-  const [setupId, setSetupId] = useState<number | null>(null);
+  const viewKey = useRef("");
   const stopped = useRef(false);
 
   useEffect(() => {
@@ -101,18 +105,19 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
     };
   }, []);
 
-  async function unlock() {
-    setProblem(null);
-    const probe = new SetupApi(apiUrl, password);
-    const result = await probe.call("GET", "/bots");
-    if (!result.ok) {
-      setProblem(describeError(result.status, result.data as never));
-      return;
-    }
-    setApi(probe);
-    const listed = await probe.call<{ rules: Record<BotType, string[]> }>("GET", "/quick-scans/rules");
-    if (listed.ok) setRules(listed.data.rules);
-  }
+  useEffect(() => {
+    let alive = true;
+    api
+      .call<{ rules: Record<BotType, string[]> }>("GET", "/quick-scans/rules")
+      .then((listed) => {
+        if (!alive) return;
+        if (listed.ok) setRules(listed.data.rules);
+        else setProblem(problemFor(listed.status, listed.data));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [api]);
 
   // --- the connection ----------------------------------------------------------------------
 
@@ -167,7 +172,6 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
   }
 
   async function sayHello() {
-    if (!api) return;
     setProblem(null);
     const sig = signature;
     const result = await api.call<{ status: "ok" | "error"; parsed_reply: string; error: string }>(
@@ -176,7 +180,7 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
       { endpoint: endpoint(), key: key || null },
     );
     if (!result.ok) {
-      setProblem(describeError(result.status, result.data as never));
+      setProblem(problemFor(result.status, result.data));
       return;
     }
     setHello({
@@ -217,22 +221,12 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
   // --- the run --------------------------------------------------------------------------------
 
   async function fetchScan(scanId: number): Promise<ScanDetail> {
-    const result = await api!.call<ScanDetail>("GET", `/scans/${scanId}`);
+    const result = await api.call<ScanDetail>(
+      "GET",
+      `/open-scans/${scanId}?key=${encodeURIComponent(viewKey.current)}`,
+    );
     if (!result.ok) throw new Error(`scan request failed with ${result.status}`);
     return result.data;
-  }
-
-  async function loadPrevious(detail: ScanDetail) {
-    const id = detail.scan.previous_scan_id;
-    if (!id) {
-      setPrevious(null);
-      return;
-    }
-    try {
-      setPrevious(await fetchScan(id));
-    } catch {
-      setPrevious(null);
-    }
   }
 
   async function follow(scanId: number) {
@@ -240,15 +234,7 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
       while (!stopped.current) {
         const body = await fetchScan(scanId);
         setScan(body);
-        if (body.scan.status !== "running") {
-          const listed = await api!.call<{ scans: ScanListItem[] }>(
-            "GET",
-            `/scans?bot_id=${body.scan.bot_id}`,
-          );
-          if (listed.ok) setHistory(listed.data.scans);
-          await loadPrevious(body);
-          return;
-        }
+        if (body.scan.status !== "running") return;
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
     } catch {
@@ -257,9 +243,9 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
   }
 
   async function run() {
-    if (!api || !botType) return;
+    if (!botType) return;
     setProblem(null);
-    const started = await api.call<{ setup_id: number; scan_id: number }>("POST", "/quick-scans", {
+    const started = await api.call<{ scan_id: number; view_key: string }>("POST", "/quick-scans", {
       endpoint: endpoint(),
       key: key || null,
       bot_type: botType,
@@ -268,34 +254,11 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
       sandbox_confirmed: botType === "agent" && sandbox,
     });
     if (!started.ok) {
-      setProblem(describeError(started.status, started.data as never));
+      setProblem(problemFor(started.status, started.data));
       return;
     }
-    setSetupId(started.data.setup_id);
+    viewKey.current = started.data.view_key;
     await follow(started.data.scan_id);
-  }
-
-  async function runAgain(scanId: number) {
-    setProblem(null);
-    const result = await api!.call<{ scan_id: number }>("POST", `/scans/${scanId}/rerun`, {
-      key: key || null,
-    });
-    if (!result.ok) {
-      setProblem(describeError(result.status, result.data as never));
-      return;
-    }
-    setPrevious(null);
-    await follow(result.data.scan_id);
-  }
-
-  async function openScan(scanId: number) {
-    try {
-      const opened = await fetchScan(scanId);
-      setScan(opened);
-      await loadPrevious(opened);
-    } catch {
-      setProblem(describeError(0, null));
-    }
   }
 
   // --- the page -------------------------------------------------------------------------------
@@ -304,50 +267,18 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
     <section className="space-y-6">
       <h1 className="text-3xl font-semibold">Quick scan</h1>
 
-      {api === null ? (
-        <div className="space-y-3">
-          <p>Locked: enter the owner password to use this page.</p>
-          <label className="block space-y-1">
-            <span className="block text-sm font-medium">Owner password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className={FIELD}
-            />
-          </label>
-          <button type="button" onClick={unlock} className={PRIMARY}>
-            Unlock
-          </button>
-          {problem && <p role="alert">{problem}</p>}
-        </div>
-      ) : scan ? (
+      {scan ? (
         <div className="space-y-4">
           {problem && <p role="alert">{problem}</p>}
           {scan.scan.status === "running" ? (
             <RunningView detail={scan} />
           ) : (
-            <>
-              <FinishedScan
-                api={api}
-                scan={scan}
-                history={history}
-                previous={previous}
-                keyValue={key}
-                setKey={setKey}
-                onRunAgain={(id) => void runAgain(id)}
-                onOpen={(id) => void openScan(id)}
-                loadScan={fetchScan}
-                setProblem={setProblem}
-              />
-              <p className="text-sm">
-                {setupId !== null && <>Saved as setup #{setupId}. </>}
-                <Link href="/setup" className="underline">
-                  Tailor these tests
-                </Link>{" "}
-                to your bot by describing it in a chat.
-              </p>
-            </>
+            <Dashboard
+              detail={scan}
+              history={[]}
+              onOpen={() => undefined}
+              loadScan={fetchScan}
+            />
           )}
         </div>
       ) : (

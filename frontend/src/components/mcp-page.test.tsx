@@ -8,8 +8,9 @@ import { McpPage } from "./mcp-page";
 
 const API = "https://api.example.test";
 const KEY = "mcp-key-value-123";
+const VIEW_KEY = "view-key-from-start";
 
-type Call = { method: string; path: string; body: unknown };
+type Call = { method: string; path: string; body: unknown; headers: Record<string, string>; key: string | null };
 
 const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -26,6 +27,7 @@ class FakeBackend {
   calls: Call[] = [];
   overrides: Record<string, (body: unknown) => Response> = {};
   scans: unknown[] = [];
+  locked = false;
 
   install() {
     vi.stubGlobal(
@@ -34,17 +36,18 @@ class FakeBackend {
         const url = new URL(String(input));
         const method = init.method ?? "GET";
         const body = init.body ? JSON.parse(String(init.body)) : undefined;
-        this.calls.push({ method, path: url.pathname, body });
-        if ((init.headers as Record<string, string>)["X-Owner-Token"] !== "owner-secret") return json(401, {});
+        const viewKey = url.searchParams.get("key");
+        this.calls.push({ method, path: url.pathname, body, headers: (init.headers ?? {}) as Record<string, string>, key: viewKey });
+        if (this.locked) return json(401, {});
         const key = `${method} ${url.pathname}`;
         const override = this.overrides[key];
         if (override) return override(body);
-        if (key === "GET /bots") return json(200, { bots: [], errors: {} });
         if (key === "POST /mcp-scans/check") return json(200, TOOLS);
-        if (key === "POST /mcp-scans") return json(202, { scan_id: 41 });
-        if (key === "GET /scans/41") return json(200, this.scans.length > 1 ? this.scans.shift() : this.scans[0]);
-        if (key === "GET /scans") return json(200, { scans: [] });
-        if (key === "GET /judge-accuracy") return json(404, {});
+        if (key === "POST /mcp-scans") return json(202, { scan_id: 41, view_key: VIEW_KEY });
+        if (key === "GET /open-scans/41") {
+          if (viewKey !== VIEW_KEY) return json(404, {});
+          return json(200, this.scans.length > 1 ? this.scans.shift() : this.scans[0]);
+        }
         return json(404, { error: { kind: "unexpected", message: key } });
       }),
     );
@@ -58,18 +61,16 @@ class FakeBackend {
 
 afterEach(() => vi.unstubAllGlobals());
 
-async function unlocked(backend: FakeBackend, pollMs = 5) {
+async function opened(backend: FakeBackend, pollMs = 5) {
   backend.install();
   const user = userEvent.setup();
   render(<McpPage apiUrl={API} pollMs={pollMs} />);
-  await user.type(screen.getByLabelText("Owner password"), "owner-secret");
-  await user.click(screen.getByRole("button", { name: "Unlock" }));
   await screen.findByRole("heading", { name: "Check an MCP server" });
   return user;
 }
 
 async function listed(backend: FakeBackend) {
-  const user = await unlocked(backend);
+  const user = await opened(backend);
   await user.type(screen.getByLabelText("Server address"), "https://mcp.example.com/mcp");
   await user.type(screen.getByLabelText("Access key"), KEY);
   await user.click(screen.getByRole("button", { name: "Look at the tools" }));
@@ -78,15 +79,22 @@ async function listed(backend: FakeBackend) {
 }
 
 describe("looking at the server", () => {
-  it("is locked until the owner password is accepted", async () => {
-    const backend = new FakeBackend().install();
+  it("has no password step and sends no owner header", async () => {
+    const backend = new FakeBackend();
+    await listed(backend);
+    expect(screen.queryByLabelText("Owner password")).not.toBeInTheDocument();
+    expect(backend.calls.every((c) => !("X-Owner-Token" in c.headers))).toBe(true);
+  });
+
+  it("says plainly when the backend has not opened the tool yet", async () => {
+    const backend = new FakeBackend();
+    backend.install();
     const user = userEvent.setup();
     render(<McpPage apiUrl={API} />);
-    expect(screen.getByText(/Locked: enter the owner password/)).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Owner password"), "wrong");
-    await user.click(screen.getByRole("button", { name: "Unlock" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("That password was not accepted.");
-    expect(backend.calls.every((c) => c.path === "/bots")).toBe(true);
+    backend.locked = true;
+    await user.type(screen.getByLabelText("Server address"), "https://mcp.example.com/mcp");
+    await user.click(screen.getByRole("button", { name: "Look at the tools" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This tool is not open yet.");
   });
 
   it("keeps the key in a password field and sends it only with the look and the run", async () => {
@@ -116,7 +124,7 @@ describe("looking at the server", () => {
     const backend = new FakeBackend();
     backend.overrides["POST /mcp-scans/check"] = () =>
       json(422, { error: { kind: "connection_failed", message: "The server answered with status 401." } });
-    const user = await unlocked(backend);
+    const user = await opened(backend);
     await user.type(screen.getByLabelText("Server address"), "https://mcp.example.com/mcp");
     await user.click(screen.getByRole("button", { name: "Look at the tools" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(

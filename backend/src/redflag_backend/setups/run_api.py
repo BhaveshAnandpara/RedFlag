@@ -60,6 +60,7 @@ async def launch_run(
     key: str | None,
     rerun_of: int | None = None,
     gate: dict[str, Any] | None = None,
+    view_key: str | None = None,
 ) -> dict[str, int] | JSONResponse:
     """Start a run of the chosen tests of a confirmed setup version. Used by the owner's page,
     by Run again and by the CI endpoints, so they all keep the same rules."""
@@ -110,6 +111,8 @@ async def launch_run(
             "seconds": 0,
             "concurrency": 1,
         },
+        # Set only for a scan started from the open pages: the secret that reads it back.
+        **({"view_key": view_key} if view_key else {}),
         "setup": {
             "setup_id": setup_id,
             "version": number,

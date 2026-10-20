@@ -87,6 +87,8 @@ All optional, with the defaults in `backend/src/redflag_backend/settings.py`:
 | `JUDGE_ACCURACY_MIN_SAMPLE` | 20 | Labeled results needed before accuracy is not called a small sample |
 | `MCP_MAX_CALLS`, `MCP_CALLS_PER_TOOL` | 60, 8 | Limits on tool calls in an MCP check |
 
+**`/quick` and `/mcp` have no owner password.** Their calls (rule list, hello check, MCP tool listing, starting a scan, and reading a scan back with the secret view key that start returned) are open to anyone; everything else stays owner-only. Proof that the person owns the server they test is not built, so anyone with the link can make Redflag send attack traffic to any public address (private and internal addresses are still refused) and use the judge's model quota. The existing limits still apply (one scan at a time, request and token budgets, a cap on hello checks), but there is no per-visitor limit. The finished page on these two pages is the dashboard only; Run again, CI tokens and Label mode need the owner password.
+
 One new migration: `judge_labels` (and `ci_tokens` earlier in the wave). Run `alembic upgrade head` (the host does this on deploy).
 
 ## How to check it

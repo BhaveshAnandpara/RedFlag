@@ -42,7 +42,8 @@
   .verdict h2 { margin: 0; font-size: clamp(26px, 3vw, 40px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.1; max-width: 22em; }
   .verdict h2 .bad { color: var(--red); }
   .vsub { font-size: 15px; color: var(--muted); }
-  .flagrow { display: flex; gap: 12px; align-items: flex-end; height: 34px; margin-top: 8px; }
+  .flagrow { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; min-height: 34px; margin-top: 8px; }
+  .verdict > * { min-width: 0; }
   .fl { position: relative; width: 15px; height: 34px; display: block; }
   .fl i { position: absolute; left: 0; bottom: 0; width: 2px; height: 100%; border-radius: 1px; background: #3a3a3a; }
   .fl.pass i { transform-origin: bottom; transform: scaleY(0.42); }
@@ -146,6 +147,32 @@
     .kv { grid-template-columns: 1fr; } .kv dt { padding-bottom: 0; } .kv dd { border-top: 0; padding-top: 2px; }
     details.item summary { grid-template-columns: auto minmax(0, 1fr); } .chev { display: none; }
   }
+
+  .qpanel { padding: 20px; display: grid; gap: 14px; }
+  .qpanel p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; max-width: 60ch; }
+  .qrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .qin { height: 40px; min-width: 260px; flex: 1; max-width: 380px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: #0c0c0c; color: var(--ink); font: inherit; font-size: 14px; outline: none; }
+  .qin:focus { border-color: rgba(255,255,255,0.4); }
+  .qpanel .btn.solid:disabled { opacity: 0.35; cursor: not-allowed; }
+  .qpanel .btn.small { height: 32px; font-size: 12.5px; }
+  .qstatus { font-size: 13px; color: var(--muted); } .qstatus code, .tokenbox code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .code { margin: 0; padding: 14px 16px; border-radius: 10px; background: #070707; border: 1px solid var(--line); font-family: var(--mono); font-size: 12.5px; color: #d6d6d3; overflow-x: auto; }
+  .tokenbox { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; background: #0d1a12; border: 1px solid rgba(63,192,122,0.3); margin-bottom: 6px; overflow-x: auto; }
+  .tailor { margin: 18px 0 0; font-size: 15px; color: var(--muted); } .tailor a { color: var(--ink); }
+  @media (max-width: 860px) { .qin { min-width: 0; max-width: none; } }
+
+  /* the MCP check report */
+  .badge.unclear { color: var(--amber); background: rgba(242,179,61,0.12); }
+  .fl.grey i { background: #5a4a26; transform-origin: bottom; transform: scaleY(0.42); }
+  .touched { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .called { padding: 18px 20px; display: grid; gap: 10px; align-content: start; }
+  .called h3 { margin: 0; font-size: 15px; font-weight: 500; } .called h3 small { color: var(--faint); font-weight: 400; margin-left: 6px; font-family: var(--mono); font-size: 12px; }
+  .called p { margin: 0; font-size: 13px; color: var(--muted); }
+  .called ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .called li { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 6px; background: #141414; color: var(--muted); }
+  .called li.on { color: var(--ink); background: #1a1a1a; } .called li.chg::after { content: " · changes"; color: var(--amber); }
+  .quote.mono { font-family: var(--mono); font-size: 12.5px; }
+  @media (max-width: 860px) { .touched { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -158,9 +185,12 @@
 <div class="toast" id="toast" role="status"></div>
 
 <script src="scan-data.js"></script>
+<script src="mcp-data.js"></script>
 <script>
 (() => {
   const q = new URLSearchParams(location.search), key = q.get('scan') === 'hardened' ? 'hardened' : 'weak', other = key === 'weak' ? 'hardened' : 'weak';
+  if (q.get('mode') === 'mcp') return; // the MCP check has its own report, below
+  const quick = q.get('mode') === 'quick'; // a quick scan of the visitor's own bot: the AI judge decides every result
   const M = SCAN_META[key], T = SCAN_DATA[key], label = { weak: 'Weak bot', hardened: 'Protected bot' };
   const RISKS = [['LLM01', 'Prompt injection'], ['LLM02', 'Sensitive information disclosure'], ['LLM03', 'Supply chain'], ['LLM04', 'Data and model poisoning'],
     ['LLM05', 'Improper output handling'], ['LLM06', 'Excessive agency'], ['LLM07', 'System prompt leakage'], ['LLM08', 'Vector and embedding weaknesses'],
@@ -178,6 +208,13 @@
   const harmful = t => tl => t.status === 'fail' && tl.outcome === 'executed' && (t.evidence.includes(tl.tool) || (tl.tool === 'lookup_order' && t.risk === 'LLM02'));
 
   function detail(t) {
+    if (quick) return `<div class="detail">
+      <div class="dl"><span>Message sent</span><div class="quote att">${esc(t.msg)}</div></div>
+      <div class="dl"><span>Your bot's reply</span><div class="quote">${esc(t.reply)}</div></div>
+      <div class="dl"><span>Tool log</span><div class="quote" style="color:var(--faint)">None. Redflag can only see your bot's replies, not what it did behind them.</div></div>
+      <div class="jb"><div class="h">AI judge <span class="badge ${t.status}">${t.status.toUpperCase()}</span></div>${esc(t.evidence.replace(' or the tool log', ''))}<span style="font-size:12px;color:var(--faint)">The AI judge read the reply against your rule. It has not been checked for accuracy. (Prototype: the recorded evidence stands in for the judge's reason.)</span></div>
+      <div class="rulefix"><div><span>Rule</span>${esc(t.rule)}</div><div><span>How to fix</span>${esc(t.fix || '—')}</div></div>
+    </div>`;
     const tools = t.tools.length ? `<div class="toollog">${t.tools.map(tl => `<div class="tl ${harmful(t)(tl) ? 'harm' : ''} ${tl.outcome === 'blocked' ? 'blocked' : ''}"><span class="call">${esc(tl.tool)}(${esc(tl.args)})</span><span class="out">${esc(tl.outcome)}${harmful(t)(tl) ? ' · the harm' : ''}</span>${tl.detail ? `<span class="det">${esc(tl.detail.slice(0, 220))}${tl.detail.length > 220 ? '…' : ''}</span>` : ''}</div>`).join('')}</div>` : '<div class="quote" style="color:var(--faint)">No tools were called.</div>';
     return `<div class="detail">
       <div class="dl"><span>Message sent</span><div class="quote att">${esc(t.msg)}</div></div>
@@ -210,7 +247,7 @@
   const st = M.settings;
   document.getElementById('main').innerHTML = `
     <div class="titlerow rise">
-      <div><div class="crumb"><a href="#">Results</a> / scan #${M.id}</div><h1>${label[key]} · scan #${M.id}</h1></div>
+      <div><div class="crumb"><a href="#">Results</a> / ${quick ? 'quick scan #13' : `scan #${M.id}`}</div><h1>${quick ? 'Your bot · quick scan #13' : `${label[key]} · scan #${M.id}`}</h1></div>
       <div class="actions"><button class="btn ghost" id="copy">Copy link</button><button class="btn solid" id="dl">Download report</button></div>
     </div>
 
@@ -222,7 +259,7 @@
       <div class="vnotes">
         <span>Attack success rate ${pct(failed.length / attacks.length)} (95% range ${pct(lo)} to ${pct(hi)}). Small sample: ${attacks.length} attacks.</span>
         <span>${untested} of 10 OWASP risks were not tested by this suite.</span>
-        <span>No AI judge ran on this scan. Verdicts come from the plain rules.</span>
+        <span>${quick ? 'Every result was decided by the AI judge, which has not been checked for accuracy.' : 'No AI judge ran on this scan. Verdicts come from the plain rules.'}</span>
         <span class="closing">This is not a guarantee of security. It only reports what these tests checked.</span>
       </div>
     </section>
@@ -241,11 +278,11 @@
     </div>
     <section class="card tablewrap rise"><table><thead><tr><th>Result</th><th>Test</th><th class="t-risk">Risk</th><th>Severity</th><th class="t-model">Model</th></tr></thead><tbody id="tbody"></tbody></table></section>
 
-    <section class="card next rise">
+    ${quick ? '' : `<section class="card next rise">
       <div><h3>${key === 'weak' ? 'Now scan the protected bot' : 'See what the weak bot let through'}</h3>
       <p>${key === 'weak' ? 'Same 16 tests, same models (' + M.models.join(', ') + '), with secret protection, order scoping, refund approval and document isolation switched on.' : 'Same 16 tests and the same models answered both scans, so the difference comes from the defenses.'}</p></div>
       <a class="btn solid" href="${key === 'weak' ? 'scan.html?bot=hardened' : 'results.html?scan=weak'}">${key === 'weak' ? 'Scan the protected bot' : 'Open the weak bot report'}</a>
-    </section>
+    </section>`}
 
     <details class="card settings rise"><summary><span>Scan details</span><span class="mono" style="color:var(--faint);font-size:12px">settings this scan ran with</span></summary>
       <dl class="kv">
@@ -257,7 +294,27 @@
         <dt>Budget</dt><dd>${st.budget.requests} requests · ${st.budget.tokens.toLocaleString()} tokens · ${st.budget.seconds / 60} min</dd>
         <dt>Planted secret</dt><dd class="mono">${esc(st.canary)}</dd>
       </dl>
-    </details>`;
+    </details>
+    ${quick ? `
+    <div class="sec-head rise"><h2>Run these tests again</h2><span>after you change your bot</span></div>
+    <section class="card qpanel rise">
+      <p>Same tests, same rules. Use it after a fix to see what changed. Your key is needed again because Redflag never stores it.</p>
+      <div class="qrow"><input class="qin" id="rk" type="password" placeholder="API key for the run" autocomplete="off" aria-label="API key for the run"><button class="btn solid" id="rerun" disabled>Run again</button></div>
+      <span class="qstatus" id="rstatus" role="status"></span>
+    </section>
+    <div class="sec-head rise"><h2>Use this in your builds</h2><span>run these tests in CI</span></div>
+    <section class="card qpanel rise">
+      <p>Create a token, then run these tests on every change with GitHub Actions or from the command line. The token is shown once.</p>
+      <div class="qrow"><input class="qin" id="tname" value="github" aria-label="Token name"><button class="btn ghost" id="mktoken">Create an API token</button></div>
+      <div id="tokenOut" hidden></div>
+      <pre class="code" id="wf">- name: Redflag scan
+  run: npx redflag scan --setup 13 --fail-on critical
+  env:
+    REDFLAG_TOKEN: $\{{ secrets.REDFLAG_TOKEN }}
+    BOT_KEY: $\{{ secrets.BOT_KEY }}</pre>
+      <div class="qrow"><button class="btn ghost small" id="copywf">Copy workflow</button><span class="qstatus">Command line: <code>REDFLAG_TOKEN=… npx redflag scan --setup 13</code></span></div>
+    </section>
+    <p class="tailor rise">Saved as setup #13. <a href="#">Tailor these tests</a> to your bot by describing it in a chat.</p>` : ''}`;
 
   // the table and its filters
   let fRes = 'all';
@@ -284,7 +341,7 @@
       `Recorded ${M.started} · ${M.duration} s · models: ${M.models.join(', ')} · suite v${st.suite_version}`, '',
       '## Failures', ...(failed.length ? failed.flatMap(t => [`### ${t.title} (${t.risk}, ${t.sev})`, `- Evidence: ${t.evidence}`, `- Rule: ${t.rule}`, `- How to fix: ${t.fix}`, '']) : ['None in this scan.', '']),
       '## What was tested', ...RISKS.map(([id, nm]) => { const m = T.filter(t => t.risk === id); return `- ${id} ${nm}: ${m.length ? `${m.filter(t => t.status === 'fail').length} of ${m.length} got through` : 'not tested'}`; }), '',
-      '## The AI judge', 'No AI judge ran on this scan. Verdicts come from the plain rules.', '',
+      '## The AI judge', quick ? 'Every result was decided by the AI judge, which has not been checked for accuracy.' : 'No AI judge ran on this scan. Verdicts come from the plain rules.', '',
       'This is not a guarantee of security. It only reports what these tests checked.'].join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `redflag-scan-${M.id}.md`; a.click(); URL.revokeObjectURL(a.href);
   });
@@ -293,7 +350,164 @@
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.08 });
   document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 70}ms`; io.observe(el); });
   requestAnimationFrame(() => document.getElementById('flagrow').classList.add('live'));
-  document.title = `${label[key]} · scan #${M.id} · Redflag`;
+  document.title = quick ? 'Your bot · quick scan #13 · Redflag' : `${label[key]} · scan #${M.id} · Redflag`;
+  if (quick) {
+    const rk = document.getElementById('rk'), rr = document.getElementById('rerun');
+    rk.addEventListener('input', () => { rr.disabled = !rk.value; });
+    rr.addEventListener('click', () => { document.getElementById('rstatus').textContent = 'Prototype: the real page starts a new scan here and then shows what changed since this run.'; rk.value = ''; rr.disabled = true; });
+    document.getElementById('mktoken').addEventListener('click', () => {
+      const tok = 'rf_demo_' + Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+      const o = document.getElementById('tokenOut'); o.hidden = false;
+      o.innerHTML = `<div class="tokenbox"><code>${tok}</code><button class="btn ghost small" id="copytok">Copy</button></div><span class="qstatus">Copy it now: it will not be shown again. (Prototype token, it does nothing.)</span>`;
+      document.getElementById('copytok').addEventListener('click', async () => { try { await navigator.clipboard.writeText(tok); toast('Token copied'); } catch {} });
+    });
+    document.getElementById('copywf').addEventListener('click', async () => { try { await navigator.clipboard.writeText(document.getElementById('wf').textContent); toast('Workflow copied'); } catch {} });
+  }
+})();
+</script>
+<script>
+// the report of an MCP check: the same layout as a bot scan, built from mcp-data.js
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('mode') !== 'mcp') return;
+  const { SERVER, FAMILIES, KINDS, META } = MCP, called = MCP.decode(q), R = MCP.run(called);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const SEV = { critical: 0, high: 1, medium: 2, low: 3 };
+  const BADGE = { pass: ['pass', 'PASS'], fail: ['fail', 'FAIL'], inconclusive: ['unclear', 'UNCLEAR'], not_applicable: ['grey', 'N/A'], error: ['grey', 'ERROR'] };
+  const badge = st => `<span class="badge ${BADGE[st][0]}">${BADGE[st][1]}</span>`;
+  const sevTag = s => `<span class="sev ${s || 'none'}">${s || 'not rated'}</span>`;
+  const ticked = Object.keys(called), changes = ticked.filter(n => called[n] === 'changes');
+  const decided = R.filter(r => r.status === 'pass' || r.status === 'fail');
+  const failed = R.filter(r => r.status === 'fail').sort((a, b) => SEV[a.severity] - SEV[b.severity]);
+  const crit = failed.filter(r => r.severity === 'critical').length, unclear = R.filter(r => r.status === 'inconclusive').length;
+  const calls = R.filter(r => r.group === 'call' && r.status !== 'not_applicable');
+  const callFails = calls.filter(r => r.status === 'fail').length;
+  const flaggedTools = new Set(R.filter(r => r.group === 'static' && r.status === 'fail' && r.family !== 'broad_parameters').map(r => r.tool));
+
+  function detail(r) {
+    const rulefix = `<div class="rulefix"><div><span>Rule</span>${esc(r.rule)}</div><div><span>How to fix</span>${esc(r.remediation || '—')}</div></div>`;
+    if (r.group === 'static') return `<div class="detail">
+      <div class="dl"><span>What was checked</span><div class="quote">${esc(r.message)}</div></div>
+      <div class="jb"><div class="h">Plain rules ${badge(r.status)}</div>${esc(r.evidence)}</div>${rulefix}</div>`;
+    if (r.status === 'not_applicable') return `<div class="detail"><div class="dl"><span>Nothing was called</span><div class="quote">${esc(r.evidence)}</div></div></div>`;
+    return `<div class="detail">
+      <div class="dl"><span>What Redflag sent</span><div class="quote att mono">${esc(r.message)}</div></div>
+      <div class="dl"><span>What the tool sent back</span><div class="quote mono">${esc(r.reply)}</div></div>
+      <div class="jb"><div class="h">AI judge ${badge(r.status)}</div>${esc(r.judge_reason)}<span style="font-size:12px;color:var(--faint)">${r.status === 'inconclusive' ? 'Unclear is not a pass. ' : ''}Judged by ${esc(r.judge_model)}. The AI judge has not been checked for accuracy.</span></div>
+      ${rulefix}</div>`;
+  }
+
+  const head = failed.length
+    ? `<span class="bad">${failed.length} of ${decided.length}</span> checks failed. ${crit} ${crit === 1 ? 'was' : 'were'} critical.`
+    : `0 of ${decided.length} checks failed.`;
+
+  // coverage: each description check over every tool, each kind of manipulated call over the ticked tools
+  const cover = [
+    ...Object.entries(FAMILIES).map(([fid, f]) => { const bad = new Set(R.filter(r => r.family === fid && r.status === 'fail').map(r => r.tool)); return { id: f.risk, nm: f.title.replace('Tool descriptions: ', 'Descriptions: ').replace('Tool inputs: ', 'Inputs: '), n: SERVER.tools.length, f: bad.size, unit: 'tools' }; }),
+    ...Object.entries(KINDS).map(([k, c]) => { const mine = calls.filter(r => r.kind === k); return { id: c.risk, nm: `Calls: ${c.label.toLowerCase()}`, n: mine.length, f: mine.filter(r => r.status === 'fail').length, unit: 'calls' }; }),
+  ];
+  const coverHTML = cover.map(c => {
+    const right = c.n ? `<span class="bar">${Array.from({ length: Math.min(c.n, 16) }, (_, k) => `<i class="${k < Math.ceil(c.f * Math.min(c.n, 16) / c.n) ? 'f' : ''}"></i>`).join('')}</span><span class="ct">${c.f ? `${c.f} of ${c.n} ${c.unit} failed` : `${c.n} ${c.unit}, none failed`}</span>` : '<span class="nt">not tested</span>';
+    return `<div class="cv"><span class="id">${c.id}</span><span class="nm">${esc(c.nm)}</span>${right}</div>`;
+  }).join('');
+
+  document.getElementById('main').innerHTML = `
+    <div class="titlerow rise">
+      <div><div class="crumb"><a href="#">Results</a> / MCP check #${META.id}</div><h1>${esc(SERVER.name)} · MCP check #${META.id}</h1></div>
+      <div class="actions"><button class="btn ghost" id="copy">Copy link</button><button class="btn solid" id="dl">Download report</button></div>
+    </div>
+
+    <section class="card verdict rise" style="--glow:${failed.length ? 0.14 : 0.04}" aria-labelledby="v-h">
+      <h2 id="v-h">${head}</h2>
+      <div class="vsub">${flaggedTools.size} of ${SERVER.tools.length} tool descriptions had problems. ${calls.length ? `${callFails} of ${calls.length} manipulated calls got through, on ${ticked.length} ticked ${ticked.length === 1 ? 'tool' : 'tools'}.` : 'No tool was ticked, so no tool was called.'}</div>
+      <div class="flagrow" id="flagrow">${R.map((r, i) => `<a class="fl ${r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : 'grey'}" href="#t-${r.test_id}" style="--n:${i}" data-tip="${BADGE[r.status][1].toLowerCase()} · ${esc(r.title)}" aria-label="Check ${i + 1}: ${BADGE[r.status][1].toLowerCase()}"><i></i><b></b></a>`).join('')}</div>
+      <div class="vmeta"><span>Server <b>${esc(SERVER.host)}</b></span><span>Checked <b>${META.started}</b></span><span><b>${META.duration} s</b></span><span>AI judge <b>${META.judge}</b></span></div>
+      <div class="vnotes">
+        ${unclear ? `<span>${unclear} ${unclear === 1 ? 'result is' : 'results are'} unclear: the AI judge gave no verdict. Unclear is not a pass.</span>` : ''}
+        <span>This is a check of an MCP server. The description and schema checks use plain rules that look for known patterns. Redflag only called the tools you ticked, and an AI judge read what each tool sent back.</span>
+        <span>The AI judge has not been checked for accuracy.</span>
+        <span class="closing">This is not a guarantee of security. It only reports what these tests checked.</span>
+      </div>
+    </section>
+
+    <div class="sec-head rise"><h2>${failed.length ? 'Fix these first' : 'Nothing failed'}</h2><span>${failed.length ? `${failed.length} failed · critical first` : 'no finding does not mean the server is safe'}</span></div>
+    <div class="fixes rise">${failed.map(r => `<details class="item failed" id="t-${r.test_id}"><summary>${sevTag(r.severity)}<span class="s-title">${esc(r.title)}<small>${r.risk}</small></span><span class="chev">›</span><span class="s-ev">${esc(r.group === 'call' ? r.judge_reason : r.evidence)}</span><span class="s-fix"><b>Fix</b>${esc(r.remediation)}</span></summary>${detail(r)}</details>`).join('')}</div>
+
+    <div class="sec-head rise"><h2>What Redflag touched</h2><span>tools are only called if ticked</span></div>
+    <div class="touched rise">
+      <section class="card called"><h3>Called<small>${ticked.length}</small></h3><p>Called with manipulated inputs, up to ${META.perTool} calls each.${changes.length ? ' Tools that change things were called because the server was confirmed as a test or sandbox.' : ''}</p>${ticked.length ? `<ul>${ticked.map(n => `<li class="on ${called[n] === 'changes' ? 'chg' : ''}">${esc(n)}</li>`).join('')}</ul>` : '<p>None.</p>'}</section>
+      <section class="card called"><h3>Only read<small>${SERVER.tools.length - ticked.length}</small></h3><p>Only the description and inputs were checked. These tools were never called.</p>${SERVER.tools.length - ticked.length ? `<ul>${SERVER.tools.filter(t => !(t.name in called)).map(t => `<li>${esc(t.name)}</li>`).join('')}</ul>` : '<p>None: every tool was ticked.</p>'}</section>
+    </div>
+
+    <div class="sec-head rise"><h2>What was and wasn't tested</h2><span>descriptions: every tool · calls: ticked tools</span></div>
+    <section class="card cover rise">${coverHTML}</section>
+
+    <div class="sec-head rise"><h2>All checks</h2><span id="t-count"></span></div>
+    <div class="filters rise" role="group" aria-label="Filter checks">
+      <button class="chip" data-f="all" aria-pressed="true">All</button><button class="chip" data-f="fail" aria-pressed="false">Failed</button><button class="chip" data-f="pass" aria-pressed="false">Passed</button>${unclear ? '<button class="chip" data-f="inconclusive" aria-pressed="false">Unclear</button>' : ''}
+      <select class="sel" id="f-kind" aria-label="Check"><option value="">Every check</option><option value="static">Descriptions and inputs</option><option value="call">Manipulated calls</option></select>
+      <select class="sel" id="f-tool" aria-label="Tool"><option value="">Every tool</option>${SERVER.tools.map(t => `<option>${esc(t.name)}</option>`).join('')}</select>
+      <select class="sel" id="f-sev" aria-label="Severity"><option value="">Every severity</option><option>critical</option><option>high</option><option>medium</option></select>
+    </div>
+    <section class="card tablewrap rise"><table><thead><tr><th>Result</th><th>Check</th><th class="t-risk">Risk</th><th>Severity</th><th class="t-model">Decided by</th></tr></thead><tbody id="tbody"></tbody></table></section>
+
+    <section class="card next rise">
+      <div><h3>Check this server again</h3><p>After you change a description or a tool, run the same checks to see what changed. The key is needed again because Redflag never stores it.</p></div>
+      <a class="btn solid" href="mcp.html">Check again</a>
+    </section>
+
+    <details class="card settings rise"><summary><span>Check details</span><span class="mono" style="color:var(--faint);font-size:12px">settings this check ran with</span></summary>
+      <dl class="kv">
+        <dt>Server</dt><dd>${esc(SERVER.name)} · https://${esc(SERVER.host)}/mcp</dd>
+        <dt>Tools on the server</dt><dd>${SERVER.tools.length}</dd>
+        <dt>Tools called</dt><dd>${ticked.length ? ticked.map(n => `${n} (${called[n] === 'changes' ? 'changes things' : 'only reads'})`).join(', ') : 'none'}</dd>
+        <dt>Test or sandbox server</dt><dd>${changes.length ? 'Confirmed before the run' : 'Not needed: no ticked tool changes things'}</dd>
+        <dt>Limits</dt><dd>${META.perTool} calls per tool · ${META.maxCalls} calls per run</dd>
+        <dt>AI judge</dt><dd>${META.judge} via ${META.judgeProvider}</dd>
+        <dt>Access key</dt><dd>Used for this check only. Not stored.</dd>
+      </dl>
+    </details>`;
+
+  let fRes = 'all';
+  const decider = r => r.group === 'static' ? 'plain rules' : r.status === 'not_applicable' ? '—' : 'AI judge';
+  function table() {
+    const kind = document.getElementById('f-kind').value, tool = document.getElementById('f-tool').value, sev = document.getElementById('f-sev').value;
+    const rows = R.filter(r => (fRes === 'all' || r.status === fRes) && (!kind || r.group === kind) && (!tool || r.tool === tool) && (!sev || r.severity === sev));
+    document.getElementById('t-count').textContent = `${rows.length} of ${R.length} checks`;
+    document.getElementById('tbody').innerHTML = rows.length ? rows.map(r => `<tr class="row" data-id="${r.test_id}"><td>${badge(r.status)}</td><td>${esc(r.title)}</td><td class="mono t-risk">${r.risk}</td><td>${r.status === 'pass' && r.group === 'static' ? sevTag('') : sevTag(r.severity)}</td><td class="mono t-model">${decider(r)}</td></tr><tr class="exp" data-for="${r.test_id}" hidden><td colspan="5">${detail(r)}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="nomatch">No checks match those filters.</td></tr>`;
+    document.querySelectorAll('tr.row').forEach(row => row.addEventListener('click', () => { const e = document.querySelector(`tr.exp[data-for="${row.dataset.id}"]`); e.hidden = !e.hidden; }));
+  }
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { fRes = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === c)); table(); }));
+  ['f-kind', 'f-tool', 'f-sev'].forEach(id => document.getElementById(id).addEventListener('change', table));
+  table();
+
+  // a flag opens its finding, or its row in the table
+  document.querySelectorAll('.fl').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    const id = a.getAttribute('href').slice(1), d = document.getElementById(id);
+    if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    fRes = 'all'; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x.dataset.f === 'all')); ['f-kind', 'f-tool', 'f-sev'].forEach(i => { document.getElementById(i).value = ''; }); table();
+    const row = document.querySelector(`tr.row[data-id="${id.slice(2)}"]`); if (row) { row.click(); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  }));
+
+  const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1800); };
+  document.getElementById('copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied'); } catch { toast('Copy failed'); } });
+  document.getElementById('dl').addEventListener('click', () => {
+    const md = [`# Redflag MCP check #${META.id} · ${SERVER.name}`, '', head.replace(/<[^>]+>/g, ''), '', `Server ${SERVER.host} · checked ${META.started} · ${META.duration} s · AI judge ${META.judge}`, '',
+      `## Called`, ...(ticked.length ? ticked.map(n => `- ${n} (${called[n] === 'changes' ? 'changes things' : 'only reads'})`) : ['None.']), '',
+      '## Failures', ...(failed.length ? failed.flatMap(r => [`### ${r.title} (${r.risk}, ${r.severity})`, `- What was found: ${r.group === 'call' ? `${r.message}. It sent back: ${r.reply.slice(0, 300)}` : r.evidence}`, ...(r.group === 'call' ? [`- AI judge: ${r.judge_reason}`] : []), `- Rule: ${r.rule}`, `- How to fix: ${r.remediation}`, '']) : ['None in this check.', '']),
+      '## All checks', ...R.map(r => `- ${BADGE[r.status][1]} ${r.title}`), '',
+      'This is a check of an MCP server. The description and schema checks use plain rules that look for known patterns. Redflag only called the tools you ticked, and an AI judge read what each tool sent back. The AI judge has not been checked for accuracy.', '',
+      'This is not a guarantee of security. It only reports what these tests checked.'].join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `redflag-mcp-check-${META.id}.md`; a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.08 });
+  document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 70}ms`; io.observe(el); });
+  requestAnimationFrame(() => document.getElementById('flagrow').classList.add('live'));
+  document.title = `${SERVER.name} · MCP check #${META.id} · Redflag`;
+  document.querySelector('nav a[href="scan.html"]').outerHTML = '<a href="mcp.html">MCP check</a>';
 })();
 </script>
 </body>

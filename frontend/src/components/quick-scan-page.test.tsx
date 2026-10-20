@@ -8,8 +8,9 @@ import { QuickScanPage } from "./quick-scan-page";
 
 const API = "https://api.example.test";
 const KEY = "typed-endpoint-key-123";
+const VIEW_KEY = "view-key-from-start";
 
-type Call = { method: string; path: string; body: unknown };
+type Call = { method: string; path: string; body: unknown; headers: Record<string, string>; key: string | null };
 
 const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -34,9 +35,10 @@ class FakeBackend {
         const url = new URL(String(input));
         const method = init.method ?? "GET";
         const body = init.body ? JSON.parse(String(init.body)) : undefined;
-        this.calls.push({ method, path: url.pathname, body });
-        if ((init.headers as Record<string, string>)["X-Owner-Token"] !== "owner-secret") return json(401, {});
-        return this.route(method, url.pathname, body);
+        const key = url.searchParams.get("key");
+        this.calls.push({ method, path: url.pathname, body, headers: (init.headers ?? {}) as Record<string, string>, key });
+        if (this.locked) return json(401, {});
+        return this.route(method, url.pathname, body, key);
       }),
     );
     return this;
@@ -46,32 +48,30 @@ class FakeBackend {
     return this.calls.filter((c) => c.path === path).map((c) => c.body);
   }
 
-  route(method: string, path: string, body: unknown): Response {
+  locked = false;
+
+  route(method: string, path: string, body: unknown, viewKey: string | null): Response {
     const key = `${method} ${path}`;
     const override = this.overrides[key];
     if (override) return override(body);
-    if (key === "GET /bots") return json(200, { bots: [], errors: {} });
     if (key === "GET /quick-scans/rules") return json(200, { rules: { chatbot: CHATBOT_RULES, agent: AGENT_RULES } });
     if (key === "POST /quick-scans/check") return json(200, this.hello);
-    if (key === "POST /quick-scans") return json(202, { setup_id: 8, version: 1, scan_id: 31, test_count: 31 });
-    if (key === "GET /scans/31") {
+    if (key === "POST /quick-scans") return json(202, { setup_id: 8, version: 1, scan_id: 31, test_count: 31, view_key: VIEW_KEY });
+    if (key === "GET /open-scans/31") {
+      if (viewKey !== VIEW_KEY) return json(404, {});
       const next = this.scans.length > 1 ? this.scans.shift() : this.scans[0];
       return json(200, next);
     }
-    if (key === "GET /scans") return json(200, { scans: [] });
-    if (key === "GET /setups/8/ci-tokens") return json(200, { tokens: [] });
     return json(404, { error: { kind: "unexpected", message: key } });
   }
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
-async function unlocked(backend: FakeBackend, pollMs = 5) {
+async function opened(backend: FakeBackend, pollMs = 5) {
   backend.install();
   const user = userEvent.setup();
   render(<QuickScanPage apiUrl={API} pollMs={pollMs} />);
-  await user.type(screen.getByLabelText("Owner password"), "owner-secret");
-  await user.click(screen.getByRole("button", { name: "Unlock" }));
   await screen.findByRole("heading", { name: "Quick scan" });
   return user;
 }
@@ -86,27 +86,33 @@ async function connectOpenAI(user: ReturnType<typeof userEvent.setup>) {
 }
 
 async function confirmedAnswer(backend: FakeBackend) {
-  const user = await unlocked(backend);
+  const user = await opened(backend);
   await connectOpenAI(user);
   await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
   await screen.findByRole("heading", { name: "What kind of bot is it?" });
   return user;
 }
 
-describe("unlocking and choosing how the bot is built", () => {
-  it("is locked until the owner password is accepted", async () => {
-    const backend = new FakeBackend().install();
-    const user = userEvent.setup();
+describe("opening the page and choosing how the bot is built", () => {
+  it("has no password step and sends no owner header", async () => {
+    const backend = new FakeBackend();
+    await opened(backend);
+    expect(screen.queryByLabelText("Owner password")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Locked/)).not.toBeInTheDocument();
+    expect(backend.calls.length).toBeGreaterThan(0);
+    expect(backend.calls.every((c) => !("X-Owner-Token" in c.headers))).toBe(true);
+  });
+
+  it("says plainly when the backend has not opened the tool yet", async () => {
+    const backend = new FakeBackend();
+    backend.locked = true;
+    backend.install();
     render(<QuickScanPage apiUrl={API} />);
-    expect(screen.getByText(/Locked: enter the owner password/)).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Owner password"), "wrong");
-    await user.click(screen.getByRole("button", { name: "Unlock" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("That password was not accepted.");
-    expect(backend.calls.every((c) => c.path === "/bots")).toBe(true);
+    expect(await screen.findByRole("alert")).toHaveTextContent("This tool is not open yet.");
   });
 
   it("offers the platforms in plain words, and shows the website widget as coming soon", async () => {
-    const user = await unlocked(new FakeBackend());
+    const user = await opened(new FakeBackend());
     const group = screen.getByRole("radiogroup", { name: "How is your bot built?" });
     for (const name of [/OpenAI-compatible/, /Flowise/, /Paste anything/, /Other/]) {
       expect(within(group).getByRole("radio", { name })).toBeEnabled();
@@ -121,7 +127,7 @@ describe("unlocking and choosing how the bot is built", () => {
 describe("connecting an OpenAI-compatible bot", () => {
   it("adds the chat path to a base address, keeps the key in a password field and sends it only with the check", async () => {
     const backend = new FakeBackend();
-    const user = await unlocked(backend);
+    const user = await opened(backend);
     await user.click(screen.getByRole("radio", { name: /OpenAI-compatible/ }));
     expect(screen.getByLabelText("Access key")).toHaveAttribute("type", "password");
     await user.type(screen.getByLabelText("API address"), "https://api.groq.com/openai/v1");
@@ -147,7 +153,7 @@ describe("connecting an OpenAI-compatible bot", () => {
 
   it("does not add the path twice when the address already ends with it", async () => {
     const backend = new FakeBackend();
-    const user = await unlocked(backend);
+    const user = await opened(backend);
     await user.click(screen.getByRole("radio", { name: /OpenAI-compatible/ }));
     await user.type(screen.getByLabelText("API address"), "https://bot.example/v1/chat/completions");
     await user.click(screen.getByRole("button", { name: "Say hello" }));
@@ -161,7 +167,7 @@ describe("connecting an OpenAI-compatible bot", () => {
 describe("connecting a Flowise bot", () => {
   it("builds the address, the message template and the reply path from the address and the chatflow id", async () => {
     const backend = new FakeBackend();
-    const user = await unlocked(backend);
+    const user = await opened(backend);
     await user.click(screen.getByRole("radio", { name: /Flowise/ }));
     await user.type(screen.getByLabelText("Flowise address"), "https://flow.example.com/");
     await user.type(screen.getByLabelText("Chatflow ID"), "abc-123");
@@ -189,7 +195,7 @@ describe("pasting anything", () => {
   const CURL = `curl https://bot.example.com/ask -H 'x-api-key: ${KEY}' --data '{"question":"hi"}'`;
 
   it("reads a curl command, fills the details in, clears the box and never shows the key as text", async () => {
-    const user = await unlocked(new FakeBackend());
+    const user = await opened(new FakeBackend());
     await user.click(screen.getByRole("radio", { name: /Paste anything/ }));
     const box = screen.getByLabelText("Paste a link, a key, a code sample or a curl command");
     await user.click(box);
@@ -207,7 +213,7 @@ describe("pasting anything", () => {
   });
 
   it("says plainly when nothing could be read", async () => {
-    const user = await unlocked(new FakeBackend());
+    const user = await opened(new FakeBackend());
     await user.click(screen.getByRole("radio", { name: /Paste anything/ }));
     await user.type(screen.getByLabelText("Paste a link, a key, a code sample or a curl command"), "hello there");
     await user.click(screen.getByRole("button", { name: "Read it" }));
@@ -218,7 +224,7 @@ describe("pasting anything", () => {
 describe("the hello check", () => {
   it("asks whether that is the bot's answer, and a yes opens the next step", async () => {
     const backend = new FakeBackend();
-    const user = await unlocked(backend);
+    const user = await opened(backend);
     await connectOpenAI(user);
     expect(screen.queryByRole("heading", { name: "What kind of bot is it?" })).not.toBeInTheDocument();
     expect(screen.getByText("Is this your bot's answer?")).toBeInTheDocument();
@@ -227,7 +233,7 @@ describe("the hello check", () => {
   });
 
   it("says what to check when the answer is not the bot's, and keeps the next step shut", async () => {
-    const user = await unlocked(new FakeBackend());
+    const user = await opened(new FakeBackend());
     await connectOpenAI(user);
     await user.click(screen.getByRole("button", { name: "No, that's not right" }));
     expect(screen.getByRole("status")).toHaveTextContent(/check the address, the key and the model name/i);
@@ -238,7 +244,7 @@ describe("the hello check", () => {
   it("explains a failed check in plain words and does not open the next step", async () => {
     const backend = new FakeBackend();
     backend.hello = { status: "error", http_status: 401, raw_reply: "nope", parsed_reply: "", error: "The server answered with status 401." };
-    const user = await unlocked(backend);
+    const user = await opened(backend);
     await user.click(screen.getByRole("radio", { name: /OpenAI-compatible/ }));
     await user.type(screen.getByLabelText("API address"), "https://bot.example/v1");
     await user.click(screen.getByRole("button", { name: "Say hello" }));
@@ -328,7 +334,7 @@ describe("running the starter pack", () => {
     expect(withKey.sort()).toEqual(["/quick-scans", "/quick-scans/check"]);
   });
 
-  it("shows progress, then the dashboard, and says where to tailor the tests", async () => {
+  it("shows progress, then the dashboard, and offers no owner-only extras", async () => {
     const backend = new FakeBackend();
     const running = makeScan([], { id: 31, status: "running", botId: "target-8", setup: { version: 1, rules: [] } });
     const done = makeScan(
@@ -340,9 +346,15 @@ describe("running the starter pack", () => {
     await user.click(screen.getByRole("button", { name: "Run starter pack" }));
     expect(await screen.findByText(/of 16 tests done/)).toBeInTheDocument();
     expect(await screen.findByRole("tab", { name: "Overview" })).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Tailor these tests/ });
-    expect(link).toHaveAttribute("href", "/setup");
-    expect(screen.getByText(/saved as setup #8/i)).toBeInTheDocument();
+    // Owner-only extras are not offered on the open page.
+    expect(screen.queryByRole("button", { name: "Run again" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Use this in your builds")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Tailor these tests/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Judge was right" })).not.toBeInTheDocument();
+    // The scan is read back with the secret key the start returned, and with no owner header.
+    const reads = backend.calls.filter((c) => c.path === "/open-scans/31");
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.every((c) => c.key === VIEW_KEY && !("X-Owner-Token" in c.headers))).toBe(true);
   });
 
   it.each(REFUSALS)("explains a refusal in plain words: %s", async (_name, status, body, words) => {

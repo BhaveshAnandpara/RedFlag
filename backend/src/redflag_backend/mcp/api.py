@@ -1,4 +1,6 @@
-"""The MCP API: look at a server's tools, then run the checks. Owner-only.
+"""The MCP API: look at a server's tools, then run the checks.
+
+Open to anyone (no owner password).
 
 The key arrives in the request, goes into the target for this one run and is never saved, logged
 or returned. A tool that changes things is only exercised when the owner says the server is a
@@ -6,13 +8,13 @@ sandbox and ticks that tool.
 """
 
 import asyncio
-import hmac
+import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -74,12 +76,7 @@ def _config(server: Server) -> McpConfig:
 
 
 def build_mcp_router(settings: Settings, deps: McpDeps) -> APIRouter:
-    def require_owner(x_owner_token: str | None = Header(default=None)) -> None:
-        expected = settings.owner_token
-        if not expected or not x_owner_token or not hmac.compare_digest(x_owner_token, expected):
-            raise HTTPException(status_code=401, detail="owner token required")
-
-    router = APIRouter(dependencies=[Depends(require_owner)])
+    router = APIRouter()
 
     @router.post("/mcp-scans/check", response_model=None)
     async def check(body: Server) -> dict[str, Any] | JSONResponse:
@@ -101,7 +98,7 @@ def build_mcp_router(settings: Settings, deps: McpDeps) -> APIRouter:
         }
 
     @router.post("/mcp-scans", status_code=202, response_model=None)
-    async def start(body: StartBody) -> dict[str, int] | JSONResponse:
+    async def start(body: StartBody) -> dict[str, Any] | JSONResponse:
         if any(choice.effect == "acts" for choice in body.exercise) and not body.sandbox_confirmed:
             return _error(422, "sandbox_required")
         if deps.gate.busy():
@@ -120,7 +117,9 @@ def build_mcp_router(settings: Settings, deps: McpDeps) -> APIRouter:
         project_id = await asyncio.to_thread(
             deps.store.ensure_project, slug, f"MCP server ({host})", "An MCP server under test."
         )
+        view_key = secrets.token_urlsafe(18)
         settings_doc: dict[str, Any] = {
+            "view_key": view_key,
             "bot_id": slug,
             "bot_name": f"MCP server ({host})",
             "bot_config_version": 1,
@@ -151,6 +150,6 @@ def build_mcp_router(settings: Settings, deps: McpDeps) -> APIRouter:
             deps.store.create_scan, project_id, settings_doc, deps.clock()
         )
         deps.gate.start(deps.runner.run(scan_id, target, listed.tools, exercise, host))
-        return {"scan_id": scan_id}
+        return {"scan_id": scan_id, "view_key": view_key}
 
     return router

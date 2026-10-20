@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { ScanDetail, ScanListItem } from "@/lib/scan";
+import type { ScanDetail } from "@/lib/scan";
 import { describeError } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
-import { FinishedScan } from "./finished-scan";
+import { Dashboard } from "./dashboard";
 import { RunningView } from "./setup-page";
 
 type Effect = "reads" | "acts";
@@ -49,6 +49,8 @@ function Field({
 }
 
 function refusal(status: number, body: { error?: { kind?: string } } | null): string {
+  // A 401 means the backend has not opened this page yet.
+  if (status === 401) return "This tool is not open yet. Please try again later.";
   switch (body?.error?.kind) {
     case "sandbox_required":
       return "A tool that changes things can only be called on a test or sandbox server. Tick the box to confirm that this is one.";
@@ -60,8 +62,9 @@ function refusal(status: number, body: { error?: { kind?: string } } | null): st
 }
 
 export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: number }) {
-  const [password, setPassword] = useState("");
-  const [api, setApi] = useState<SetupApi | null>(null);
+  // No password: the backend opens the MCP calls when it is set up to. A scan is read back with
+  // the secret view key that starting it returned, kept only here in memory.
+  const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
   const [problem, setProblem] = useState<string | null>(null);
 
   const [address, setAddress] = useState("");
@@ -75,7 +78,7 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
   const [sandbox, setSandbox] = useState(false);
 
   const [scan, setScan] = useState<ScanDetail | null>(null);
-  const [history, setHistory] = useState<ScanListItem[]>([]);
+  const viewKey = useRef("");
   const stopped = useRef(false);
 
   useEffect(() => {
@@ -85,17 +88,6 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
     };
   }, []);
 
-  async function unlock() {
-    setProblem(null);
-    const probe = new SetupApi(apiUrl, password);
-    const result = await probe.call("GET", "/bots");
-    if (!result.ok) {
-      setProblem(describeError(result.status, result.data as never));
-      return;
-    }
-    setApi(probe);
-  }
-
   const server = () => ({
     url: address.trim(),
     key: key || null,
@@ -104,11 +96,10 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
   });
 
   async function look() {
-    if (!api) return;
     setProblem(null);
     const result = await api.call<Listing>("POST", "/mcp-scans/check", server());
     if (!result.ok) {
-      setProblem(describeError(result.status, result.data as never));
+      setProblem(refusal(result.status, result.data as never));
       return;
     }
     setListing(result.data);
@@ -137,7 +128,10 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
   }
 
   async function fetchScan(scanId: number): Promise<ScanDetail> {
-    const result = await api!.call<ScanDetail>("GET", `/scans/${scanId}`);
+    const result = await api.call<ScanDetail>(
+      "GET",
+      `/open-scans/${scanId}?key=${encodeURIComponent(viewKey.current)}`,
+    );
     if (!result.ok) throw new Error(`scan request failed with ${result.status}`);
     return result.data;
   }
@@ -147,14 +141,7 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
       while (!stopped.current) {
         const body = await fetchScan(scanId);
         setScan(body);
-        if (body.scan.status !== "running") {
-          const listed = await api!.call<{ scans: ScanListItem[] }>(
-            "GET",
-            `/scans?bot_id=${body.scan.bot_id}`,
-          );
-          if (listed.ok) setHistory(listed.data.scans);
-          return;
-        }
+        if (body.scan.status !== "running") return;
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
     } catch {
@@ -163,9 +150,8 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
   }
 
   async function run() {
-    if (!api) return;
     setProblem(null);
-    const started = await api.call<{ scan_id: number }>("POST", "/mcp-scans", {
+    const started = await api.call<{ scan_id: number; view_key: string }>("POST", "/mcp-scans", {
       ...server(),
       exercise,
       sandbox_confirmed: needsSandbox && sandbox,
@@ -174,55 +160,25 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
       setProblem(refusal(started.status, started.data as never));
       return;
     }
+    viewKey.current = started.data.view_key;
     await follow(started.data.scan_id);
-  }
-
-  async function openScan(scanId: number) {
-    try {
-      setScan(await fetchScan(scanId));
-    } catch {
-      setProblem(describeError(0, null));
-    }
   }
 
   return (
     <section className="space-y-6">
       <h1 className="text-3xl font-semibold">Check an MCP server</h1>
 
-      {api === null ? (
-        <div className="space-y-3">
-          <p>Locked: enter the owner password to use this page.</p>
-          <label className="block space-y-1">
-            <span className="block text-sm font-medium">Owner password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className={FIELD}
-            />
-          </label>
-          <button type="button" onClick={unlock} className={PRIMARY}>
-            Unlock
-          </button>
-          {problem && <p role="alert">{problem}</p>}
-        </div>
-      ) : scan ? (
+      {scan ? (
         <div className="space-y-4">
           {problem && <p role="alert">{problem}</p>}
           {scan.scan.status === "running" ? (
             <RunningView detail={scan} />
           ) : (
-            <FinishedScan
-              api={api}
-              scan={scan}
-              history={history}
-              previous={null}
-              keyValue={key}
-              setKey={setKey}
-              onRunAgain={() => undefined}
-              onOpen={(id) => void openScan(id)}
+            <Dashboard
+              detail={scan}
+              history={[]}
+              onOpen={() => undefined}
               loadScan={fetchScan}
-              setProblem={setProblem}
             />
           )}
         </div>
