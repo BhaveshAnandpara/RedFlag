@@ -131,7 +131,7 @@
   .toast.on { opacity: 1; transform: translate(-50%, 0); }
 
   @media (prefers-reduced-motion: no-preference) {
-    .rise { opacity: 0; transform: translateY(14px); transition: opacity 600ms var(--ease), transform 700ms var(--ease); }
+    .rise { opacity: 0; transform: translateY(14px); transition: opacity 200ms var(--ease), transform 200ms var(--ease); }
     .rise.in { opacity: 1; transform: none; }
   }
   @media (max-width: 860px) {
@@ -178,7 +178,7 @@
 <body>
 <header>
   <a class="brand" href="home.html"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</a>
-  <nav aria-label="Main"><a href="home.html#scene">How it works</a><a href="scan.html">Scan</a><a href="#" aria-current="page">Results</a><a href="https://github.com/BhaveshAnandpara/RedFlag#readme" target="_blank" rel="noopener">Docs</a></nav>
+  <nav aria-label="Main"><a href="/#scene">How it works</a><a href="/scan.html">Demo scan</a><a href="/quick">Test your bot</a><a href="/mcp">MCP check</a><a href="/results.html" aria-current="page">Results</a><a href="https://github.com/BhaveshAnandpara/RedFlag#readme" target="_blank" rel="noopener">Docs</a></nav>
 </header>
 
 <main id="main"></main>
@@ -270,7 +270,7 @@
     <div class="sec-head rise"><h2>What was and wasn't tested</h2><span>OWASP Top 10 for LLM apps · 2025</span></div>
     <section class="card cover rise">${coverHTML}</section>
 
-    <div class="sec-head rise"><h2>All tests</h2><span id="t-count">16 tests</span></div>
+    <div class="sec-head rise"><h2>All tests</h2><span id="t-count">13 attacks + 3 normal requests</span></div>
     <div class="filters rise" role="group" aria-label="Filter tests">
       <button class="chip" data-f="all" aria-pressed="true">All</button><button class="chip" data-f="fail" aria-pressed="false">Got through</button><button class="chip" data-f="pass" aria-pressed="false">Held</button>
       <select class="sel" id="f-risk" aria-label="Risk"><option value="">Every risk</option>${[...tested].sort().map(r => `<option>${r}</option>`).join('')}<option value="normal">Normal requests</option></select>
@@ -280,7 +280,7 @@
 
     ${quick ? '' : `<section class="card next rise">
       <div><h3>${key === 'weak' ? 'Now scan the protected bot' : 'See what the weak bot let through'}</h3>
-      <p>${key === 'weak' ? 'Same 16 tests, same models (' + M.models.join(', ') + '), with secret protection, order scoping, refund approval and document isolation switched on.' : 'Same 16 tests and the same models answered both scans, so the difference comes from the defenses.'}</p></div>
+      <p>${key === 'weak' ? 'Same 13 attacks + 3 normal requests, same models (' + M.models.join(', ') + '), with secret protection, order scoping, refund approval and document isolation switched on.' : 'Same 16 tests and the same models answered both scans, so the difference comes from the defenses.'}</p></div>
       <a class="btn solid" href="${key === 'weak' ? 'scan.html?bot=hardened' : 'results.html?scan=weak'}">${key === 'weak' ? 'Scan the protected bot' : 'Open the weak bot report'}</a>
     </section>`}
 
@@ -289,6 +289,7 @@
         <dt>Bot</dt><dd>${esc(st.bot_name)} · config v${st.bot_config_version}</dd>
         <dt>Defenses</dt><dd>${st.bot_defenses.length ? st.bot_defenses.join(', ').replace(/_/g, ' ') : 'none'}</dd>
         <dt>Models that answered</dt><dd>${M.models.join(', ')}</dd>
+        ${M.models.length > 1 ? '<dt>Why two models</dt><dd>Free-tier demo: requests fall back to a second model when the first is rate-limited.</dd>' : ''}
         <dt>Providers</dt><dd>${st.providers.join(' → ')}</dd>
         <dt>Test suite</dt><dd>v${st.suite_version} · ${st.test_count} tests · ${st.catalog_version}</dd>
         <dt>Budget</dt><dd>${st.budget.requests} requests · ${st.budget.tokens.toLocaleString()} tokens · ${st.budget.seconds / 60} min</dd>
@@ -321,8 +322,8 @@
   function table() {
     const risk = document.getElementById('f-risk').value, sev = document.getElementById('f-sev').value;
     const rows = T.filter(t => (fRes === 'all' || t.status === fRes) && (!risk || (risk === 'normal' ? t.kind === 'positive' : t.risk === risk)) && (!sev || (sev === 'none' ? !t.sev : t.sev === sev)));
-    document.getElementById('t-count').textContent = `${rows.length} of 16 tests`;
-    document.getElementById('tbody').innerHTML = rows.length ? rows.map(t => `<tr class="row" data-id="${t.id}"><td><span class="badge ${t.status}">${t.status === 'fail' ? 'FAIL' : 'PASS'}</span></td><td>${esc(t.title)}</td><td class="mono t-risk">${t.risk || 'normal'}</td><td>${sevTag(t.sev)}</td><td class="mono t-model">${esc(t.model)}</td></tr><tr class="exp" data-for="${t.id}" hidden><td colspan="5">${detail(t)}</td></tr>`).join('')
+    document.getElementById('t-count').textContent = `${rows.length} of 16 · 13 attacks + 3 normal requests`;
+    document.getElementById('tbody').innerHTML = rows.length ? rows.map(t => `<tr class="row" data-id="${t.id}"><td><span class="badge ${t.status}">${t.kind === 'positive' ? (t.status === 'fail' ? 'FAILED' : 'ANSWERED') : (t.status === 'fail' ? 'GOT THROUGH' : 'HELD')}</span></td><td>${esc(t.title)}</td><td class="mono t-risk">${t.risk || 'normal'}</td><td>${sevTag(t.sev)}</td><td class="mono t-model">${esc(t.model)}</td></tr><tr class="exp" data-for="${t.id}" hidden><td colspan="5">${detail(t)}</td></tr>`).join('')
       : `<tr><td colspan="5" class="nomatch">No tests match those filters.</td></tr>`;
     document.querySelectorAll('tr.row').forEach(r => r.addEventListener('click', () => { const e = document.querySelector(`tr.exp[data-for="${r.dataset.id}"]`); e.hidden = !e.hidden; }));
   }
@@ -348,7 +349,7 @@
 
   // arrival
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.08 });
-  document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 70}ms`; io.observe(el); });
+  document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 20}ms`; io.observe(el); });
   requestAnimationFrame(() => document.getElementById('flagrow').classList.add('live'));
   document.title = quick ? 'Your bot · quick scan #13 · Redflag' : `${label[key]} · scan #${M.id} · Redflag`;
   if (quick) {
@@ -504,7 +505,7 @@
   });
 
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.08 });
-  document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 70}ms`; io.observe(el); });
+  document.querySelectorAll('.rise').forEach((el, i) => { el.style.transitionDelay = `${Math.min(i, 4) * 20}ms`; io.observe(el); });
   requestAnimationFrame(() => document.getElementById('flagrow').classList.add('live'));
   document.title = `${SERVER.name} · MCP check #${META.id} · Redflag`;
   document.querySelector('nav a[href="scan.html"]').outerHTML = '<a href="mcp.html">MCP check</a>';

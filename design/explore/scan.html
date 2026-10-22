@@ -139,7 +139,7 @@
 <div class="app">
   <header>
     <a class="brand" href="home.html"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</a>
-    <nav aria-label="Main"><a href="home.html#scene">How it works</a><a href="#" aria-current="page">Scan</a><a href="results.html">Results</a><a href="https://github.com/BhaveshAnandpara/RedFlag#readme" target="_blank" rel="noopener">Docs</a></nav>
+    <nav aria-label="Main"><a href="/#scene">How it works</a><a href="/scan.html" aria-current="page">Demo scan</a><a href="/quick">Test your bot</a><a href="/mcp">MCP check</a><a href="/results.html">Results</a><a href="https://github.com/BhaveshAnandpara/RedFlag#readme" target="_blank" rel="noopener">Docs</a></nav>
     <span class="h-right">demo · free tier models</span>
   </header>
 
@@ -147,7 +147,7 @@
     <aside>
       <div>
         <h1>Run a scan</h1>
-        <p class="lede">Redflag sends 16 tests to a demo support bot and judges what it did, not just what it said.</p>
+        <p class="lede">Redflag sends 13 attacks + 3 normal requests to a demo support bot and judges what it did, not just what it said.</p>
       </div>
 
       <div>
@@ -276,7 +276,7 @@
         box.appendChild(tl);
       }
       const v = document.createElement('div'); v.className = 'verdict';
-      v.innerHTML = `<span class="badge ${t.status}">${t.status === 'fail' ? 'FAIL' : 'PASS'}</span><span class="why">${esc(t.evidence)}</span>`;
+      v.innerHTML = `<span class="badge ${t.status}">${t.kind === 'positive' ? (t.status === 'fail' ? 'FAILED' : 'ANSWERED') : (t.status === 'fail' ? 'GOT THROUGH' : 'HELD')}</span><span class="why">${esc(t.evidence)}</span>`;
       box.appendChild(v); scrollDown();
       done.push(i); if (t.status === 'fail') fails++;
       $('bar').style.width = `${(done.length / 16) * 100}%`; $('c-done').textContent = `${done.length} of 16`; $('c-fail').textContent = fails;
