@@ -163,7 +163,9 @@ class McpScanRunner:
         worst = min(
             (f.severity for _, found in flagged for f in found), key=lambda s: SEVERITY_RANK[s]
         )
-        per_tool = " · ".join(
+        # One line per tool (not run together), so the page can show a short summary and
+        # expand to a readable list, instead of one giant paragraph.
+        per_tool = "\n".join(
             f"{tool.name}: {'; '.join(f.evidence for f in found)}" for tool, found in flagged
         )
         return self._static_result(
@@ -171,7 +173,7 @@ class McpScanRunner:
             family,
             "fail",
             f"{len(flagged)} of {len(tools)} tools have a parameter with no list, pattern or "
-            f"length limit. {per_tool}",
+            f"length limit.\n{per_tool}",
             worst,
             now,
             message=f"Checked the input schema of {len(tools)} tools.",
