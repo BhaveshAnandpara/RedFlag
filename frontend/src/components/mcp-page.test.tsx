@@ -333,7 +333,7 @@ describe("the results", () => {
     expect(within(rows[2] as HTMLElement).getByText("FAIL")).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText("called")).toBeInTheDocument();
     expect(within(rows[3] as HTMLElement).getByText("UNCLEAR")).toBeInTheDocument();
-    expect(screen.getByText("4 tests done so far")).toBeInTheDocument();
+    expect(screen.getByText(/4 tests done so far/)).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open the report" })).not.toBeInTheDocument();
   });

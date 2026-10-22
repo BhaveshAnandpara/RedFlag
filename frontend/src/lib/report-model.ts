@@ -46,7 +46,10 @@ export function judgeModels(results: ScanResult[]): string[] {
 
 // ---------- a scan of the visitor's own bot ----------
 
-export type Cover = { id: string; name: string; n: number; f: number };
+// n/f are decided results (pass/fail) only. u is how many more could not be decided (an error,
+// a refusal, or the judge giving no verdict) — never folded into n, so "f of n" never implies
+// more was tested than actually was.
+export type Cover = { id: string; name: string; n: number; f: number; u?: number };
 
 export function botModel(detail: ScanDetail) {
   const results = detail.results;
@@ -129,7 +132,9 @@ export function mcpModel(detail: ScanDetail) {
   const critical = failed.filter((r) => r.severity === "critical").length;
   const unclear = results.filter((r) => r.status === "inconclusive").length;
   const calls = results.filter((r) => mcpGroup(r.test_id) === "call" && r.status !== "not_applicable");
-  const callFails = calls.filter((r) => r.status === "fail").length;
+  const decidedCalls = calls.filter((r) => r.status === "pass" || r.status === "fail");
+  const undecidedCalls = calls.length - decidedCalls.length;
+  const callFails = decidedCalls.filter((r) => r.status === "fail").length;
   const flaggedTools = new Set(
     results
       .filter(
@@ -158,11 +163,13 @@ export function mcpModel(detail: ScanDetail) {
     }),
     ...Object.entries(MCP_KINDS).map(([kind, info]) => {
       const mine = calls.filter((r) => mcpKind(r.test_id) === kind);
+      const decided = mine.filter((r) => r.status === "pass" || r.status === "fail");
       return {
         id: info.risk,
         name: `Calls: ${info.label.toLowerCase()}`,
-        n: mine.length,
-        f: mine.filter((r) => r.status === "fail").length,
+        n: decided.length,
+        f: decided.filter((r) => r.status === "fail").length,
+        u: mine.length - decided.length,
       };
     }),
   ];
@@ -172,6 +179,8 @@ export function mcpModel(detail: ScanDetail) {
     critical,
     unclear,
     calls,
+    decidedCalls,
+    undecidedCalls,
     callFails,
     flaggedTools,
     called,

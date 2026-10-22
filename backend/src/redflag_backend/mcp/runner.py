@@ -248,6 +248,16 @@ class McpScanRunner:
         sent = await target.call_tool(tool.name, call.arguments)
         if sent.status == "error":
             return self._result(tool, call, started, "error", sent.error)
+        if sent.status == "refused":
+            return self._result(
+                tool,
+                call,
+                started,
+                "inconclusive",
+                f"{sent.error} This may be the server correctly rejecting the call, or an "
+                "unrelated problem Redflag cannot tell apart from that. Either way, this is "
+                "not counted as a pass.",
+            )
         shown = sent.text or "(the tool returned nothing)"
         if sent.tool_error:
             shown = f"(the tool reported an error) {shown}"

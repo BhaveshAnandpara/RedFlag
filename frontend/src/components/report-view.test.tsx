@@ -251,7 +251,11 @@ describe("the report of a check of an MCP server", () => {
     render(<ReportView detail={mcpScan()} />);
     expect(screen.getByRole("heading", { name: "files · MCP check #14" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /2 of 3 checks failed\. 2 were critical\./ })).toBeInTheDocument();
-    expect(screen.getByText(/1 of 4 tool descriptions had problems\. 1 of 2 manipulated calls got through, on 2 ticked tools\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /1 of 4 tool descriptions had problems\. 1 of 1 manipulated calls that got a real answer got through, on 2 ticked tools\. 1 more could not be completed\./,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/1 result is unclear: the AI judge gave no verdict\. Unclear is not a pass\./)).toBeInTheDocument();
     expect(screen.getByText(/Redflag only called the tools you ticked/)).toBeInTheDocument();
     expect(screen.getByText("This is not a guarantee of security. It only reports what these tests checked.")).toBeInTheDocument();
@@ -291,7 +295,7 @@ describe("the report of a check of an MCP server", () => {
     expect(rows).toHaveLength(8);
     expect(rows[0]).toHaveTextContent("Descriptions: hidden instructions");
     expect(rows[0]).toHaveTextContent("1 of 4 tools failed");
-    expect(rows[1]).toHaveTextContent("4 tools, none failed");
+    expect(rows[1]).toHaveTextContent("4 tools decided, none failed");
     expect(rows[4]).toHaveTextContent("Calls: path traversal");
     expect(rows[4]).toHaveTextContent("1 of 1 calls failed");
     expect(rows[5]).toHaveTextContent("not tested");

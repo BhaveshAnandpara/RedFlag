@@ -58,7 +58,11 @@ class ToolsResult:
 
 @dataclass(frozen=True)
 class CallResult:
-    status: Literal["ok", "error"]
+    # "refused" is an HTTP-level 4xx: the server did not run the call at all. That may be the
+    # server correctly rejecting it, or an unrelated problem (a stale session, a bad request
+    # shape) — Redflag cannot tell which, so it is reported as inconclusive, not folded in with
+    # a connection failure ("error") or treated as a pass.
+    status: Literal["ok", "error", "refused"]
     # The text the tool sent back (or the server's error text for a tool that failed).
     text: str = ""
     # True when the server said the call failed (isError, or a protocol error message).
@@ -68,6 +72,16 @@ class CallResult:
 
 class _Failed(Exception):
     """A problem to report as an error result. The message is shown to the user."""
+
+
+class _ServerRefused(_Failed):
+    """The server answered with a 4xx status: it did not run the call. A subclass of _Failed so
+    a plain `except _Failed` still catches it (connecting still treats this as an error), but
+    call_tool catches it separately to report it as inconclusive, not a crash."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(f"The server answered with status {status} and did not run the call.")
 
 
 class McpTarget:
@@ -125,6 +139,8 @@ class McpTarget:
         try:
             await self._connect()
             result = await self._request("tools/call", {"name": name, "arguments": arguments})
+        except _ServerRefused as refused:
+            return CallResult("refused", error=str(refused))
         except _Failed as failed:
             return CallResult("error", error=str(failed))
         except _ToolRefused as refused:
@@ -246,7 +262,9 @@ class McpTarget:
         status = response.status_code
         if 300 <= status < 400:
             raise _Failed(f"The server answered with a redirect ({status}), which is not followed.")
-        if status >= 400:
+        if 400 <= status < 500:
+            raise _ServerRefused(status)
+        if status >= 500:
             raise _Failed(f"The server answered with status {status}.")
         session = response.headers.get("mcp-session-id")
         if session:

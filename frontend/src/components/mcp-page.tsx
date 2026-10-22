@@ -75,6 +75,7 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
   const [headerPrefix, setHeaderPrefix] = useState("Bearer ");
   const [attemptedLook, setAttemptedLook] = useState(false);
   const [looking, setLooking] = useState(false);
+  const [slowLook, setSlowLook] = useState(false);
   const [lookProblem, setLookProblem] = useState<string | null>(null);
   const [serverName, setServerName] = useState("");
   const [tools, setTools] = useState<Tool[]>([]);
@@ -101,6 +102,14 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
     };
   }, []);
 
+  // A server that has been asleep (e.g. a free-tier host waking up) can take a while to answer
+  // the first request. Say so after a bit, instead of leaving "Looking…" with no explanation.
+  useEffect(() => {
+    if (!looking) return;
+    const timer = setTimeout(() => setSlowLook(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [looking]);
+
   // ---------- step 1 ----------
   const address = url.trim();
   const showUrlError = attemptedLook ? urlProblem(address) : "";
@@ -121,6 +130,7 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
     setLookProblem(null);
     const result = await api.call<Listing>("POST", "/mcp-scans/check", server());
     setLooking(false);
+    setSlowLook(false);
     if (!result.ok) {
       setLookProblem(problemFor(result.status, result.data));
       return;
@@ -204,6 +214,11 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
   }
 
   const results = scan?.results ?? [];
+  // A rough upper bound, not an exact count: a tool with few or no text parameters gets fewer
+  // calls than the per-tool cap, or none at all. 4 static rows (one per description/schema
+  // check) plus up to the per-tool cap for every ticked tool.
+  const perTool = scan?.scan.settings.mcp?.limits?.calls_per_tool ?? 8;
+  const estimatedMax = scan ? 4 + ticked.length * perTool : 0;
   const finished = scan !== null && scan.scan.status !== "running";
   const running = stage === 3 && !finished && !scanProblem;
   const fails = results.filter((r) => r.status === "fail").length;
@@ -367,6 +382,12 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
             {lookProblem && (
               <span className="status bad" role="status">
                 {lookProblem}
+              </span>
+            )}
+            {looking && slowLook && (
+              <span className="status" role="status">
+                Still waiting. If this server has been idle, it may be starting back up — that
+                can take a while on a free host.
               </span>
             )}
           </div>
@@ -541,7 +562,9 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
               })}
             </div>
             <div className="runfoot">
-              <span>{results.length} tests done so far</span>
+              <span>
+                {results.length} tests done so far{estimatedMax ? ` (up to about ${estimatedMax})` : ""}
+              </span>
               <span>
                 <span className="f" key={fails}>
                   {fails}

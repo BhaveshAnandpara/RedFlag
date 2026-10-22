@@ -143,24 +143,31 @@ function FlagRow({ items, onOpen }: { items: { id: string; look: Look; word: str
 function CoverCard({ rows, unit }: { rows: Cover[]; unit: (c: Cover) => string }) {
   return (
     <section className="card cover">
-      {rows.map((c) => (
-        <div className="cv" key={`${c.id}-${c.name}`}>
-          <span className="id">{c.id}</span>
-          <span className="nm">{c.name}</span>
-          {c.n ? (
-            <>
-              <span className="bar">
-                {Array.from({ length: Math.min(c.n, 16) }, (_, k) => (
-                  <i key={k} className={k < Math.ceil((c.f * Math.min(c.n, 16)) / c.n) ? "f" : ""} />
-                ))}
-              </span>
-              <span className="ct">{unit(c)}</span>
-            </>
-          ) : (
-            <span className="nt">not tested</span>
-          )}
-        </div>
-      ))}
+      {rows.map((c) => {
+        const attempted = c.n + (c.u ?? 0);
+        return (
+          <div className="cv" key={`${c.id}-${c.name}`}>
+            <span className="id">{c.id}</span>
+            <span className="nm">{c.name}</span>
+            {attempted ? (
+              <>
+                <span className="bar">
+                  {Array.from({ length: Math.min(attempted, 16) }, (_, k) => {
+                    const shown = Math.min(attempted, 16);
+                    const failTicks = Math.ceil((c.f * shown) / attempted);
+                    const undecidedTicks = Math.ceil(((c.u ?? 0) * shown) / attempted);
+                    const style = k < failTicks ? undefined : k < failTicks + undecidedTicks ? { background: "var(--amber)" } : undefined;
+                    return <i key={k} className={k < failTicks ? "f" : ""} style={style} />;
+                  })}
+                </span>
+                <span className="ct">{unit(c)}</span>
+              </>
+            ) : (
+              <span className="nt">not tested</span>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -661,7 +668,9 @@ function McpReport({ detail }: { detail: ScanDetail }) {
         <div className="vsub">
           {m.flaggedTools.size} of {m.toolCount} tool descriptions had problems.{" "}
           {m.calls.length
-            ? `${m.callFails} of ${m.calls.length} manipulated calls got through, on ${m.called.length} ticked ${m.called.length === 1 ? "tool" : "tools"}.`
+            ? `${m.callFails} of ${m.decidedCalls.length} manipulated calls that got a real answer got through, on ${m.called.length} ticked ${m.called.length === 1 ? "tool" : "tools"}.${
+                m.undecidedCalls ? ` ${m.undecidedCalls} more could not be completed.` : ""
+              }`
             : "No tool was ticked, so no tool was called."}
         </div>
         <FlagRow
@@ -780,7 +789,12 @@ function McpReport({ detail }: { detail: ScanDetail }) {
           rows={m.cover}
           unit={(c) => {
             const unit = c.name.startsWith("Calls") ? "calls" : "tools";
-            return c.f ? `${c.f} of ${c.n} ${unit} failed` : `${c.n} ${unit}, none failed`;
+            const decided = c.f
+              ? `${c.f} of ${c.n} ${unit} failed`
+              : c.n
+                ? `${c.n} ${unit} decided, none failed`
+                : "none decided";
+            return c.u ? `${decided} · ${c.u} not completed` : decided;
           }}
         />
       </Rise>
