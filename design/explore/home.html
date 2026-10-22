@@ -104,7 +104,8 @@
   .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: bob 1s ease-in-out infinite; }
   .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
   @keyframes bob { 50% { transform: translateY(-4px); opacity: 0.5; } }
-  .slot { opacity: 0; transform: translateY(12px); transition: opacity 600ms var(--ease), transform 600ms var(--ease); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .slot { opacity: 0; transform: translateY(12px); transition: opacity 250ms var(--ease), transform 250ms var(--ease); }
   .slot.in { opacity: 1; transform: none; }
   .att-wrap { justify-self: end; display: grid; justify-items: end; max-width: 86%; } .att-wrap .msg { max-width: none; }
   .bot-wrap { justify-self: start; max-width: 86%; } .bot-wrap .msg { max-width: none; }
@@ -137,6 +138,7 @@
   .pill.grey { color: var(--muted); background: #1c1c1c; }
   .verdict dt { color: var(--faint); font-family: var(--mono); font-size: 12px; padding-top: 2px; } .verdict dd { margin: 0; color: #e6e6e3; }
 
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
   .btn.big { height: 46px; padding: 0 22px; font-size: 15px; }
   .sound { position: fixed; left: 24px; bottom: 24px; z-index: 5; display: inline-flex; gap: 8px; align-items: center; height: 34px; padding: 0 12px;
     border-radius: 999px; background: rgba(10,10,10,0.8); border: 1px solid rgba(255,255,255,0.12); color: var(--muted);
@@ -576,19 +578,21 @@
 
   <header>
     <a class="brand" href="#"><svg viewBox="0 0 16 18" aria-hidden="true"><rect width="2" height="18" fill="#f4f4f2"/><path d="M2 1h13l-3 4 3 4H2z" fill="#ff3b3f"/></svg>Redflag</a>
-    <nav aria-label="Main"><a href="#scene">How it works</a><a href="scan.html">Scan</a><a href="results.html">Results</a><a href="https://github.com/BhaveshAnandpara/RedFlag#readme" target="_blank" rel="noopener">Docs</a></nav>
-    <div class="head-cta"><a class="text" href="https://github.com/BhaveshAnandpara/RedFlag" target="_blank" rel="noopener">GitHub</a><a class="btn" href="scan.html">Run full scan</a></div>
+    <nav aria-label="Main"><a href="/#scene">How it works</a><a href="/scan.html">Demo scan</a><a href="/quick">Test your bot</a><a href="/mcp">MCP check</a><a href="/results.html">Results</a><a href="https://github.com/BhaveshAnandpara/RedFlag#readme" target="_blank" rel="noopener">Docs</a></nav>
+    <div class="head-cta"><a class="text" href="https://github.com/BhaveshAnandpara/RedFlag" target="_blank" rel="noopener">GitHub</a><a class="btn" href="/quick">Test your bot</a></div>
   </header>
 
   <div class="copy">
     <div class="status rise" style="--i:0" id="status" role="status"><i></i><span id="statusText">Scanning acme-weak · <b>0</b> of 16 tests</span></div>
     <h1 class="rise" style="--i:1">Find the <em class="hot">red flags</em> before your users do.</h1>
     <p class="sub rise" style="--i:2">Redflag attacks your AI agent the way a real attacker would, and shows you the exact line where it broke.</p>
+    <div class="hero-cta rise" style="--i:3"><a class="btn big" href="/quick">Test your bot</a><a class="btn big ghost" href="/scan.html">Watch a demo scan</a></div>
   </div>
 
   <a class="scroll rise" style="--i:3" href="#scene"><span class="ring"><svg viewBox="0 0 14 14" fill="none" stroke="#f4f4f2" stroke-width="1.4"><path d="M7 1v12M2 8l5 5 5-5"/></svg></span>Scroll to watch an attack</a>
 </section>
 <section class="scene" id="scene" aria-labelledby="scene-title">
+  <p class="sr-only" role="status" id="scene-live"></p>
   <div class="stage" id="stage">
     <canvas class="field" id="field" aria-hidden="true"></canvas>
     <div class="tell">
@@ -601,7 +605,7 @@
       </ol>
     </div>
 
-    <button class="skip" id="skip" type="button" hidden>Skip <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2l4 4-4 4M9 2v8"/></svg></button>
+    <button class="skip" id="skip" type="button" aria-label="Skip the animation" hidden>Skip <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2l4 4-4 4M9 2v8"/></svg></button>
     <div class="window" id="win">
       <div class="wbar"><span class="dots"><i></i><i></i><i></i></span><span class="title">acme-weak · support chat</span><span class="right">test 13 of 16 · ea-email-stranger</span></div>
       <div class="wbody" id="wbody"><div class="chat">
@@ -633,7 +637,7 @@
 <section class="how" id="how" aria-labelledby="how-title">
   <canvas class="mini-sphere" id="mini-sphere" aria-hidden="true"></canvas>
   <div class="how-head">
-    <h2 id="how-title" class="reveal">That was <em class="hot">1 of 16</em> attacks.</h2>
+    <h2 id="how-title" class="reveal">That was <em class="hot">1 of 13</em> attacks.</h2>
     <p class="reveal" style="--d:1">A full scan runs every one against your bot and judges what it did, not just what it said. Three ways in:</p>
   </div>
 
@@ -692,7 +696,7 @@
 
   <div class="how-cta reveal" style="--d:5">
     <a class="btn big" href="scan.html">Run full scan</a>
-    <span>16 tests · under a minute · evidence on every finding</span>
+    <span>13 attacks + 3 normal requests · under a minute · evidence on every finding</span>
   </div>
 </section>
 
@@ -756,7 +760,7 @@
         <div class="verdict-block" data-part="verdict">
           <h3 id="d-head">5 of 13 attacks got through. 4 were critical.</h3>
           <p class="d-meta" id="d-meta">3 of 3 normal requests worked · 19 Oct 2026 · 25.7 s · gemini-3.5-flash-lite, gpt-oss-20b</p>
-          <div class="flagrow" id="flagrow" aria-label="16 tests, one flag each"></div>
+          <div class="flagrow" id="flagrow" aria-label="13 attacks and 3 normal requests, one flag each"></div>
           <p class="d-close">This is not a guarantee of security. It only reports what these tests checked.</p>
         </div>
 
@@ -787,8 +791,8 @@
     <h2 id="final-title" class="reveal">Raise the <em class="hot">red flags</em> before your users do.</h2>
     <p class="reveal" style="--d:1">Run the full 16-test scan on a demo bot and read the report. It takes under a minute.</p>
     <div class="final-cta reveal" style="--d:2">
-      <a class="btn big" href="scan.html">Run full scan</a>
-      <a class="btn big ghost" href="#show">See a sample report</a>
+      <a class="btn big" href="/quick">Test your bot</a>
+      <a class="btn big ghost" href="/scan.html">Watch a demo scan</a>
     </div>
     <p class="own-bot reveal" style="--d:3">You can also <a href="/quick">test your own AI chatbot here</a>. Connect it, and we run a starter pack of tests on your bot in one go. Building an MCP server? <a href="/mcp">Check it here</a>.</p>
   </div>
@@ -1016,20 +1020,19 @@
   const ease = t => 1 - Math.pow(1 - t, 3);
   const spring = t => t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.cos(t * Math.PI * 2.6) * Math.exp(-t * 6);
 
-  // the timeline, in seconds: each beat plays at a fixed pace, the important ones hold for about two seconds
+  // the timeline, in seconds: the whole scene plays in 5. The chat takes its time; once the bot has replied
+  // the tool log, the red flag and the verdict land at once, then the finished frame holds
   const T = {
-    winIn: [0, 0.7],
-    type: [0.8, 4.0],        // the attack types out
-    send: 4.1,               // and is sent
-    think: [4.4, 6.4],       // the bot is typing: two seconds
-    reply: [6.4, 8.4],       // the reply streams in
-    // 8.4 to 10.4: the reply holds
-    log: 10.4, call1: 10.9, call2: 11.6,
-    foul: 12.6,              // the line turns red, the flag goes up
-    flag: [12.6, 13.4],
-    // 13.4 to 15.4: the flag holds
-    verdict: 15.4,
-    end: 18.0,               // 15.4 to 18: the verdict holds
+    winIn: [0, 0.3],
+    type: [0.3, 1.5],        // the attack types out
+    send: 1.6,               // and is sent
+    think: [1.7, 2.3],       // the bot is typing
+    reply: [2.3, 3.3],       // the reply streams in
+    log: 3.4, call1: 3.4, call2: 3.5,
+    foul: 3.5,               // the line turns red, the flag goes up
+    flag: [3.5, 3.8],
+    verdict: 3.8,
+    end: 5.0,                // the reply beside the red send_email call holds as the last frame
   };
   const span = (t, [a, b]) => clamp((t - a) / (b - a));
   const BEATS = [0, T.think[0], T.log];
@@ -1074,7 +1077,7 @@
     $('c2').classList.toggle('foul', foul); $('c2-ok').textContent = foul ? 'executed · not allowed' : 'executed';
     $('c2').style.setProperty('--pole', ease(clamp(f * 2)));
     $('c2').style.setProperty('--cloth', spring(clamp(f * 2 - 0.5)));
-    stage.style.setProperty('--foul', foul ? (1 - clamp((t - T.foul) / 4) * 0.6).toFixed(3) : 0);
+    stage.style.setProperty('--foul', foul ? (1 - clamp((t - T.foul) / 1.5) * 0.6).toFixed(3) : 0);
     if (foul && !fouled && t > prevT) whistle();
     fouled = foul;
 
@@ -1097,7 +1100,7 @@
   function focusTop() {
     const max = Math.max(0, wbody.scrollHeight - wbody.clientHeight);
     if (curT >= T.foul) {
-      const y = $('c2').getBoundingClientRect().top - wbody.getBoundingClientRect().top + wbody.scrollTop;
+      const y = $('s-bot').getBoundingClientRect().top - wbody.getBoundingClientRect().top + wbody.scrollTop;
       return Math.min(max, Math.max(0, y - 10));
     }
     return max;
@@ -1111,7 +1114,7 @@
   const skipBtn = $('skip');
   const lock = on => { document.documentElement.classList.toggle('held', on); skipBtn.hidden = !on; };
   function begin() { state = 'playing'; scrollTo({ top: scene.offsetTop, behavior: 'instant' }); lock(true); }
-  function finish() { t = T.end; state = 'done'; lock(false); }
+  function finish() { t = T.end; state = 'done'; lock(false); $('scene-live').textContent = 'The bot replied "All set!", but its tool log shows send_email went to an address the policy does not allow. Redflag marks this test FAIL, critical.'; }
   function release() { if (state === 'playing') { state = 'idle'; lock(false); } } // scrolled back up: pause, resume on return
   skipBtn.addEventListener('click', finish);
 

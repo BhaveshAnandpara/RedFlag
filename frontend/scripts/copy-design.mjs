@@ -16,7 +16,8 @@ if (!existsSync(source)) {
 
 rmSync(target, { recursive: true, force: true });
 mkdirSync(target, { recursive: true });
-// Only the pages and their data. The screenshots folder (png) is never shipped.
-const files = readdirSync(source).filter((name) => /\.(html|js)$/.test(name));
+// The pages, their data and the shared flair script and styles (the pages 404 without flair.css).
+// The screenshots folder (png) is never shipped.
+const files = readdirSync(source).filter((name) => /\.(html|js|css)$/.test(name));
 for (const name of files) cpSync(join(source, name), join(target, name));
 console.log(`Copied ${files.length} design files to public/design.`);

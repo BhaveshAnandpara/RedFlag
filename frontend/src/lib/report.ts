@@ -28,6 +28,9 @@ const JUDGE_WORD: Record<JudgeState, string> = {
 };
 
 const cell = (text: string) => text.replace(/\|/g, "\\|").replace(/\n/g, " ");
+// A merged finding (e.g. the open-parameter check) carries one line per tool. Indent the
+// continuation lines so they nest under the bullet instead of breaking out of the list.
+const nested = (text: string) => text.replace(/\n/g, "\n  ");
 
 function severityText(result: ScanResult): string {
   if (result.kind === "positive") return "normal request";
@@ -136,7 +139,7 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
   for (const r of failures) {
     lines.push(`### ${r.title}`, "");
     lines.push(`- Severity: ${severityText(r)}`);
-    lines.push(`- Evidence: ${r.evidence}`);
+    lines.push(`- Evidence: ${nested(r.evidence)}`);
     if (r.turns && r.turns.length > 0) {
       const count = Math.ceil(r.turns.length / 2);
       lines.push(`- Conversation (${count} ${count === 1 ? "turn" : "turns"}):`);
@@ -146,7 +149,7 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
     }
     if (judgeState(r) !== "not_run") {
       const rules = ruleOutput(r);
-      lines.push(`- Plain rules (${STATUS_WORD[rules.status]}): ${rules.evidence}`);
+      lines.push(`- Plain rules (${STATUS_WORD[rules.status]}): ${nested(rules.evidence)}`);
       lines.push(
         `- AI judge (${JUDGE_WORD[judgeState(r)]}): ${r.judge_reason ?? "no reason recorded"}${
           r.judge_model ? ` [${r.judge_model}]` : ""
@@ -161,14 +164,14 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
   const unclear = results.filter((r) => r.status === "inconclusive" || r.status === "error");
   if (unclear.length === 0) lines.push("Nothing.", "");
   for (const r of unclear) {
-    lines.push(`- **${r.title}** (${STATUS_WORD[r.status]}): ${r.evidence}`);
+    lines.push(`- **${r.title}** (${STATUS_WORD[r.status]}): ${nested(r.evidence)}`);
   }
   if (unclear.length > 0) lines.push("");
 
   const notApplicable = results.filter((r) => r.status === "not_applicable");
   if (notApplicable.length > 0) {
     lines.push("## Did not apply to this bot", "");
-    for (const r of notApplicable) lines.push(`- **${r.title}**: ${r.evidence}`);
+    for (const r of notApplicable) lines.push(`- **${r.title}**: ${nested(r.evidence)}`);
     lines.push("");
   }
 

@@ -554,6 +554,7 @@ function RowPair({
 
 function McpDetail({ r }: { r: ScanResult }) {
   if (mcpGroup(r.test_id) === "static") {
+    const [summary, ...toolLines] = r.evidence.split("\n");
     return (
       <div className="detail">
         <div className="dl">
@@ -564,7 +565,16 @@ function McpDetail({ r }: { r: ScanResult }) {
           <div className="h">
             Plain rules <Badge status={r.status} />
           </div>
-          {r.evidence}
+          {summary}
+          {toolLines.length > 0 && (
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18, display: "grid", gap: 4, listStyle: "disc" }}>
+              {toolLines.map((line) => (
+                <li key={line} style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <RuleFix rule={r.rule} fix={r.remediation} />
       </div>
@@ -710,7 +720,7 @@ function McpReport({ detail }: { detail: ScanDetail }) {
             result={r}
             open={opening.open.has(r.test_id)}
             onToggle={(on) => opening.set(r.test_id, on)}
-            evidence={mcpGroup(r.test_id) === "call" ? (r.judge_reason ?? r.evidence) : r.evidence}
+            evidence={mcpGroup(r.test_id) === "call" ? (r.judge_reason ?? r.evidence) : r.evidence.split("\n")[0]}
           >
             <McpDetail r={r} />
           </Finding>
