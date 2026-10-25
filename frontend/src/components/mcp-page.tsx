@@ -167,7 +167,13 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
     reads: tools.filter((t) => t.effect === "reads").length,
     changes: tools.filter((t) => t.effect === "changes").length,
   };
-  const allOn = tools.length > 0 && tools.every((t) => t.on);
+  // Select/deselect all acts on the currently filtered and searched view, not always every
+  // tool, so "Only reads" or "Changes things" can be ticked or unticked as its own group.
+  const shownOn = shown.length > 0 && shown.every((t) => t.on);
+  const toggleShown = () => {
+    const names = new Set(shown.map((t) => t.name));
+    setTools(tools.map((t) => (names.has(t.name) ? { ...t, on: !shownOn } : t)));
+  };
   const update = (name: string, change: Partial<Tool>) =>
     setTools(tools.map((t) => (t.name === name ? { ...t, ...change } : t)));
 
@@ -408,12 +414,9 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
                 {tools.length} {tools.length === 1 ? "tool" : "tools"}
                 {serverName && <span> on {serverName}</span>}
               </h3>
-              <button
-                type="button"
-                className="allbtn"
-                onClick={() => setTools(tools.map((t) => ({ ...t, on: !allOn })))}
-              >
-                {allOn ? "Untick all" : "Tick all"}
+              <button type="button" className="allbtn" disabled={shown.length === 0} onClick={toggleShown}>
+                {shownOn ? "Untick all" : "Tick all"}
+                {shown.length !== tools.length ? ` (${shown.length})` : ""}
               </button>
             </div>
             <p>

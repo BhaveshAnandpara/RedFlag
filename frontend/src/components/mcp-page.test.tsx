@@ -228,6 +228,19 @@ describe("choosing what to call", () => {
     expect(tick("read_file")).toBeChecked();
   });
 
+  it("unticks and ticks only the filtered tools, leaving the rest alone", async () => {
+    const user = await looked(new FakeBackend());
+    await user.click(screen.getByRole("button", { name: /^Changes things/ }));
+    await user.click(screen.getByRole("button", { name: "Untick all (2)" }));
+    expect(tick("write_file")).not.toBeChecked();
+    expect(tick("workspace_stats")).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: /^All/ }));
+    expect(tick("read_file")).toBeChecked(); // untouched: it was never in the "changes" filter
+    await user.click(screen.getByRole("button", { name: /^Changes things/ }));
+    await user.click(screen.getByRole("button", { name: "Tick all (2)" }));
+    expect(tick("write_file")).toBeChecked();
+  });
+
   it("asks for the sandbox box only while a ticked tool changes things, and refuses to run without it", async () => {
     const backend = new FakeBackend();
     const user = await looked(backend);
