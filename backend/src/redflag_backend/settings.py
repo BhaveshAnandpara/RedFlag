@@ -71,9 +71,10 @@ class Settings(BaseSettings):
     bot_budget_max_concurrency: int = 1
     # Hard limits for the AI judge in one scan. The judge runs on Redflag's own keys and models
     # (the ones above), so it never draws on the bots' quota.
-    # Raised from 200 to find out whether the judge budget or Groq's own limit is what stops a
-    # big MCP scan first; change back after. See judge_budget_max_tokens below.
-    judge_budget_max_requests: int = 400
+    # Raised well above what a 400-call MCP scan needs (400 calls x up to 4 attempts each, on a
+    # retried rate limit), so the judge is never the first thing to run out. Still a real cap,
+    # not unlimited: a bug that loops should still hit a ceiling eventually.
+    judge_budget_max_requests: int = 2_000
     # Below this many labeled results, accuracy numbers are called a small sample.
     judge_accuracy_min_sample: int = 20
     # Limits for checking an MCP server: tool calls in one run, and per tool.
@@ -81,10 +82,12 @@ class Settings(BaseSettings):
     # Change back after.
     mcp_max_calls: int = 400
     mcp_calls_per_tool: int = 8
-    # Raised from 200_000: a 46-tool MCP scan needs up to ~368 judge calls, which the old cap
-    # could not cover. Change back once that round of testing is done.
-    judge_budget_max_tokens: int = 1_000_000
-    judge_budget_max_seconds: float = 1800.0
+    # Raised well above a 400-call scan's worst case (big replies, full tool-description
+    # context, every call needing a real judge verdict instead of stopping early).
+    judge_budget_max_tokens: int = 5_000_000
+    # Raised so a scan with every call judged (judging runs one at a time, not in parallel)
+    # has room to finish before the clock, not the token or request cap, decides things.
+    judge_budget_max_seconds: float = 3600.0
     # The setup chat, the supervisor and the test generator: how much of Redflag's own model
     # quota one setup may use, and how long the interview and the uploads may be.
     setup_budget_max_requests: int = 60
