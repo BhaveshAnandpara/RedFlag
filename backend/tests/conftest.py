@@ -38,7 +38,7 @@ def empty_router_tables(migrated_database: None) -> None:
         conn.execute(
             text(
                 "TRUNCATE llm_cache, llm_calls, llm_spend, judge_labels, scan_results, scans, "
-                "generated_tests, "
+                "generated_tests, test_specs, "
                 "ci_tokens, setup_versions, setup_drafts, projects "
                 "RESTART IDENTITY CASCADE"
             )
