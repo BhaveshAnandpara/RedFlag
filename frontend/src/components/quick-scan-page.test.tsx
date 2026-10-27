@@ -94,6 +94,7 @@ async function confirmedAnswer(backend: FakeBackend) {
   await connectOpenAI(user);
   await user.click(stagingTick());
   await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+  await user.click(await screen.findByRole("button", { name: "Next" }));
   await screen.findByRole("radio", { name: /Answers questions/ });
   return user;
 }
@@ -354,6 +355,7 @@ describe("the hello check", () => {
     expect(screen.getByText("hello from the bot")).toBeInTheDocument();
     await user.click(stagingTick());
     await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    await user.click(await screen.findByRole("button", { name: "Next" }));
     expect(await screen.findByRole("radio", { name: /Takes actions too/ })).toBeInTheDocument();
     expect(screen.getByText("api.groq.com · answered hello")).toBeInTheDocument();
   });
@@ -454,6 +456,25 @@ describe("the step 2 chat", () => {
     expect(log.getByText(/I said hello and your bot answered: “hello from the bot”/)).toBeInTheDocument();
     expect(log.getByText(/I don't see logs in its reply, which is fine/)).toBeInTheDocument();
     expect(log.getByText(/What is this bot for, and what must it never do\?/)).toBeInTheDocument();
+  });
+
+  it("opens on the chat alone, and Next opens the details while the chat stays", async () => {
+    const backend = new FakeBackend();
+    backend.install();
+    const user = userEvent.setup();
+    render(<QuickScanPage apiUrl={API} pollMs={5} />);
+    await screen.findByRole("heading", { name: "Quick scan" });
+    await connectOpenAI(user);
+    await user.click(stagingTick());
+    await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    expect(await screen.findByRole("log", { name: "Chat with Redflag" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Answers questions/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/What is it for/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run my scan" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("radio", { name: /Answers questions/ })).toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "Chat with Redflag" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
   });
 
   it("sends the message with the chat so far and what the page knows, and fills in what was said", async () => {
@@ -571,6 +592,7 @@ describe("running Production scans", () => {
     await user.click(screen.getByRole("radio", { name: "Production" }));
     await connectOpenAI(user);
     await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    await user.click(await screen.findByRole("button", { name: "Next" }));
     await user.click(await screen.findByRole("radio", { name: /Takes actions too/ }));
     await user.type(screen.getByLabelText(/What is it for/), "An agent for a bank.");
     return user;

@@ -161,6 +161,8 @@ export function QuickScanPage({
   const [chatBusy, setChatBusy] = useState(false);
   const [chatProblem, setChatProblem] = useState<string | null>(null);
   const [chatLimit, setChatLimit] = useState(false);
+  // Step 2 opens on the chat alone. The details below it open with Next, and the chat stays.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [purposeTyped, setPurposeTyped] = useState(false);
   // Production only: the tests offered, and which of them are ticked. null until they are shown.
   const [picks, setPicks] = useState<Pick[] | null>(null);
@@ -894,194 +896,213 @@ export function QuickScanPage({
               </button>
             </div>
             <span className="hint">
-              The chat fills in the answers below. You can also fill them in or change them yourself.
+              {detailsOpen
+                ? "The chat fills in the answers below. You can also fill them in or change them yourself."
+                : "Answer here, or press Next to fill in the details yourself."}
             </span>
           </div>
 
-          <div role="radiogroup" aria-label="What does your bot do?" className="f" style={{ display: "grid", gap: 10 }}>
-            <span className="lab">
-              <span>
-                What does your bot do?<span className="req" aria-hidden="true">*</span>
-              </span>
-            </span>
-            <div className={`kinds ${showRun.kind ? "invalid" : ""}`}>
-              <button
-                type="button"
-                id="kind-chatbot"
-                className="kind"
-                role="radio"
-                aria-checked={kind === "chatbot"}
-                onClick={() => chooseKind("chatbot")}
-              >
-                <b>Answers questions</b>
-                <span>A chatbot. It talks, but it can&apos;t do anything on its own.</span>
-              </button>
-              <button
-                type="button"
-                className="kind"
-                role="radio"
-                aria-checked={kind === "agent"}
-                onClick={() => chooseKind("agent")}
-              >
-                <b>Takes actions too</b>
-                <span>An agent. It can book, refund, send emails or change things.</span>
-              </button>
-            </div>
-            {showRun.kind && <span className="err">{showRun.kind}</span>}
-          </div>
-
-          <label className="f">
-            <span className="lab">
-              <span>
-                What is it for?<span className="req" aria-hidden="true">*</span>
-              </span>
-              <small>one sentence</small>
-            </span>
-            <input
-              className="in"
-              id="purpose"
-              required
-              placeholder="A customer support assistant for Acme Bank that answers questions about accounts, cards and fees."
-              value={purpose}
-              aria-invalid={showRun.purpose ? "true" : "false"}
-              aria-describedby="e-purpose"
-              onChange={(e) => {
-                setPurpose(e.target.value);
-                setPurposeTyped(e.target.value.trim() !== "");
-              }}
-            />
-            {showRun.purpose && (
-              <span className="err" id="e-purpose">
-                {showRun.purpose}
-              </span>
-            )}
-          </label>
-
-          {kind && (
-            <div>
-              <div className="lab" style={{ marginBottom: 6 }}>
-                <span>
-                  What must it never do?<span className="req" aria-hidden="true">*</span>
-                </span>
-                <small>
-                  {onCount} of {rules.length} on
-                </small>
-              </div>
-              <div className="rules">
-                {rules.map((rule, i) => (
-                  <div key={`${i}-${rule.t}`} className={`rule ${rule.on ? "" : "off"}`}>
-                    <span>
-                      {rule.t}
-                      {rule.own && <span className="mine">your rule</span>}
-                    </span>
-                    <button
-                      type="button"
-                      id={`rule-${i}`}
-                      className="sw"
-                      role="switch"
-                      aria-checked={rule.on}
-                      aria-label={rule.t}
-                      onClick={() =>
-                        changeRules(rules.map((r, k) => (k === i ? { ...r, on: !r.on } : r)))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-              {showRun.rules && <span className="err">{showRun.rules}</span>}
-              <div className="addrule">
-                <input
-                  className="in"
-                  aria-label="Add your own rule"
-                  placeholder="Add your own, e.g. It must never promise a refund."
-                  value={newRule}
-                  onChange={(e) => setNewRule(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addRule();
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn ghost small"
-                  disabled={!newRule.trim()}
-                  onClick={addRule}
-                >
-                  Add rule
-                </button>
-              </div>
-            </div>
-          )}
-
-          {runProblem && (
-            <div className="alert" role="alert">
-              {runProblem}
-            </div>
-          )}
-          {live && picks && (
-            <div>
-              <div className="lab" style={{ marginBottom: 6 }}>
-                <span>Which OWASP tests should run?</span>
-                <small>
-                  {ticked.length} of {picks.length} on
-                </small>
-              </div>
-              <div className="rules">
-                {picks.map((p) => (
-                  <div key={p.id} className={`rule ${off.has(p.id) ? "off" : ""}`}>
-                    <span>
-                      {p.title}
-                      <span className="mine">
-                        {p.risk} {p.risk_name}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      className="sw"
-                      role="switch"
-                      aria-checked={!off.has(p.id)}
-                      aria-label={p.title}
-                      onClick={() => togglePick(p.id)}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="actions" style={{ marginTop: 8 }}>
-                <button
-                  type="button"
-                  className="btn ghost small"
-                  onClick={() => setOff(ticked.length ? new Set(picks.map((p) => p.id)) : new Set())}
-                >
-                  {ticked.length ? "Untick all" : "Tick all"}
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="actions">
-            {live && !picks ? (
-              <button type="button" className="btn solid" disabled={listing} onClick={showTests}>
-                {listing ? (
-                  <>
-                    <span className="spin" />
-                    Finding the tests…
-                  </>
-                ) : (
-                  "Show the tests"
-                )}
-              </button>
-            ) : (
+          {!detailsOpen && (
+            <div className="actions">
               <button
                 type="button"
                 className="btn solid"
-                disabled={live && ticked.length === 0}
-                onClick={runScan}
+                disabled={chatBusy}
+                onClick={() => setDetailsOpen(true)}
               >
-                {live ? `Run ${ticked.length} ${ticked.length === 1 ? "test" : "tests"}` : "Run my scan"}
+                Next
               </button>
-            )}
-          </div>
+            </div>
+          )}
+
+          {detailsOpen && (
+            <>
+              <div role="radiogroup" aria-label="What does your bot do?" className="f" style={{ display: "grid", gap: 10 }}>
+                <span className="lab">
+                  <span>
+                    What does your bot do?<span className="req" aria-hidden="true">*</span>
+                  </span>
+                </span>
+                <div className={`kinds ${showRun.kind ? "invalid" : ""}`}>
+                  <button
+                    type="button"
+                    id="kind-chatbot"
+                    className="kind"
+                    role="radio"
+                    aria-checked={kind === "chatbot"}
+                    onClick={() => chooseKind("chatbot")}
+                  >
+                    <b>Answers questions</b>
+                    <span>A chatbot. It talks, but it can&apos;t do anything on its own.</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="kind"
+                    role="radio"
+                    aria-checked={kind === "agent"}
+                    onClick={() => chooseKind("agent")}
+                  >
+                    <b>Takes actions too</b>
+                    <span>An agent. It can book, refund, send emails or change things.</span>
+                  </button>
+                </div>
+                {showRun.kind && <span className="err">{showRun.kind}</span>}
+              </div>
+
+              <label className="f">
+                <span className="lab">
+                  <span>
+                    What is it for?<span className="req" aria-hidden="true">*</span>
+                  </span>
+                  <small>one sentence</small>
+                </span>
+                <input
+                  className="in"
+                  id="purpose"
+                  required
+                  placeholder="A customer support assistant for Acme Bank that answers questions about accounts, cards and fees."
+                  value={purpose}
+                  aria-invalid={showRun.purpose ? "true" : "false"}
+                  aria-describedby="e-purpose"
+                  onChange={(e) => {
+                    setPurpose(e.target.value);
+                    setPurposeTyped(e.target.value.trim() !== "");
+                  }}
+                />
+                {showRun.purpose && (
+                  <span className="err" id="e-purpose">
+                    {showRun.purpose}
+                  </span>
+                )}
+              </label>
+
+              {kind && (
+                <div>
+                  <div className="lab" style={{ marginBottom: 6 }}>
+                    <span>
+                      What must it never do?<span className="req" aria-hidden="true">*</span>
+                    </span>
+                    <small>
+                      {onCount} of {rules.length} on
+                    </small>
+                  </div>
+                  <div className="rules">
+                    {rules.map((rule, i) => (
+                      <div key={`${i}-${rule.t}`} className={`rule ${rule.on ? "" : "off"}`}>
+                        <span>
+                          {rule.t}
+                          {rule.own && <span className="mine">your rule</span>}
+                        </span>
+                        <button
+                          type="button"
+                          id={`rule-${i}`}
+                          className="sw"
+                          role="switch"
+                          aria-checked={rule.on}
+                          aria-label={rule.t}
+                          onClick={() =>
+                            changeRules(rules.map((r, k) => (k === i ? { ...r, on: !r.on } : r)))
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {showRun.rules && <span className="err">{showRun.rules}</span>}
+                  <div className="addrule">
+                    <input
+                      className="in"
+                      aria-label="Add your own rule"
+                      placeholder="Add your own, e.g. It must never promise a refund."
+                      value={newRule}
+                      onChange={(e) => setNewRule(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addRule();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={!newRule.trim()}
+                      onClick={addRule}
+                    >
+                      Add rule
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {runProblem && (
+                <div className="alert" role="alert">
+                  {runProblem}
+                </div>
+              )}
+              {live && picks && (
+                <div>
+                  <div className="lab" style={{ marginBottom: 6 }}>
+                    <span>Which OWASP tests should run?</span>
+                    <small>
+                      {ticked.length} of {picks.length} on
+                    </small>
+                  </div>
+                  <div className="rules">
+                    {picks.map((p) => (
+                      <div key={p.id} className={`rule ${off.has(p.id) ? "off" : ""}`}>
+                        <span>
+                          {p.title}
+                          <span className="mine">
+                            {p.risk} {p.risk_name}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="sw"
+                          role="switch"
+                          aria-checked={!off.has(p.id)}
+                          aria-label={p.title}
+                          onClick={() => togglePick(p.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="actions" style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      onClick={() => setOff(ticked.length ? new Set(picks.map((p) => p.id)) : new Set())}
+                    >
+                      {ticked.length ? "Untick all" : "Tick all"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="actions">
+                {live && !picks ? (
+                  <button type="button" className="btn solid" disabled={listing} onClick={showTests}>
+                    {listing ? (
+                      <>
+                        <span className="spin" />
+                        Finding the tests…
+                      </>
+                    ) : (
+                      "Show the tests"
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn solid"
+                    disabled={live && ticked.length === 0}
+                    onClick={runScan}
+                  >
+                    {live ? `Run ${ticked.length} ${ticked.length === 1 ? "test" : "tests"}` : "Run my scan"}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </Step>
 
         <Step n={3} id="s3" title="Watch the scan" state={state(3)}>
