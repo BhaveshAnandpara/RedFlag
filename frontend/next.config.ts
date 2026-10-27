@@ -19,7 +19,11 @@ const nextConfig: NextConfig = {
   },
   // The MCP check is now a way to connect in Test your bot.
   async redirects() {
-    return [{ source: "/mcp", destination: "/quick?connect=mcp", permanent: false }];
+    return [
+      { source: "/mcp", destination: "/quick?connect=mcp", permanent: false },
+      // The setup interview now lives in step 2 of Test your bot.
+      { source: "/setup", destination: "/quick", permanent: false },
+    ];
   },
   // The early design explorations stay reachable but out of search.
   async headers() {

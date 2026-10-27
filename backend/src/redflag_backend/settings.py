@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     # used to hammer someone's server.
     quick_checks_per_window: int = 20
     quick_check_window_seconds: float = 600.0
+    # The quick scan's interview chat is open to anyone and spends model quota, so it is limited
+    # per window overall, and per chat by how many user messages one chat may hold.
+    quick_interviews_per_window: int = 60
+    quick_interview_window_seconds: float = 600.0
+    quick_interview_max_messages: int = 12
     # The most tests one setup version may hold (generated tests plus attack variations).
     setup_max_tests: int = 200
     # The most requests one run may send to the user's own endpoint.

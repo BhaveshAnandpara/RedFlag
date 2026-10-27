@@ -432,6 +432,114 @@ describe("step 2: what the bot does and what it must never do", () => {
   });
 });
 
+describe("the step 2 chat", () => {
+  const said = (extra: Record<string, unknown> = {}) => ({
+    reply: "Thanks. What must it never do?",
+    asking: "what it must never do",
+    purpose: null,
+    bot_type: null,
+    must_never: [],
+    limit_reached: false,
+    messages_left: 11,
+    ...extra,
+  });
+  const send = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
+    await user.type(screen.getByLabelText("Your message to Redflag"), text);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+  };
+
+  it("opens with what the hello check showed, including that no logs were seen", async () => {
+    await confirmedAnswer(new FakeBackend());
+    const log = within(screen.getByRole("log", { name: "Chat with Redflag" }));
+    expect(log.getByText(/I said hello and your bot answered: “hello from the bot”/)).toBeInTheDocument();
+    expect(log.getByText(/I don't see logs in its reply, which is fine/)).toBeInTheDocument();
+    expect(log.getByText(/What is this bot for, and what must it never do\?/)).toBeInTheDocument();
+  });
+
+  it("sends the message with the chat so far and what the page knows, and fills in what was said", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(
+        200,
+        said({
+          purpose: "A support bot for Acme Bank.",
+          bot_type: "agent",
+          must_never: ["It must never refund over 100 pounds."],
+        }),
+      );
+    const user = await confirmedAnswer(backend);
+    await send(user, "It helps bank customers and can refund them.");
+    expect(await screen.findByText("Thanks. What must it never do?")).toBeInTheDocument();
+    expect(backend.bodies("/quick-scans/interview")[0]).toMatchObject({
+      message: "It helps bank customers and can refund them.",
+      environment: "staging",
+      hello_reply: "hello from the bot",
+      history: [{ role: "assistant", content: expect.stringContaining("I said hello") }],
+    });
+    expect(screen.getByLabelText(/What is it for/)).toHaveValue("A support bot for Acme Bank.");
+    expect(screen.getByRole("radio", { name: /Takes actions too/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "It must never refund over 100 pounds." })).toBeChecked();
+    expect(screen.getByText("your rule")).toBeInTheDocument();
+  });
+
+  it("never overwrites a purpose the person typed, a kind they chose or a rule they switched off", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(
+        200,
+        said({
+          purpose: "Something the chat made up.",
+          bot_type: "agent",
+          must_never: [CHATBOT_RULES[0]],
+        }),
+      );
+    const user = await confirmedAnswer(backend);
+    await user.click(screen.getByRole("radio", { name: /Answers questions/ }));
+    await user.type(screen.getByLabelText(/What is it for/), "My own sentence.");
+    await user.click(screen.getByRole("switch", { name: CHATBOT_RULES[0] }));
+    await send(user, "Anything.");
+    await screen.findByText("Thanks. What must it never do?");
+    expect(screen.getByLabelText(/What is it for/)).toHaveValue("My own sentence.");
+    expect(screen.getByRole("radio", { name: /Answers questions/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: CHATBOT_RULES[0] })).not.toBeChecked();
+  });
+
+  it("says plainly when the chat fails, and keeps what was typed in the form", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () => json(429, { error: { kind: "too_many_chats" } });
+    const user = await confirmedAnswer(backend);
+    await user.type(screen.getByLabelText(/What is it for/), "A bank bot.");
+    await send(user, "hello");
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByLabelText(/What is it for/)).toHaveValue("A bank bot.");
+  });
+
+  it("stops the chat at the limit and points to the form", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(200, said({ reply: "We have reached the limit for this chat.", limit_reached: true }));
+    const user = await confirmedAnswer(backend);
+    await send(user, "one more");
+    expect(await screen.findByText(/reached the limit for this chat/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Your message to Redflag")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("does not talk about logs in Production", async () => {
+    const backend = new FakeBackend();
+    backend.install();
+    const user = userEvent.setup();
+    render(<QuickScanPage apiUrl={API} pollMs={5} />);
+    await screen.findByRole("heading", { name: "Quick scan" });
+    await user.click(screen.getByRole("radio", { name: "Production" }));
+    await connectOpenAI(user);
+    await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    const log = within(await screen.findByRole("log", { name: "Chat with Redflag" }));
+    expect(log.getByText(/I said hello and your bot answered/)).toBeInTheDocument();
+    expect(log.queryByText(/logs/)).not.toBeInTheDocument();
+  });
+});
+
 describe("running Staging scans", () => {
   it("sends the Staging tick as the sandbox confirmation for an agent, and says it is staging", async () => {
     const backend = new FakeBackend();

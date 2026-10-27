@@ -22,6 +22,7 @@ type Env = "staging" | "production";
 type Logs = { found: boolean; fields: string[]; shape: string } | null;
 /** One OWASP test a person can pick from for a live bot. */
 type Pick = { id: string; title: string; goal: string; risk: string; risk_name: string; severity: string };
+type Turn = { role: "user" | "assistant"; content: string };
 type Hello = { sig: string; ok: boolean; reply: string; error: string; logs: Logs };
 
 const NO_LOGS =
@@ -154,6 +155,13 @@ export function QuickScanPage({
   const [rules, setRules] = useState<Rule[]>([]);
   const [newRule, setNewRule] = useState("");
   const [attemptedRun, setAttemptedRun] = useState(false);
+  // The step 2 chat. The purpose a person typed themselves is never overwritten by the chat.
+  const [chat, setChat] = useState<Turn[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatProblem, setChatProblem] = useState<string | null>(null);
+  const [chatLimit, setChatLimit] = useState(false);
+  const [purposeTyped, setPurposeTyped] = useState(false);
   // Production only: the tests offered, and which of them are ticked. null until they are shown.
   const [picks, setPicks] = useState<Pick[] | null>(null);
   const [off, setOff] = useState<Set<string>>(new Set());
@@ -298,6 +306,61 @@ export function QuickScanPage({
   function changeRules(next: Rule[]) {
     setRules(next);
     setPicks(null); // the tests offered depend on the rules, so the list is shown again
+  }
+
+  /** What Redflag says first, built from what the hello check already showed. */
+  const opening = hello?.ok
+    ? `I said hello and your bot answered: “${hello.reply.length > 160 ? `${hello.reply.slice(0, 160)}…` : hello.reply}”. ${
+        env === "staging"
+          ? hello.logs?.found
+            ? "I can see logs in its reply. "
+            : "I don't see logs in its reply, which is fine. "
+          : ""
+      }What is this bot for, and what must it never do?`
+    : "What is this bot for, and what must it never do?";
+
+  async function sendChat() {
+    const message = chatInput.trim();
+    if (!message || chatBusy || chatLimit) return;
+    const history: Turn[] = [{ role: "assistant", content: opening }, ...chat];
+    setChat([...chat, { role: "user", content: message }]);
+    setChatInput("");
+    setChatProblem(null);
+    setChatBusy(true);
+    const answer = await api.call<{
+      reply: string;
+      purpose?: string | null;
+      bot_type?: Kind | null;
+      must_never?: string[];
+      limit_reached: boolean;
+    }>("POST", "/quick-scans/interview", {
+      message,
+      history,
+      environment: env,
+      hello_reply: hello?.reply ?? "",
+      logs: hello?.logs ?? null,
+      purpose: purpose.trim(),
+      rules: rules.filter((r) => r.on).map((r) => r.t),
+    });
+    setChatBusy(false);
+    if (!answer.ok) {
+      setChatProblem(problemFor(answer.status, answer.data));
+      return;
+    }
+    const said = answer.data;
+    setChat((turns) => [...turns, { role: "assistant", content: said.reply }]);
+    if (said.limit_reached) setChatLimit(true);
+    if (said.purpose && !purposeTyped) setPurpose(said.purpose);
+    // The chat fills in what the person said. Their own edits win: a kind they already chose stays,
+    // and a rule they switched off is not switched back on.
+    const nextKind = kind ?? said.bot_type ?? null;
+    const base = kind || !nextKind ? rules : [...ruleLists[nextKind].map((t) => ({ t, on: true })), ...rules.filter((r) => r.own)];
+    const known = new Set(base.map((r) => r.t.toLowerCase()));
+    const added = (said.must_never ?? [])
+      .filter((t) => !known.has(t.toLowerCase()))
+      .map((t) => ({ t, on: true, own: true }));
+    if (nextKind !== kind) setKind(nextKind);
+    if (nextKind !== kind || added.length) changeRules([...base, ...added]);
   }
 
   function addRule() {
@@ -784,6 +847,57 @@ export function QuickScanPage({
           summary={`${kind === "agent" ? "Agent" : "Chatbot"} · ${onCount} rule${onCount === 1 ? "" : "s"}`}
           onChange={running ? undefined : () => setStage(2)}
         >
+          <div className="hello">
+            <span className="who">Redflag</span>
+            <div role="log" aria-label="Chat with Redflag" className="hello" aria-live="polite">
+              <div className="bubble bot">{opening}</div>
+              {chat.map((turn, i) =>
+                turn.role === "user" ? (
+                  <div key={i} className="bubble me">
+                    {turn.content}
+                  </div>
+                ) : (
+                  <div key={i} className="bubble bot">
+                    {turn.content}
+                  </div>
+                ),
+              )}
+              {chatBusy && <div className="bubble bot">…</div>}
+            </div>
+            {chatProblem && (
+              <span className="status bad" role="status">
+                {chatProblem}
+              </span>
+            )}
+            <div className="chatrow">
+              <input
+                className="in"
+                aria-label="Your message to Redflag"
+                placeholder={chatLimit ? "Chat limit reached. Use the form below." : "Type your answer"}
+                disabled={chatLimit}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void sendChat();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn solid small"
+                disabled={!chatInput.trim() || chatBusy || chatLimit}
+                onClick={sendChat}
+              >
+                Send
+              </button>
+            </div>
+            <span className="hint">
+              The chat fills in the answers below. You can also fill them in or change them yourself.
+            </span>
+          </div>
+
           <div role="radiogroup" aria-label="What does your bot do?" className="f" style={{ display: "grid", gap: 10 }}>
             <span className="lab">
               <span>
@@ -831,7 +945,10 @@ export function QuickScanPage({
               value={purpose}
               aria-invalid={showRun.purpose ? "true" : "false"}
               aria-describedby="e-purpose"
-              onChange={(e) => setPurpose(e.target.value)}
+              onChange={(e) => {
+                setPurpose(e.target.value);
+                setPurposeTyped(e.target.value.trim() !== "");
+              }}
             />
             {showRun.purpose && (
               <span className="err" id="e-purpose">

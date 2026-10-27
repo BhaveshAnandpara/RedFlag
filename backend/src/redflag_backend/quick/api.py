@@ -15,6 +15,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from redflag_backend.quick.interview import LIMIT_REPLY, InterviewBody, interview, user_turns
 from redflag_backend.quick.logs import detect_logs
 from redflag_backend.quick.pack import (
     AGENT_RULES,
@@ -26,7 +27,7 @@ from redflag_backend.quick.pack import (
 )
 from redflag_backend.scan.catalog import load_catalog
 from redflag_backend.settings import Settings
-from redflag_backend.setups.llm import SetupLLM
+from redflag_backend.setups.llm import ModelFailure, SetupLLM
 from redflag_backend.setups.models import Endpoint, FieldValue, Rule, SetupData
 from redflag_backend.setups.run_api import RunDeps, launch_run
 from redflag_backend.setups.store import SetupStore
@@ -86,6 +87,7 @@ def build_quick_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/quick-scans")
     recent: deque[float] = deque()
+    recent_chats: deque[float] = deque()
 
     def target(endpoint: Endpoint, key: str | None):  # type: ignore[no-untyped-def]
         return deps.make_target(EndpointConfig(**endpoint.model_dump(), key=key))
@@ -118,6 +120,28 @@ def build_quick_router(
                 }
             )
         return {"tests": tests}
+
+    @router.post("/interview", response_model=None)
+    async def interview_chat(body: InterviewBody) -> dict[str, Any] | JSONResponse:
+        """One turn of the step 2 chat. Nothing is saved, and the endpoint key never comes here."""
+        cap = settings.quick_interview_max_messages
+        if user_turns(body) >= cap:
+            return {"reply": LIMIT_REPLY, "limit_reached": True, "messages_left": 0}
+        now = clock()
+        while recent_chats and now - recent_chats[0] > settings.quick_interview_window_seconds:
+            recent_chats.popleft()
+        if len(recent_chats) >= settings.quick_interviews_per_window:
+            return _error(429, "too_many_chats")
+        recent_chats.append(now)
+        try:
+            answer = await interview(llm, body)
+        except ModelFailure as failure:
+            return _error(failure.status, failure.kind)
+        return {
+            **answer.model_dump(),
+            "limit_reached": False,
+            "messages_left": cap - user_turns(body) - 1,
+        }
 
     @router.post("/check", response_model=None)
     async def check(body: CheckBody) -> dict[str, Any] | JSONResponse:
