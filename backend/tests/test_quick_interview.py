@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from redflag_backend.quick.pack import DEFAULT_RULES
 from tests.helpers import OWNER
 from tests.test_setup_chat import RoleModel
 from tests.test_setup_runs import run_client
@@ -57,6 +58,17 @@ def test_the_reply_says_when_the_interview_is_done_and_defaults_to_not_done() ->
     with run_client(roles=model) as (client, _, _):
         assert chat(client).json()["done"] is True
         assert chat(client).json()["done"] is False
+
+
+def test_the_model_is_told_which_standard_rules_exist_so_it_does_not_repeat_them() -> None:
+    model = RoleModel(interviewer=[said()])
+    with run_client(roles=model) as (client, _, _):
+        chat(client)
+        system = model.calls["interviewer"][0].messages[0].content
+        prompt = model.prompts("interviewer")[0]
+        assert "standard rules" in system and "means the same as one of them" in system
+        for rule in DEFAULT_RULES["agent"]:
+            assert rule in prompt
 
 
 def test_the_prompt_asks_for_done_and_points_to_the_next_button() -> None:

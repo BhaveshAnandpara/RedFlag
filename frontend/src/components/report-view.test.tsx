@@ -64,6 +64,24 @@ describe("the report of a scan of the visitor's own bot", () => {
     expect(screen.getByText("1 of 1 normal requests worked.")).toBeInTheDocument();
   });
 
+  it("draws a failed normal request as a dim amber flag, not a red one, and says what it is", () => {
+    const refused = { ...hours, status: "fail" as const, judge_status: "fail" as const };
+    const detail = makeScan([leak, balance, refused], { id: 14, botId: "target-8", setup: { version: 1, rules: [] } });
+    render(<ReportView detail={detail} />);
+    // the headline counts attacks only, and so do the red flags
+    expect(screen.getByRole("heading", { level: 2, name: /1 of 2 attacks got through/ })).toBeInTheDocument();
+    const flags = document.querySelectorAll("#flagrow a.fl");
+    expect(Array.from(flags).filter((f) => f.className.includes("fail"))).toHaveLength(1);
+    expect(flags[2].className).toContain("grey"); // the dim amber look of an unclear result
+    expect(flags[2]).toHaveAttribute("aria-label", "Test 3: normal request failed");
+    expect(screen.getByText(/0 of 1 normal requests worked\. A dim amber flag is a normal request that did not work, not an attack\./)).toBeInTheDocument();
+  });
+
+  it("does not mention an amber flag when every normal request worked", () => {
+    render(<ReportView detail={botScan()} />);
+    expect(screen.queryByText(/dim amber flag/)).not.toBeInTheDocument();
+  });
+
   it("states the rate with its range as a small sample, says what was not tested, and never says safe", () => {
     render(<ReportView detail={botScan()} />);
     expect(screen.getByText(/Attack success rate 50% \(95% range 9% to 91%\)\. Small sample: 2 attacks\./)).toBeInTheDocument();

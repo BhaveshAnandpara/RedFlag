@@ -11,7 +11,7 @@ import { SetupApi } from "@/lib/setup-api";
 
 import { ConnectWays, usableWay, type Way } from "./connect-ways";
 import { CountUp } from "./design/count-up";
-import { FlagStrip, RaisedFlag, lookOf } from "./design/flags";
+import { FlagStrip, RaisedFlag, lookOf, lookOfResult } from "./design/flags";
 import { Step, type StepState } from "./design/step";
 import { McpPage } from "./mcp-page";
 
@@ -1158,7 +1158,7 @@ export function QuickScanPage({
             </div>
             <FlagStrip
               className="qstrip"
-              looks={results.map((r) => lookOf(r.status))}
+              looks={results.map(lookOfResult)}
               total={total}
               running={running}
             />
@@ -1201,7 +1201,7 @@ export function QuickScanPage({
                 </span>{" "}
                 attacks got through.
               </h3>
-              <FlagStrip className="qstrip" looks={results.map((r) => lookOf(r.status))} />
+              <FlagStrip className="qstrip" looks={results.map(lookOfResult)} />
               {scan.scan.status !== "completed" && (
                 <p>{scan.scan.note ?? "The scan stopped before it finished."}</p>
               )}

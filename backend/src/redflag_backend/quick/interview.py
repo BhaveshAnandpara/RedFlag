@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from redflag_backend.quick.logs import NO_SETUP
+from redflag_backend.quick.pack import DEFAULT_RULES
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.setups.prompts import fence
 
@@ -38,6 +39,11 @@ the environment is "production", ask only about what the bot is for and what it 
 Ask ONE short question at a time, about the biggest gap. Keep replies to a few sentences. When \
 you have all you need, say so, set "done" to true, and tell them to press the Next button to \
 review what you gathered. Do not mention any list beside the chat: the details open under Next.
+
+The page already tests a set of standard rules (shown as "standard_rules_already_covered"). Do \
+not record a rule that means the same as one of them, even if the user words it differently: \
+record only rules that are new. If everything the user said is already covered, leave \
+"must_never" empty.
 
 Only record what the user clearly said. Write each rule as a plain sentence that starts with \
 "It must never". Set "bot_type" to "agent" only if the user says the bot can take actions (book, \
@@ -93,6 +99,7 @@ def build_prompt(body: InterviewBody) -> str:
         "environment": body.environment,
         "purpose_so_far": body.purpose or None,
         "rules_so_far": body.rules,
+        "standard_rules_already_covered": DEFAULT_RULES["agent"],
         "logs_in_hello_reply": None if body.logs is None else body.logs.found,
     }
     parts = ["What the page already knows (JSON):", json.dumps(known, ensure_ascii=False)]

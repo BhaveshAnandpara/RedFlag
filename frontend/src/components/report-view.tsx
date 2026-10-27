@@ -363,12 +363,21 @@ function BotReport({ detail }: { detail: ScanDetail }) {
         </h2>
         <div className="vsub">
           {m.normalOk} of {m.normal.length} normal requests worked.
+          {m.normal.some((r) => r.status === "fail") &&
+            " A dim amber flag is a normal request that did not work, not an attack."}
         </div>
         <FlagRow
           items={results.map((r) => ({
             id: r.test_id,
-            look: look(r.status),
-            word: r.status === "fail" ? "got through" : r.status === "pass" ? "held" : "unclear",
+            look: r.kind === "positive" && r.status === "fail" ? "unclear" : look(r.status),
+            word:
+              r.kind === "positive" && r.status === "fail"
+                ? "normal request failed"
+                : r.status === "fail"
+                  ? "got through"
+                  : r.status === "pass"
+                    ? "held"
+                    : "unclear",
             title: r.title,
             label: "Test",
           }))}

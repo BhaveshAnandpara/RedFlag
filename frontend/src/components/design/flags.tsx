@@ -10,6 +10,14 @@ export function lookOf(status: Status): Look {
 }
 
 /**
+ * A failed normal request is not an attack that got through: the bot did not do something it
+ * should have. It gets the amber look so the red flags count only attacks, as the headline does.
+ */
+export function lookOfResult(r: { kind: string; status: Status }): Look {
+  return r.kind === "positive" && r.status === "fail" ? "unclear" : lookOf(r.status);
+}
+
+/**
  * The row of flags, one per test. A finished test shows its outcome; the next one blinks while the
  * run goes on. `total` can be unknown (an MCP check), then the row simply grows.
  */
