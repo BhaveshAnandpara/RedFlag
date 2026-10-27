@@ -87,9 +87,12 @@ async function connectOpenAI(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText("Is this your bot's answer?");
 }
 
+const stagingTick = () => screen.getByRole("checkbox", { name: /dev or test copy/ });
+
 async function confirmedAnswer(backend: FakeBackend) {
   const user = await opened(backend);
   await connectOpenAI(user);
+  await user.click(stagingTick());
   await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
   await screen.findByRole("radio", { name: /Answers questions/ });
   return user;
@@ -298,11 +301,58 @@ describe("pasting anything", () => {
   });
 });
 
+describe("staging and production", () => {
+  const yes = () => screen.getByRole("button", { name: "Yes, that's my bot's answer" });
+
+  it("starts on Staging and will not go on until the dev or test copy box is ticked", async () => {
+    const user = await opened(new FakeBackend());
+    expect(screen.getByRole("radio", { name: "Staging" })).toBeChecked();
+    await connectOpenAI(user);
+    expect(yes()).toBeDisabled();
+    expect(screen.getByText(/dev or test copy, not a published bot/)).toBeInTheDocument();
+    await user.click(stagingTick());
+    expect(yes()).toBeEnabled();
+  });
+
+  it("asks for no tick in Production and says it is the OWASP tests you choose from", async () => {
+    const user = await opened(new FakeBackend());
+    await user.click(screen.getByRole("radio", { name: "Production" }));
+    expect(screen.queryByRole("checkbox", { name: /dev or test copy/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Only the OWASP top 10 tests/)).toBeInTheDocument();
+    await connectOpenAI(user);
+    expect(yes()).toBeEnabled();
+    expect(screen.queryByText(/We don't see logs/)).not.toBeInTheDocument();
+  });
+
+  it("says plainly that logs are missing, and that they are not mandatory, in Staging", async () => {
+    const user = await opened(new FakeBackend());
+    await connectOpenAI(user);
+    expect(
+      screen.getByText(/We don't see logs in your bot's response\..*it isn't mandatory\./),
+    ).toBeInTheDocument();
+    await user.click(stagingTick());
+    expect(yes()).toBeEnabled();
+  });
+
+  it("says the logs were found, with where, when the supervisor read them in the reply", async () => {
+    const backend = new FakeBackend();
+    backend.hello = {
+      ...backend.hello,
+      logs: { found: true, fields: ["_meta.logs"], shape: "one entry per tool run" },
+    } as typeof backend.hello;
+    const user = await opened(backend);
+    await connectOpenAI(user);
+    expect(screen.getByText(/We found logs in your bot's response \(_meta\.logs\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/We don't see logs/)).not.toBeInTheDocument();
+  });
+});
+
 describe("the hello check", () => {
   it("shows the bot's answer as a chat, and a yes closes step 1 with a summary and opens step 2", async () => {
     const user = await opened(new FakeBackend());
     await connectOpenAI(user);
     expect(screen.getByText("hello from the bot")).toBeInTheDocument();
+    await user.click(stagingTick());
     await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
     expect(await screen.findByRole("radio", { name: /Takes actions too/ })).toBeInTheDocument();
     expect(screen.getByText("api.groq.com · answered hello")).toBeInTheDocument();
@@ -547,14 +597,14 @@ describe("running the starter pack", () => {
 });
 
 describe("choosing how to connect", () => {
-  it("offers HTTP, curl and MCP in step 1 and says what it works with", async () => {
+  it("offers HTTP and curl in step 1 and says what it works with", async () => {
     new FakeBackend().install();
     render(<QuickScanPage apiUrl={API} />);
     const ways = within(screen.getByRole("radiogroup", { name: "How do you connect?" }));
     expect(ways.getByRole("radio", { name: "HTTP endpoint" })).toBeChecked();
     expect(ways.getByRole("radio", { name: "curl command" })).toBeInTheDocument();
-    expect(ways.getByRole("radio", { name: "MCP server" })).toBeInTheDocument();
-    expect(screen.getByText("Works with: HTTP bots, curl or code, MCP servers")).toBeInTheDocument();
+    expect(ways.queryByRole("radio", { name: "MCP server" })).not.toBeInTheDocument();
+    expect(screen.getByText("Works with: HTTP bots, curl or code")).toBeInTheDocument();
   });
 
   it("opens the paste box for curl", async () => {
@@ -564,18 +614,10 @@ describe("choosing how to connect", () => {
     expect(screen.getByLabelText(/Paste a link, a key/)).toBeInTheDocument();
   });
 
-  it("shows the MCP connect fields, with the picker still there, when MCP is chosen", async () => {
-    new FakeBackend().install();
-    render(<QuickScanPage apiUrl={API} />);
-    await userEvent.setup().click(screen.getByRole("radio", { name: "MCP server" }));
-    expect(screen.getByRole("button", { name: "Look at the tools" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "MCP server" })).toBeChecked();
-    expect(screen.queryByLabelText(/Your bot's address/)).not.toBeInTheDocument();
-  });
-
-  it("starts on MCP when the old MCP link is followed", () => {
+  it("falls back to the HTTP form when the old MCP link is followed", () => {
     new FakeBackend().install();
     render(<QuickScanPage apiUrl={API} initialWay="mcp" />);
-    expect(screen.getByRole("radio", { name: "MCP server" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "HTTP endpoint" })).toBeChecked();
+    expect(screen.getByLabelText(/Your bot's address/)).toBeInTheDocument();
   });
 });

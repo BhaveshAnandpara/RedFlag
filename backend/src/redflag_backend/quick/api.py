@@ -15,6 +15,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from redflag_backend.quick.logs import detect_logs
 from redflag_backend.quick.pack import (
     AGENT_RULES,
     BOT_TYPES,
@@ -23,6 +24,7 @@ from redflag_backend.quick.pack import (
     starter_tests,
 )
 from redflag_backend.settings import Settings
+from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.setups.models import Endpoint, FieldValue, Rule, SetupData
 from redflag_backend.setups.run_api import RunDeps, launch_run
 from redflag_backend.setups.store import SetupStore
@@ -63,6 +65,7 @@ def build_quick_router(
     store: SetupStore,
     deps: RunDeps,
     clock: Callable[[], float],
+    llm: SetupLLM,
 ) -> APIRouter:
     router = APIRouter(prefix="/quick-scans")
     recent: deque[float] = deque()
@@ -84,12 +87,15 @@ def build_quick_router(
             return _error(429, "too_many_checks")
         recent.append(now)
         seen = await target(body.endpoint, body.key).test_connection()
+        # Logs are optional, so a reply that could not be read is "unknown" (null), not a failure.
+        logs = await detect_logs(llm, seen.raw_reply) if seen.status == "ok" else None
         return {
             "status": seen.status,
             "http_status": seen.http_status,
             "raw_reply": seen.raw_reply,
             "parsed_reply": seen.parsed_reply,
             "error": seen.error,
+            "logs": logs.model_dump() if logs else None,
         }
 
     @router.post("", status_code=202, response_model=None)

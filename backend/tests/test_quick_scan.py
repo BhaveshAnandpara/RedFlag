@@ -20,6 +20,7 @@ from redflag_backend.quick.pack import (
 from redflag_backend.scan.catalog import load_catalog
 from tests.helpers import OWNER, TitleJudge, wait_for_scan
 from tests.test_setup_api import KEY
+from tests.test_setup_chat import RoleModel
 from tests.test_setup_runs import requests_seen, run_client
 from tests.test_targets import StandIn
 
@@ -168,6 +169,55 @@ def test_the_hello_check_has_a_limit_so_it_cannot_be_used_to_hammer_a_server() -
         blocked = check(client)
         assert blocked.status_code == 429 and blocked.json()["error"]["kind"] == "too_many_checks"
         assert len(endpoint.requests) == 3
+
+
+def logs_answer(found: bool, fields: list[str] | None = None, shape: str = "") -> str:
+    return json.dumps({"found": found, "fields": fields or [], "shape": shape})
+
+
+def test_the_hello_check_says_whether_the_reply_carries_logs_and_what_they_look_like() -> None:
+    model = RoleModel(
+        supervisor=[logs_answer(True, ["_meta.logs"], "tool name and arguments per step")]
+    )
+    with run_client(roles=model) as (client, _, _):
+        body = check(client).json()
+        assert body["status"] == "ok"
+        assert body["logs"] == {
+            "found": True,
+            "fields": ["_meta.logs"],
+            "shape": "tool name and arguments per step",
+        }
+
+
+def test_a_reply_without_logs_is_reported_as_none_found_and_the_hello_still_succeeds() -> None:
+    with run_client(roles=RoleModel(supervisor=[logs_answer(False)])) as (client, _, _):
+        body = check(client).json()
+        assert body["status"] == "ok" and body["logs"] == {
+            "found": False,
+            "fields": [],
+            "shape": "",
+        }
+
+
+def test_when_the_model_cannot_read_the_reply_logs_are_unknown_not_a_failed_hello() -> None:
+    model = RoleModel(supervisor=["not json", "still not json"])
+    with run_client(roles=model) as (client, _, _):
+        body = check(client).json()
+        assert body["status"] == "ok" and body["logs"] is None
+
+
+def test_the_bots_reply_goes_to_the_model_fenced_as_data_and_a_failed_hello_asks_nothing() -> None:
+    model = RoleModel(supervisor=[logs_answer(False)])
+    with run_client(roles=model) as (client, _, _):
+        check(client)
+        prompt = model.prompts("supervisor")[0]
+        assert "<<<BOT REPLY" in prompt and "hello from the bot" in prompt
+    failing = StandIn(lambda request: httpx.Response(401, text="nope"))
+    model = RoleModel(supervisor=[logs_answer(True, ["logs"])])
+    with run_client(stand_in=failing, roles=model) as (client, _, _):
+        body = check(client).json()
+        assert body["status"] == "error" and body["logs"] is None
+        assert model.prompts("supervisor") == []
 
 
 # --- setting up and running in one call -----------------------------------------------------

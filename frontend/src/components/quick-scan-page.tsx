@@ -9,7 +9,7 @@ import type { ScanDetail, ScanResult } from "@/lib/scan";
 import type { Endpoint } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
-import { ConnectWays, type Way } from "./connect-ways";
+import { ConnectWays, usableWay, type Way } from "./connect-ways";
 import { CountUp } from "./design/count-up";
 import { FlagStrip, RaisedFlag, lookOf } from "./design/flags";
 import { Step, type StepState } from "./design/step";
@@ -17,7 +17,15 @@ import { McpPage } from "./mcp-page";
 
 type Kind = "chatbot" | "agent";
 type Rule = { t: string; on: boolean; own?: boolean };
-type Hello = { sig: string; ok: boolean; reply: string; error: string };
+type Env = "staging" | "production";
+/** What the supervisor made of the hello reply: null when it could not say. */
+type Logs = { found: boolean; fields: string[]; shape: string } | null;
+type Hello = { sig: string; ok: boolean; reply: string; error: string; logs: Logs };
+
+const NO_LOGS =
+  "We don't see logs in your bot's response. We can test your bot a lot better if it returns logs with each response, but it isn't mandatory.";
+const STAGING_TICK_REQUIRED =
+  "Tick the box to confirm this is a dev or test copy, not a published bot.";
 type Format = { id: "flowise" | "openwebui" | "openai" | "unknown"; label: string };
 
 /** Reads the address to tell which kind of bot it points at, so the person never picks a platform. */
@@ -113,14 +121,17 @@ export function QuickScanPage({
   // key that starting it returned, kept only here in memory.
   const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
   const [stage, setStage] = useState<1 | 2 | 3>(1);
-  const [way, setWay] = useState<Way>(initialWay);
+  const [way, setWay] = useState<Way>(usableWay(initialWay));
+  // Staging is the safer starting point: it asks for the "dev or test copy" tick before going on.
+  const [env, setEnv] = useState<Env>("staging");
+  const [stagingTick, setStagingTick] = useState(false);
 
   // step 1
   const [addr, setAddr] = useState("");
   const [model, setModel] = useState("");
   // The key lives only here, in memory: sent with the hello check and the run, never stored.
   const [key, setKey] = useState("");
-  const [pasteOpen, setPasteOpen] = useState(initialWay === "curl");
+  const [pasteOpen, setPasteOpen] = useState(usableWay(initialWay) === "curl");
   const [pasted, setPasted] = useState("");
   const [pasteNote, setPasteNote] = useState<{ text: string; bad: boolean } | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
@@ -239,7 +250,12 @@ export function QuickScanPage({
     setBusy(true);
     setHelloProblem(null);
     const sig = signature;
-    const result = await api.call<{ status: "ok" | "error"; parsed_reply: string; error: string }>(
+    const result = await api.call<{
+      status: "ok" | "error";
+      parsed_reply: string;
+      error: string;
+      logs?: Logs;
+    }>(
       "POST",
       "/quick-scans/check",
       { endpoint: buildEndpoint(fields), key: key || null },
@@ -254,6 +270,7 @@ export function QuickScanPage({
       ok: result.data.status === "ok",
       reply: result.data.parsed_reply,
       error: result.data.error,
+      logs: result.data.logs ?? null,
     });
   }
 
@@ -386,6 +403,58 @@ export function QuickScanPage({
           summary={`${hostOf(address)} · answered hello`}
           onChange={running ? undefined : () => setStage(1)}
         >
+          <div className="f">
+            <div className="ways" role="radiogroup" aria-label="Where is your bot?">
+              {(
+                [
+                  ["staging", "Staging"],
+                  ["production", "Production"],
+                ] as [Env, string][]
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="way"
+                  role="radio"
+                  aria-checked={env === id}
+                  onClick={() => setEnv(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="hint">
+              {env === "staging"
+                ? "In development, not published. The full scan runs."
+                : "Live. Only the OWASP top 10 tests, which you choose from."}
+            </span>
+          </div>
+          {env === "staging" && (
+            <div
+              id="staging-tick"
+              className={`sandbox ${stagingTick ? "on" : ""}`}
+              role="checkbox"
+              aria-checked={stagingTick}
+              aria-label="This is a dev or test copy, not published"
+              tabIndex={0}
+              onClick={() => setStagingTick(!stagingTick)}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  setStagingTick(!stagingTick);
+                }
+              }}
+            >
+              <span className="box" />
+              <div>
+                <b>This is a dev or test copy, not published.</b>
+                <span>
+                  Redflag takes your word for it. Tests may make your bot do real things, so only
+                  use a copy you can reset.
+                </span>
+              </div>
+            </div>
+          )}
           {ways}
           <p className="legend">
             Fields marked <span className="req">*</span> are required.
@@ -635,16 +704,31 @@ export function QuickScanPage({
               <div className="bubble me">Hello</div>
               <span className="who">your bot</span>
               <div className="bubble bot">{shownHello.reply}</div>
+              {env === "staging" && (
+                <span className="hint" role="status">
+                  {shownHello.logs?.found
+                    ? `We found logs in your bot's response (${shownHello.logs.fields.join(", ") || "in the reply"}). Findings can be confirmed from them.`
+                    : NO_LOGS}
+                </span>
+              )}
               <div className="confirm">
                 <b>Is this your bot&apos;s answer?</b>
                 <div className="actions">
-                  <button type="button" className="btn solid small" onClick={() => setStage(2)}>
+                  <button
+                    type="button"
+                    className="btn solid small"
+                    disabled={env === "staging" && !stagingTick}
+                    onClick={() => setStage(2)}
+                  >
                     Yes, that&apos;s my bot&apos;s answer
                   </button>
                   <button type="button" className="btn ghost small" onClick={() => setDenied(signature)}>
                     No, that&apos;s not right
                   </button>
                 </div>
+                {env === "staging" && !stagingTick && (
+                  <span className="err">{STAGING_TICK_REQUIRED}</span>
+                )}
               </div>
             </div>
           )}

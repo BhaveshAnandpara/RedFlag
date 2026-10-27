@@ -219,7 +219,7 @@ def create_app(
     )
     ci_tokens = CiTokenStore(engine, clock=now)
     app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))
-    app.include_router(build_quick_router(settings, setup_store, run_deps, now))
+    app.include_router(build_quick_router(settings, setup_store, run_deps, now, setup_llm))
     app.include_router(
         build_setup_router(
             settings,
