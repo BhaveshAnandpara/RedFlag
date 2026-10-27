@@ -6,6 +6,6 @@ import { HeaderView } from "./header-view";
 
 export function DesignHeader() {
   const path = usePathname();
-  const current = path === "/quick" || path.startsWith("/quick/") ? "quick" : path === "/mcp" || path.startsWith("/mcp/") ? "mcp" : null;
+  const current = path === "/quick" || path.startsWith("/quick/") ? "quick" : null;
   return <HeaderView current={current} />;
 }

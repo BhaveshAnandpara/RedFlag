@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { hostOf, problemFor, readOpenScan, reportPath } from "@/lib/open-api";
 import { mcpGroup } from "@/lib/report-model";
@@ -61,7 +61,16 @@ function refusal(status: number, body: unknown): string {
   return problemFor(status, body);
 }
 
-export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: number }) {
+export function McpPage({
+  apiUrl,
+  pollMs = 2000,
+  ways,
+}: {
+  apiUrl: string;
+  pollMs?: number;
+  /** The way-to-connect picker, shown at the top of step 1 when this page is part of Test your bot. */
+  ways?: ReactNode;
+}) {
   // No password: the backend answers these calls openly. A scan is read back with the secret view
   // key that starting it returned, kept only here in memory.
   const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
@@ -287,6 +296,7 @@ export function McpPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: nu
           summary={`${hostOf(address)} · ${tools.length} tools`}
           onChange={running ? undefined : () => setStage(1)}
         >
+          {ways}
           <p className="legend">
             Fields marked <span className="req">*</span> are required.
           </p>

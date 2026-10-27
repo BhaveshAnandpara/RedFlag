@@ -328,7 +328,7 @@ describe("the report of a check of an MCP server", () => {
 
   it("offers to check the server again", () => {
     render(<ReportView detail={mcpScan()} />);
-    expect(screen.getByRole("link", { name: "Check again" })).toHaveAttribute("href", "/mcp");
+    expect(screen.getByRole("link", { name: "Check again" })).toHaveAttribute("href", "/quick?connect=mcp");
   });
 
   it("still opens a check saved before the tool names were kept", () => {

@@ -9,9 +9,11 @@ import type { ScanDetail, ScanResult } from "@/lib/scan";
 import type { Endpoint } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
 
+import { ConnectWays, type Way } from "./connect-ways";
 import { CountUp } from "./design/count-up";
 import { FlagStrip, RaisedFlag, lookOf } from "./design/flags";
 import { Step, type StepState } from "./design/step";
+import { McpPage } from "./mcp-page";
 
 type Kind = "chatbot" | "agent";
 type Rule = { t: string; on: boolean; own?: boolean };
@@ -98,18 +100,27 @@ function focusFirst(ids: (string | null)[]) {
   el?.scrollIntoView?.({ block: "center", behavior: "smooth" });
 }
 
-export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollMs?: number }) {
+export function QuickScanPage({
+  apiUrl,
+  pollMs = 2000,
+  initialWay = "http",
+}: {
+  apiUrl: string;
+  pollMs?: number;
+  initialWay?: Way;
+}) {
   // No password: the backend answers these calls openly. A scan is read back with the secret view
   // key that starting it returned, kept only here in memory.
   const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
   const [stage, setStage] = useState<1 | 2 | 3>(1);
+  const [way, setWay] = useState<Way>(initialWay);
 
   // step 1
   const [addr, setAddr] = useState("");
   const [model, setModel] = useState("");
   // The key lives only here, in memory: sent with the hello check and the run, never stored.
   const [key, setKey] = useState("");
-  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(initialWay === "curl");
   const [pasted, setPasted] = useState("");
   const [pasteNote, setPasteNote] = useState<{ text: string; bad: boolean } | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
@@ -341,6 +352,15 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
   const state = (n: number): StepState => (n < stage ? "done" : n === stage ? "active" : "locked");
   const running = stage === 3 && !finished && !scanProblem;
 
+  function chooseWay(next: Way) {
+    setWay(next);
+    if (next === "curl") setPasteOpen(true);
+  }
+  const ways = <ConnectWays value={way} onChange={chooseWay} />;
+
+  // Choosing an MCP server runs the MCP check's own steps, unchanged, in place of the bot steps.
+  if (way === "mcp") return <McpPage apiUrl={apiUrl} pollMs={pollMs} ways={ways} />;
+
   return (
     <main className="d-quick">
       <div className="intro">
@@ -366,6 +386,7 @@ export function QuickScanPage({ apiUrl, pollMs = 2000 }: { apiUrl: string; pollM
           summary={`${hostOf(address)} · answered hello`}
           onChange={running ? undefined : () => setStage(1)}
         >
+          {ways}
           <p className="legend">
             Fields marked <span className="req">*</span> are required.
           </p>

@@ -530,3 +530,8 @@
   .rfd header { gap: 16px; padding: 0 16px; }
   .rfd nav { display: none; }
 }
+
+.d-quick .ways, .d-mcp .ways { display: flex; gap: 8px; flex-wrap: wrap; }
+.d-quick .way, .d-mcp .way { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
+.d-quick .way[aria-checked="true"], .d-mcp .way[aria-checked="true"] { background: var(--ink); color: #000; border-color: var(--ink); }
+.d-quick .f > .hint, .d-mcp .f > .hint { display: block; margin-top: 8px; }

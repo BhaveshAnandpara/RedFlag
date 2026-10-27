@@ -896,7 +896,7 @@ function McpReport({ detail }: { detail: ScanDetail }) {
             needed again because Redflag never stores it.
           </p>
         </div>
-        <a className="btn solid" href="/mcp">
+        <a className="btn solid" href="/quick?connect=mcp">
           Check again
         </a>
       </Rise>

@@ -6,6 +6,8 @@ import { makeResult, makeScan } from "@/test-support/fixtures";
 
 import { QuickScanPage } from "./quick-scan-page";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 const API = "https://api.example.test";
 const KEY = "typed-endpoint-key-123";
 const VIEW_KEY = "view-key-from-start";
@@ -541,5 +543,39 @@ describe("running the starter pack", () => {
     await user.click(screen.getByRole("button", { name: "Run my scan" }));
     expect(await screen.findByText("Turn two question")).toBeInTheDocument();
     expect(within(document.body).getByText("Turn one answer")).toBeInTheDocument();
+  });
+});
+
+describe("choosing how to connect", () => {
+  it("offers HTTP, curl and MCP in step 1 and says what it works with", async () => {
+    new FakeBackend().install();
+    render(<QuickScanPage apiUrl={API} />);
+    const ways = within(screen.getByRole("radiogroup", { name: "How do you connect?" }));
+    expect(ways.getByRole("radio", { name: "HTTP endpoint" })).toBeChecked();
+    expect(ways.getByRole("radio", { name: "curl command" })).toBeInTheDocument();
+    expect(ways.getByRole("radio", { name: "MCP server" })).toBeInTheDocument();
+    expect(screen.getByText("Works with: HTTP bots, curl or code, MCP servers")).toBeInTheDocument();
+  });
+
+  it("opens the paste box for curl", async () => {
+    new FakeBackend().install();
+    render(<QuickScanPage apiUrl={API} />);
+    await userEvent.setup().click(screen.getByRole("radio", { name: "curl command" }));
+    expect(screen.getByLabelText(/Paste a link, a key/)).toBeInTheDocument();
+  });
+
+  it("shows the MCP connect fields, with the picker still there, when MCP is chosen", async () => {
+    new FakeBackend().install();
+    render(<QuickScanPage apiUrl={API} />);
+    await userEvent.setup().click(screen.getByRole("radio", { name: "MCP server" }));
+    expect(screen.getByRole("button", { name: "Look at the tools" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "MCP server" })).toBeChecked();
+    expect(screen.queryByLabelText(/Your bot's address/)).not.toBeInTheDocument();
+  });
+
+  it("starts on MCP when the old MCP link is followed", () => {
+    new FakeBackend().install();
+    render(<QuickScanPage apiUrl={API} initialWay="mcp" />);
+    expect(screen.getByRole("radio", { name: "MCP server" })).toBeChecked();
   });
 });
