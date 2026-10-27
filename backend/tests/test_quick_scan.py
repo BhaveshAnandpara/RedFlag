@@ -295,7 +295,8 @@ def offered(client: TestClient, bot_type: str = "chatbot") -> list[dict[str, Any
         json={"bot_type": bot_type, "must_never": all_rules(bot_type)},
     )
     assert response.status_code == 200, response.text
-    return response.json()["tests"]
+    tests: list[dict[str, Any]] = response.json()["tests"]
+    return tests
 
 
 def test_the_production_list_is_only_attacks_and_never_makes_an_agent_act() -> None:
