@@ -82,6 +82,17 @@
   .who.r { justify-self: end; }
   .confirm { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; background: #0d0d0d; border: 1px solid var(--line); }
   .confirm b { font-weight: 500; }
+  /* the connect picker, the Staging / Production toggle and the step 2 chat on the real page */
+  .ways { display: flex; gap: 8px; flex-wrap: wrap; }
+  .way { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
+  .way[aria-checked="true"] { background: var(--ink); color: #000; border-color: var(--ink); }
+  .f > .hint { display: block; margin-top: 8px; }
+  .chatbox { display: grid; gap: 14px; }
+  .asking { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .asking i { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); animation: blink 1s ease-in-out infinite; }
+  .chatrow { display: flex; gap: 8px; align-items: center; }
+  .chatrow .in { flex: 1 1 0; min-width: 0; width: auto; height: 44px; }
+  .chatrow .btn { flex: none; height: 44px; padding: 0 18px; }
 
   /* describe */
   .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

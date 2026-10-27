@@ -163,6 +163,8 @@ export function QuickScanPage({
   const [chatLimit, setChatLimit] = useState(false);
   // Step 2 opens on the chat alone. The details below it open with Next, and the chat stays.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [chatNudge, setChatNudge] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const [purposeTyped, setPurposeTyped] = useState(false);
   // Production only: the tests offered, and which of them are ticked. null until they are shown.
   const [picks, setPicks] = useState<Pick[] | null>(null);
@@ -321,9 +323,19 @@ export function QuickScanPage({
       }What is this bot for, and what must it never do?`
     : "What is this bot for, and what must it never do?";
 
+  // Redflag has asked something and is waiting: the chat is empty, or its last turn is Redflag's.
+  const chatWaiting = !chatBusy && !chatLimit && (chat.length === 0 || chat[chat.length - 1].role === "assistant");
+
   async function sendChat() {
     const message = chatInput.trim();
-    if (!message || chatBusy || chatLimit) return;
+    if (chatBusy || chatLimit) return;
+    if (!message) {
+      // Send stays pressable: an empty press shows what to do instead of doing nothing.
+      setChatNudge(true);
+      chatInputRef.current?.focus();
+      return;
+    }
+    setChatNudge(false);
     const history: Turn[] = [{ role: "assistant", content: opening }, ...chat];
     setChat([...chat, { role: "user", content: message }]);
     setChatInput("");
@@ -849,22 +861,33 @@ export function QuickScanPage({
           summary={`${kind === "agent" ? "Agent" : "Chatbot"} · ${onCount} rule${onCount === 1 ? "" : "s"}`}
           onChange={running ? undefined : () => setStage(2)}
         >
-          <div className="hello">
-            <span className="who">Redflag</span>
-            <div role="log" aria-label="Chat with Redflag" className="hello" aria-live="polite">
-              <div className="bubble bot">{opening}</div>
-              {chat.map((turn, i) =>
-                turn.role === "user" ? (
-                  <div key={i} className="bubble me">
-                    {turn.content}
-                  </div>
+          <div className="chatbox">
+            <div className="hello">
+              <span className="asking">
+                {chatWaiting ? (
+                  <>
+                    <i />
+                    Redflag asked you a question · waiting for your answer
+                  </>
                 ) : (
-                  <div key={i} className="bubble bot">
-                    {turn.content}
-                  </div>
-                ),
-              )}
-              {chatBusy && <div className="bubble bot">…</div>}
+                  "Redflag"
+                )}
+              </span>
+              <div role="log" aria-label="Chat with Redflag" className="hello" aria-live="polite">
+                <div className="bubble bot">{opening}</div>
+                {chat.map((turn, i) =>
+                  turn.role === "user" ? (
+                    <div key={i} className="bubble me">
+                      {turn.content}
+                    </div>
+                  ) : (
+                    <div key={i} className="bubble bot">
+                      {turn.content}
+                    </div>
+                  ),
+                )}
+                {chatBusy && <div className="bubble bot">…</div>}
+              </div>
             </div>
             {chatProblem && (
               <span className="status bad" role="status">
@@ -873,12 +896,18 @@ export function QuickScanPage({
             )}
             <div className="chatrow">
               <input
+                ref={chatInputRef}
                 className="in"
                 aria-label="Your message to Redflag"
-                placeholder={chatLimit ? "Chat limit reached. Use the form below." : "Type your answer"}
+                placeholder={
+                  chatLimit ? "Chat limit reached. Use the form below." : "Type your answer to Redflag's question"
+                }
                 disabled={chatLimit}
                 value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
+                onChange={(e) => {
+                  setChatInput(e.target.value);
+                  setChatNudge(false);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -886,34 +915,31 @@ export function QuickScanPage({
                   }
                 }}
               />
-              <button
-                type="button"
-                className="btn solid small"
-                disabled={!chatInput.trim() || chatBusy || chatLimit}
-                onClick={sendChat}
-              >
+              <button type="button" className="btn solid" disabled={chatLimit} onClick={sendChat}>
                 Send
               </button>
+              {!detailsOpen && (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={chatBusy}
+                  onClick={() => setDetailsOpen(true)}
+                >
+                  Next
+                </button>
+              )}
             </div>
+            {chatNudge && (
+              <span className="status" role="status">
+                Type your answer first, or press Next to skip the chat.
+              </span>
+            )}
             <span className="hint">
               {detailsOpen
                 ? "The chat fills in the answers below. You can also fill them in or change them yourself."
-                : "Answer here, or press Next to fill in the details yourself."}
+                : "Redflag asked a question above and is waiting for your answer. A short answer is fine. Or press Next to skip the chat and fill in the details yourself."}
             </span>
           </div>
-
-          {!detailsOpen && (
-            <div className="actions">
-              <button
-                type="button"
-                className="btn solid"
-                disabled={chatBusy}
-                onClick={() => setDetailsOpen(true)}
-              >
-                Next
-              </button>
-            </div>
-          )}
 
           {detailsOpen && (
             <>

@@ -435,6 +435,19 @@ describe("step 2: what the bot does and what it must never do", () => {
 });
 
 describe("the step 2 chat", () => {
+  /** Step 1 done, step 2 open on the chat alone: no Next pressed yet. */
+  async function confirmedAnswerOnChat(backend = new FakeBackend()) {
+    backend.install();
+    const user = userEvent.setup();
+    render(<QuickScanPage apiUrl={API} pollMs={5} />);
+    await screen.findByRole("heading", { name: "Quick scan" });
+    await connectOpenAI(user);
+    await user.click(stagingTick());
+    await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    await screen.findByRole("log", { name: "Chat with Redflag" });
+    return user;
+  }
+
   const said = (extra: Record<string, unknown> = {}) => ({
     reply: "Thanks. What must it never do?",
     asking: "what it must never do",
@@ -475,6 +488,32 @@ describe("the step 2 chat", () => {
     expect(await screen.findByRole("radio", { name: /Answers questions/ })).toBeInTheDocument();
     expect(screen.getByRole("log", { name: "Chat with Redflag" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
+  });
+
+  it("makes it plain that Redflag asked a question and is waiting, and that the person can move on", async () => {
+    await confirmedAnswerOnChat();
+    expect(screen.getByText(/Redflag asked you a question · waiting for your answer/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Type your answer to Redflag's question")).toBeInTheDocument();
+    expect(screen.getByText(/Or press Next to skip the chat and fill in the details yourself/)).toBeInTheDocument();
+  });
+
+  it("keeps Send pressable when empty, and says what to do instead of doing nothing", async () => {
+    const backend = new FakeBackend();
+    const user = await confirmedAnswerOnChat(backend);
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send).toBeEnabled();
+    await user.click(send);
+    expect(screen.getByText("Type your answer first, or press Next to skip the chat.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Your message to Redflag")).toHaveFocus();
+    expect(backend.bodies("/quick-scans/interview")).toEqual([]);
+    await user.type(screen.getByLabelText("Your message to Redflag"), "a");
+    expect(screen.queryByText(/Type your answer first/)).not.toBeInTheDocument();
+  });
+
+  it("puts Next beside Send, in the same row", async () => {
+    await confirmedAnswerOnChat();
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(screen.getByRole("button", { name: "Next" }).parentElement).toBe(send.parentElement);
   });
 
   it("sends the message with the chat so far and what the page knows, and fills in what was said", async () => {
