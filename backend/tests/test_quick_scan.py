@@ -15,6 +15,7 @@ from redflag_backend.quick.pack import (
     AGENT_RULES,
     CHATBOT_RULES,
     DEFAULT_RULES,
+    production_tests,
     starter_tests,
 )
 from redflag_backend.scan.catalog import load_catalog
@@ -283,6 +284,97 @@ def test_an_agent_scan_needs_the_sandbox_box_ticked_and_gets_the_action_tests() 
         )
         assert started.status_code == 202 and started.json()["test_count"] == 43
         wait_for_scan(client, started.json()["scan_id"], timeout=90)
+
+
+# --- production: the OWASP tests the owner picks from --------------------------------------------
+
+
+def offered(client: TestClient, bot_type: str = "chatbot") -> list[dict[str, Any]]:
+    response = client.post(
+        "/quick-scans/production-tests",
+        json={"bot_type": bot_type, "must_never": all_rules(bot_type)},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["tests"]
+
+
+def test_the_production_list_is_only_attacks_and_never_makes_an_agent_act() -> None:
+    for bot_type in ("chatbot", "agent"):
+        tests = production_tests(bot_type, all_rules(bot_type), [])
+        assert tests and all(t["kind"] == "negative" and not t["real_action"] for t in tests)
+    agent = production_tests("agent", all_rules("agent"), [])
+    assert not any(t["risk"] == "LLM06" for t in agent)
+    full = {t["id"]: t for t in starter_tests("agent", all_rules("agent"), [])}
+    assert all(full[t["id"]] == t for t in agent)  # the same tests, the same ids
+
+
+def test_the_production_list_names_each_test_by_its_owasp_risk_and_runs_nothing() -> None:
+    with run_client() as (client, _, endpoint):
+        tests = offered(client)
+        assert tests[0].keys() == {"id", "title", "goal", "risk", "risk_name", "severity"}
+        assert {t["risk"] for t in tests} <= CATALOG_IDS
+        assert all(t["risk_name"] and t["risk_name"] != t["risk"] for t in tests)
+        assert endpoint.requests == []
+        assert client.get("/setups", headers=OWNER).json()["setups"] == []
+
+
+def test_the_production_list_refuses_a_bad_bot_type_and_no_rules() -> None:
+    with run_client() as (client, _, _):
+        bad = client.post(
+            "/quick-scans/production-tests", json={"bot_type": "x", "must_never": ["a"]}
+        )
+        none = client.post(
+            "/quick-scans/production-tests", json={"bot_type": "chatbot", "must_never": [" "]}
+        )
+        assert bad.json()["error"]["kind"] == "bad_bot_type"
+        assert none.json()["error"]["kind"] == "rules_required"
+
+
+def test_a_production_scan_runs_only_the_tests_picked_and_an_agent_needs_no_sandbox_tick() -> None:
+    with run_client() as (client, _, _):
+        tests = offered(client, "agent")
+        picked = [tests[0]["id"], tests[2]["id"]]
+        started = quick(
+            client,
+            bot_type="agent",
+            must_never=all_rules("agent"),
+            environment="production",
+            test_ids=picked,
+        )
+        assert started.status_code == 202 and started.json()["test_count"] == 2
+        scan = wait_for_scan(client, started.json()["scan_id"], timeout=90)
+        assert {r["test_id"] for r in scan["results"]} == set(picked)
+
+
+def test_a_production_scan_needs_a_pick_and_refuses_a_test_that_was_not_offered() -> None:
+    with run_client() as (client, _, _):
+        none = quick(client, environment="production")
+        empty = quick(client, environment="production", test_ids=[])
+        # g-99 is not offered, and neither is a real-action test of the full pack
+        action = next(
+            t["id"] for t in starter_tests("agent", all_rules("agent"), []) if t["real_action"]
+        )
+        unknown = quick(client, environment="production", test_ids=["g-99"])
+        acting = quick(
+            client,
+            bot_type="agent",
+            must_never=all_rules("agent"),
+            environment="production",
+            test_ids=[action],
+        )
+        for refused, kind in ((none, "no_tests_selected"), (empty, "no_tests_selected")):
+            assert refused.status_code == 422 and refused.json()["error"]["kind"] == kind
+        for refused in (unknown, acting):
+            assert refused.status_code == 422 and refused.json()["error"]["kind"] == "unknown_test"
+        assert client.get("/setups", headers=OWNER).json()["setups"] == []
+
+
+def test_staging_is_the_default_and_still_runs_the_full_pack_and_asks_agents_for_the_tick() -> None:
+    with run_client() as (client, _, _):
+        refused = quick(
+            client, bot_type="agent", must_never=all_rules("agent"), environment="staging"
+        )
+        assert refused.json()["error"]["kind"] == "sandbox_required"
 
 
 def test_the_users_own_rules_are_added_and_unticked_defaults_are_left_out() -> None:

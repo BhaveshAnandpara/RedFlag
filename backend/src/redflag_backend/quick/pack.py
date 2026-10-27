@@ -396,3 +396,19 @@ def starter_tests(bot_type: str, rules: list[str], custom_rules: list[str]) -> l
         make_variation(test, strategy) for _, test in varied for strategy in VARIATION_STRATEGIES
     ]
     return [*bases, *variants]
+
+
+def production_tests(
+    bot_type: str, rules: list[str], custom_rules: list[str]
+) -> list[dict[str, Any]]:
+    """The OWASP-style attacks the user can pick from for a live bot.
+
+    Only the attacks: no normal-use checks, and nothing that makes an agent really act, so a live
+    bot is never asked to change anything. The ids are the same ones the full pack gives these
+    tests, so the list the user ticked from and the run agree.
+    """
+    return [
+        test
+        for test in starter_tests(bot_type, rules, custom_rules)
+        if test["kind"] == "negative" and not test["real_action"]
+    ]

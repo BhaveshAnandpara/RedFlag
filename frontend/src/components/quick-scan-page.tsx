@@ -20,6 +20,8 @@ type Rule = { t: string; on: boolean; own?: boolean };
 type Env = "staging" | "production";
 /** What the supervisor made of the hello reply: null when it could not say. */
 type Logs = { found: boolean; fields: string[]; shape: string } | null;
+/** One OWASP test a person can pick from for a live bot. */
+type Pick = { id: string; title: string; goal: string; risk: string; risk_name: string; severity: string };
 type Hello = { sig: string; ok: boolean; reply: string; error: string; logs: Logs };
 
 const NO_LOGS =
@@ -97,8 +99,6 @@ function buildEndpoint(f: Fields): Endpoint {
 }
 
 const NO_MODEL = "Enter the model name your bot uses, such as llama-3.1-8b-instant.";
-const SANDBOX_REQUIRED =
-  "An agent can only be scanned in a test or sandbox environment. Tick the box to confirm that this is one.";
 
 function focusFirst(ids: (string | null)[]) {
   const id = ids.find(Boolean);
@@ -153,8 +153,11 @@ export function QuickScanPage({
   const [purpose, setPurpose] = useState("");
   const [rules, setRules] = useState<Rule[]>([]);
   const [newRule, setNewRule] = useState("");
-  const [sandbox, setSandbox] = useState(false);
   const [attemptedRun, setAttemptedRun] = useState(false);
+  // Production only: the tests offered, and which of them are ticked. null until they are shown.
+  const [picks, setPicks] = useState<Pick[] | null>(null);
+  const [off, setOff] = useState<Set<string>>(new Set());
+  const [listing, setListing] = useState(false);
   const [runProblem, setRunProblem] = useState<string | null>(null);
 
   // step 3
@@ -277,6 +280,7 @@ export function QuickScanPage({
   // ---------- step 2: describe ----------
   function chooseKind(next: Kind) {
     setKind(next);
+    setPicks(null);
     const own = rules.filter((r) => r.own);
     setRules([...ruleLists[next].map((t) => ({ t, on: true })), ...own]);
   }
@@ -286,24 +290,59 @@ export function QuickScanPage({
     purpose: !purpose.trim() ? "Say what your bot is for, in one sentence." : "",
     rules:
       kind && onCount === 0 ? "Pick at least one thing it must never do, or add your own." : "",
-    sandbox: kind === "agent" && !sandbox ? SANDBOX_REQUIRED : "",
   };
-  const showRun = attemptedRun ? runErrors : { kind: "", purpose: "", rules: "", sandbox: "" };
+  const showRun = attemptedRun ? runErrors : { kind: "", purpose: "", rules: "" };
+  const ticked = (picks ?? []).filter((p) => !off.has(p.id));
+  const live = env === "production";
+
+  function changeRules(next: Rule[]) {
+    setRules(next);
+    setPicks(null); // the tests offered depend on the rules, so the list is shown again
+  }
 
   function addRule() {
     const t = newRule.trim();
     if (!t) return;
-    setRules([...rules, { t, on: true, own: true }]);
+    changeRules([...rules, { t, on: true, own: true }]);
     setNewRule("");
   }
 
-  async function runScan() {
+  function checkRun(): boolean {
     setAttemptedRun(true);
     const bad = Object.entries(runErrors).filter(([, m]) => m);
     if (bad.length) {
       focusFirst(bad.map(([id]) => (id === "kind" ? "kind-chatbot" : id === "rules" ? "rule-0" : id)));
+      return false;
+    }
+    return true;
+  }
+
+  async function showTests() {
+    if (!checkRun()) return;
+    setRunProblem(null);
+    setListing(true);
+    const listed = await api.call<{ tests: Pick[] }>("POST", "/quick-scans/production-tests", {
+      bot_type: kind,
+      must_never: rules.filter((r) => r.on).map((r) => r.t),
+    });
+    setListing(false);
+    if (!listed.ok) {
+      setRunProblem(problemFor(listed.status, listed.data));
       return;
     }
+    setOff(new Set());
+    setPicks(listed.data.tests);
+  }
+
+  const togglePick = (id: string) =>
+    setOff((was) => {
+      const next = new Set(was);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  async function runScan() {
+    if (!checkRun()) return;
     setRunProblem(null);
     const started = await api.call<{ scan_id: number; view_key: string; test_count: number }>(
       "POST",
@@ -314,7 +353,10 @@ export function QuickScanPage({
         bot_type: kind,
         purpose: purpose.trim(),
         must_never: rules.filter((r) => r.on).map((r) => r.t),
-        sandbox_confirmed: kind === "agent" && sandbox,
+        environment: env,
+        ...(live ? { test_ids: ticked.map((p) => p.id) } : {}),
+        // Staging's tick is the one confirmation that this is a test copy.
+        sandbox_confirmed: kind === "agent" && !live && stagingTick,
       },
     );
     if (!started.ok) {
@@ -823,7 +865,7 @@ export function QuickScanPage({
                       aria-checked={rule.on}
                       aria-label={rule.t}
                       onClick={() =>
-                        setRules(rules.map((r, k) => (k === i ? { ...r, on: !r.on } : r)))
+                        changeRules(rules.map((r, k) => (k === i ? { ...r, on: !r.on } : r)))
                       }
                     />
                   </div>
@@ -856,47 +898,72 @@ export function QuickScanPage({
             </div>
           )}
 
-          {kind === "agent" && (
-            <>
-              <div
-                id="sandbox"
-                className={`sandbox ${sandbox ? "on" : ""} ${showRun.sandbox ? "invalid" : ""}`}
-                role="checkbox"
-                aria-checked={sandbox}
-                tabIndex={0}
-                onClick={() => setSandbox(!sandbox)}
-                onKeyDown={(e) => {
-                  if (e.key === " " || e.key === "Enter") {
-                    e.preventDefault();
-                    setSandbox(!sandbox);
-                  }
-                }}
-              >
-                <span className="box" />
-                <div>
-                  <b>
-                    This is a test copy of my bot, not the live one.
-                    <span className="req" aria-hidden="true">*</span>
-                  </b>
-                  <span>
-                    An agent can take real actions, so Redflag only scans it in a test or sandbox
-                    environment.
-                  </span>
-                </div>
-              </div>
-              {showRun.sandbox && <span className="err">{showRun.sandbox}</span>}
-            </>
-          )}
-
           {runProblem && (
             <div className="alert" role="alert">
               {runProblem}
             </div>
           )}
+          {live && picks && (
+            <div>
+              <div className="lab" style={{ marginBottom: 6 }}>
+                <span>Which OWASP tests should run?</span>
+                <small>
+                  {ticked.length} of {picks.length} on
+                </small>
+              </div>
+              <div className="rules">
+                {picks.map((p) => (
+                  <div key={p.id} className={`rule ${off.has(p.id) ? "off" : ""}`}>
+                    <span>
+                      {p.title}
+                      <span className="mine">
+                        {p.risk} {p.risk_name}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="sw"
+                      role="switch"
+                      aria-checked={!off.has(p.id)}
+                      aria-label={p.title}
+                      onClick={() => togglePick(p.id)}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="actions" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => setOff(ticked.length ? new Set(picks.map((p) => p.id)) : new Set())}
+                >
+                  {ticked.length ? "Untick all" : "Tick all"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="actions">
-            <button type="button" className="btn solid" onClick={runScan}>
-              Run my scan
-            </button>
+            {live && !picks ? (
+              <button type="button" className="btn solid" disabled={listing} onClick={showTests}>
+                {listing ? (
+                  <>
+                    <span className="spin" />
+                    Finding the tests…
+                  </>
+                ) : (
+                  "Show the tests"
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn solid"
+                disabled={live && ticked.length === 0}
+                onClick={runScan}
+              >
+                {live ? `Run ${ticked.length} ${ticked.length === 1 ? "test" : "tests"}` : "Run my scan"}
+              </button>
+            )}
           </div>
         </Step>
 

@@ -9,7 +9,7 @@ import asyncio
 import secrets
 from collections import deque
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -21,8 +21,10 @@ from redflag_backend.quick.pack import (
     BOT_TYPES,
     CHATBOT_RULES,
     DEFAULT_RULES,
+    production_tests,
     starter_tests,
 )
+from redflag_backend.scan.catalog import load_catalog
 from redflag_backend.settings import Settings
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.setups.models import Endpoint, FieldValue, Rule, SetupData
@@ -43,14 +45,29 @@ class CheckBody(BaseModel):
     key: str | None = None
 
 
+class ProductionTestsBody(BaseModel):
+    bot_type: str
+    must_never: list[str]
+
+
 class QuickBody(BaseModel):
     endpoint: Endpoint
     key: str | None = None
     bot_type: str
     purpose: str
     must_never: list[str]
-    # An agent can act, so the owner confirms it is pointed at a test or sandbox environment.
+    # Staging runs the full pack. Production runs only the tests the owner picked from the list
+    # `production_tests` gives, none of which makes an agent act.
+    environment: Literal["staging", "production"] = "staging"
+    test_ids: list[str] | None = None
+    # An agent can act, so in staging the owner confirms it is a test or sandbox environment.
     sandbox_confirmed: bool = False
+
+
+def _split_rules(bot_type: str, must_never: list[str]) -> tuple[list[str], list[str]]:
+    chosen = [rule.strip() for rule in must_never if rule.strip()]
+    defaults = {r.lower() for r in DEFAULT_RULES[bot_type]}
+    return chosen, [r for r in chosen if r.lower() not in defaults]
 
 
 def _error(status: int, kind: str, message: str | None = None) -> JSONResponse:
@@ -78,6 +95,30 @@ def build_quick_router(
         """The rules a person can tick for each kind of bot. The page shows exactly these."""
         return {"rules": DEFAULT_RULES}
 
+    @router.post("/production-tests", response_model=None)
+    async def production_list(body: ProductionTestsBody) -> dict[str, Any] | JSONResponse:
+        """The OWASP tests a person can pick from for a live bot. Nothing is run or saved."""
+        if body.bot_type not in BOT_TYPES:
+            return _error(422, "bad_bot_type")
+        chosen, custom = _split_rules(body.bot_type, body.must_never)
+        if not chosen:
+            return _error(422, "rules_required")
+        catalog = load_catalog()
+        tests = []
+        for test in production_tests(body.bot_type, chosen, custom):
+            risk = catalog.risk(test["risk"])
+            tests.append(
+                {
+                    "id": test["id"],
+                    "title": test["title"],
+                    "goal": test["goal"],
+                    "risk": test["risk"],
+                    "risk_name": risk.name if risk else test["risk"],
+                    "severity": test["severity"],
+                }
+            )
+        return {"tests": tests}
+
     @router.post("/check", response_model=None)
     async def check(body: CheckBody) -> dict[str, Any] | JSONResponse:
         now = clock()
@@ -104,10 +145,11 @@ def build_quick_router(
             return _error(422, "bad_bot_type")
         if not body.purpose.strip():
             return _error(422, "purpose_required")
-        chosen = [rule.strip() for rule in body.must_never if rule.strip()]
+        chosen, custom = _split_rules(body.bot_type, body.must_never)
         if not chosen:
             return _error(422, "rules_required")
-        if body.bot_type == "agent" and not body.sandbox_confirmed:
+        live = body.environment == "production"
+        if body.bot_type == "agent" and not live and not body.sandbox_confirmed:
             return _error(422, "sandbox_required")
         if deps.gate.busy():
             return _error(409, "scan_running")
@@ -117,9 +159,15 @@ def build_quick_router(
         if seen.status != "ok":
             return _error(422, "connection_failed", seen.error or "The bot did not answer.")
 
-        defaults = {r.lower() for r in DEFAULT_RULES[body.bot_type]}
-        custom = [r for r in chosen if r.lower() not in defaults]
-        tests = starter_tests(body.bot_type, chosen, custom)
+        if live:
+            offered = {t["id"]: t for t in production_tests(body.bot_type, chosen, custom)}
+            if not body.test_ids:
+                return _error(422, "no_tests_selected")
+            if any(i not in offered for i in body.test_ids):
+                return _error(422, "unknown_test")
+            tests = [offered[i] for i in dict.fromkeys(body.test_ids)]
+        else:
+            tests = starter_tests(body.bot_type, chosen, custom)
 
         def fill(data: SetupData) -> None:
             data.fields.purpose = FieldValue(

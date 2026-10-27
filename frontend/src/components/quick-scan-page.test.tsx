@@ -404,12 +404,7 @@ describe("step 2: what the bot does and what it must never do", () => {
     expect(screen.getByText("3 of 3 on")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /Takes actions too/ }));
     expect(screen.getAllByRole("switch")).toHaveLength(4);
-    expect(screen.getByRole("checkbox", { name: /test copy of my bot/ })).toBeInTheDocument();
-  });
-
-  it("does not ask a chatbot for the sandbox box", async () => {
-    const user = await confirmedAnswer(new FakeBackend());
-    await user.click(screen.getByRole("radio", { name: /Answers questions/ }));
+    // the Staging tick in step 1 is the only "test copy" confirmation: step 2 has no second box
     expect(screen.queryByRole("checkbox", { name: /test copy of my bot/ })).not.toBeInTheDocument();
   });
 
@@ -424,9 +419,6 @@ describe("step 2: what the bot does and what it must never do", () => {
     for (const s of screen.getAllByRole("switch")) await user.click(s);
     await user.click(screen.getByRole("button", { name: "Run my scan" }));
     expect(screen.getByText("Pick at least one thing it must never do, or add your own.")).toBeInTheDocument();
-    expect(screen.getByText(/can only be scanned in a test or sandbox environment/)).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: /test copy of my bot/ }));
-    expect(screen.queryByText(/can only be scanned in a test or sandbox environment/)).not.toBeInTheDocument();
   });
 
   it("adds the person's own rule to the list, marked as theirs", async () => {
@@ -437,6 +429,90 @@ describe("step 2: what the bot does and what it must never do", () => {
     expect(screen.getByText("It must never promise a delivery date.")).toBeInTheDocument();
     expect(screen.getByText("your rule")).toBeInTheDocument();
     expect(screen.getByText("4 of 4 on")).toBeInTheDocument();
+  });
+});
+
+describe("running Staging scans", () => {
+  it("sends the Staging tick as the sandbox confirmation for an agent, and says it is staging", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [makeScan([], { id: 31, status: "running", botId: "target-8", setup: { version: 1, rules: [] } })];
+    const user = await confirmedAnswer(backend);
+    await user.click(screen.getByRole("radio", { name: /Takes actions too/ }));
+    await user.type(screen.getByLabelText(/What is it for/), "An agent for a bank.");
+    await user.click(screen.getByRole("button", { name: "Run my scan" }));
+    await screen.findByText("Scan #31");
+    const sent = backend.bodies("/quick-scans")[0] as Record<string, unknown>;
+    expect(sent).toMatchObject({ environment: "staging", sandbox_confirmed: true, bot_type: "agent" });
+    expect(sent).not.toHaveProperty("test_ids");
+  });
+});
+
+describe("running Production scans", () => {
+  const TESTS = [
+    { id: "g-1", title: "Ask for the hidden instructions", goal: "g", risk: "LLM07", risk_name: "System Prompt Leakage", severity: "high" },
+    { id: "g-2", title: "Ask for keys and internal links", goal: "g", risk: "LLM02", risk_name: "Sensitive Information Disclosure", severity: "critical" },
+    { id: "g-3", title: "Get it to write a script tag", goal: "g", risk: "LLM05", risk_name: "Improper Output Handling", severity: "high" },
+  ];
+
+  async function production(backend: FakeBackend) {
+    backend.overrides["POST /quick-scans/production-tests"] = () => json(200, { tests: TESTS });
+    backend.install();
+    const user = userEvent.setup();
+    render(<QuickScanPage apiUrl={API} pollMs={5} />);
+    await screen.findByRole("heading", { name: "Quick scan" });
+    await user.click(screen.getByRole("radio", { name: "Production" }));
+    await connectOpenAI(user);
+    await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    await user.click(await screen.findByRole("radio", { name: /Takes actions too/ }));
+    await user.type(screen.getByLabelText(/What is it for/), "An agent for a bank.");
+    return user;
+  }
+
+  it("shows the OWASP tests to pick from instead of running straight away, with no tick for an agent", async () => {
+    const backend = new FakeBackend();
+    const user = await production(backend);
+    expect(screen.queryByRole("button", { name: "Run my scan" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show the tests" }));
+    expect(await screen.findByText("Which OWASP tests should run?")).toBeInTheDocument();
+    expect(screen.getByText("3 of 3 on")).toBeInTheDocument();
+    expect(screen.getByText("LLM07 System Prompt Leakage")).toBeInTheDocument();
+    expect(backend.bodies("/quick-scans")).toEqual([]);
+    expect(backend.bodies("/quick-scans/production-tests")[0]).toMatchObject({ bot_type: "agent" });
+  });
+
+  it("runs only the tests left ticked, sends no sandbox confirmation, and the button says how many", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [makeScan([], { id: 31, status: "running", botId: "target-8", setup: { version: 1, rules: [] } })];
+    const user = await production(backend);
+    await user.click(screen.getByRole("button", { name: "Show the tests" }));
+    await user.click(await screen.findByRole("switch", { name: "Get it to write a script tag" }));
+    expect(screen.getByText("2 of 3 on")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Run 2 tests" }));
+    await screen.findByText("Scan #31");
+    expect(backend.bodies("/quick-scans")[0]).toMatchObject({
+      environment: "production",
+      test_ids: ["g-1", "g-2"],
+      sandbox_confirmed: false,
+    });
+  });
+
+  it("lets the person untick all, and then will not run an empty pick", async () => {
+    const user = await production(new FakeBackend());
+    await user.click(screen.getByRole("button", { name: "Show the tests" }));
+    await user.click(await screen.findByRole("button", { name: "Untick all" }));
+    expect(screen.getByText("0 of 3 on")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run 0 tests" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Tick all" }));
+    expect(screen.getByRole("button", { name: "Run 3 tests" })).toBeEnabled();
+  });
+
+  it("shows the list again after a rule changes, because the tests offered depend on the rules", async () => {
+    const user = await production(new FakeBackend());
+    await user.click(screen.getByRole("button", { name: "Show the tests" }));
+    await screen.findByText("Which OWASP tests should run?");
+    await user.click(screen.getAllByRole("switch")[0]);
+    expect(screen.queryByText("Which OWASP tests should run?")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show the tests" })).toBeInTheDocument();
   });
 });
 
@@ -499,6 +575,7 @@ describe("running the starter pack", () => {
         bot_type: "chatbot",
         purpose: "A support bot for a bank.",
         must_never: [CHATBOT_RULES[0], CHATBOT_RULES[1], "It must never promise a delivery date."],
+        environment: "staging",
         sandbox_confirmed: false,
       },
     ]);
