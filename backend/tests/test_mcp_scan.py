@@ -93,7 +93,7 @@ def test_a_private_address_is_refused() -> None:
 
 def test_with_nothing_ticked_it_runs_the_static_checks_only_and_never_calls_a_tool() -> None:
     fake = server([tool("add", inputSchema=NARROW)])
-    # The cap is set here: its default is tuned from time to time, and this test is about the plumbing.
+    # The cap is set here: its default is tuned now and then, and this test is about the plumbing.
     with run_client(stand_in=fake, mcp_max_calls=60) as (client, _, _):
         scan = run(client)
     assert scan["scan"]["status"] == "completed"
