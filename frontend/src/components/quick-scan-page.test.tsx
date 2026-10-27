@@ -454,6 +454,7 @@ describe("the step 2 chat", () => {
     purpose: null,
     bot_type: null,
     must_never: [],
+    done: false,
     limit_reached: false,
     messages_left: 11,
     ...extra,
@@ -508,6 +509,48 @@ describe("the step 2 chat", () => {
     expect(backend.bodies("/quick-scans/interview")).toEqual([]);
     await user.type(screen.getByLabelText("Your message to Redflag"), "a");
     expect(screen.queryByText(/Type your answer first/)).not.toBeInTheDocument();
+  });
+
+  it("highlights Next and says so once Redflag has what it needs", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(200, said({ reply: "That is everything. Press Next to review.", done: true }));
+    const user = await confirmedAnswerOnChat(backend);
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(next).not.toHaveClass("ready");
+    await user.type(screen.getByLabelText("Your message to Redflag"), "A test bot, no private data.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("That is everything. Press Next to review.");
+    expect(screen.getByRole("button", { name: "Next" })).toHaveClass("ready");
+    expect(screen.getByText("Redflag has what it needs · press Next")).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for your answer/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Press Next to review the details and run the scan/)).toBeInTheDocument();
+  });
+
+  it("does not highlight Next while Redflag is still asking, and drops the highlight if it asks more", async () => {
+    const backend = new FakeBackend();
+    const answers = [said({ done: true }), said({ done: false })];
+    backend.overrides["POST /quick-scans/interview"] = () => json(200, answers.shift());
+    const user = await confirmedAnswerOnChat(backend);
+    const input = screen.getByLabelText("Your message to Redflag");
+    await user.type(input, "one");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).toHaveClass("ready"));
+    await user.type(input, "two");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).not.toHaveClass("ready"));
+    expect(screen.getByText(/Redflag asked you a question · waiting for your answer/)).toBeInTheDocument();
+  });
+
+  it("highlights Next when the chat hits its limit, since the form is the only way on", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(200, said({ reply: "We have reached the limit for this chat.", limit_reached: true }));
+    const user = await confirmedAnswerOnChat(backend);
+    await user.type(screen.getByLabelText("Your message to Redflag"), "x");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(/reached the limit/);
+    expect(screen.getByRole("button", { name: "Next" })).toHaveClass("ready");
   });
 
   it("puts Next beside Send, in the same row", async () => {

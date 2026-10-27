@@ -164,6 +164,8 @@ export function QuickScanPage({
   // Step 2 opens on the chat alone. The details below it open with Next, and the chat stays.
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [chatNudge, setChatNudge] = useState(false);
+  // Redflag has what it needs (or the chat hit its limit): Next is highlighted as the next move.
+  const [chatDone, setChatDone] = useState(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const [purposeTyped, setPurposeTyped] = useState(false);
   // Production only: the tests offered, and which of them are ticked. null until they are shown.
@@ -324,7 +326,8 @@ export function QuickScanPage({
     : "What is this bot for, and what must it never do?";
 
   // Redflag has asked something and is waiting: the chat is empty, or its last turn is Redflag's.
-  const chatWaiting = !chatBusy && !chatLimit && (chat.length === 0 || chat[chat.length - 1].role === "assistant");
+  const chatWaiting =
+    !chatBusy && !chatLimit && !chatDone && (chat.length === 0 || chat[chat.length - 1].role === "assistant");
 
   async function sendChat() {
     const message = chatInput.trim();
@@ -346,6 +349,7 @@ export function QuickScanPage({
       purpose?: string | null;
       bot_type?: Kind | null;
       must_never?: string[];
+      done?: boolean;
       limit_reached: boolean;
     }>("POST", "/quick-scans/interview", {
       message,
@@ -364,6 +368,7 @@ export function QuickScanPage({
     const said = answer.data;
     setChat((turns) => [...turns, { role: "assistant", content: said.reply }]);
     if (said.limit_reached) setChatLimit(true);
+    setChatDone(Boolean(said.done) || said.limit_reached);
     if (said.purpose && !purposeTyped) setPurpose(said.purpose);
     // The chat fills in what the person said. Their own edits win: a kind they already chose stays,
     // and a rule they switched off is not switched back on.
@@ -869,6 +874,11 @@ export function QuickScanPage({
                     <i />
                     Redflag asked you a question · waiting for your answer
                   </>
+                ) : chatDone && !detailsOpen ? (
+                  <>
+                    <i className="ok" />
+                    Redflag has what it needs · press Next
+                  </>
                 ) : (
                   "Redflag"
                 )}
@@ -921,7 +931,7 @@ export function QuickScanPage({
               {!detailsOpen && (
                 <button
                   type="button"
-                  className="btn ghost"
+                  className={`btn ${chatDone ? "solid ready" : "ghost"}`}
                   disabled={chatBusy}
                   onClick={() => setDetailsOpen(true)}
                 >
@@ -937,7 +947,9 @@ export function QuickScanPage({
             <span className="hint">
               {detailsOpen
                 ? "The chat fills in the answers below. You can also fill them in or change them yourself."
-                : "Redflag asked a question above and is waiting for your answer. A short answer is fine. Or press Next to skip the chat and fill in the details yourself."}
+                : chatDone
+                  ? "Redflag has everything it needs. Press Next to review the details and run the scan."
+                  : "Redflag asked a question above and is waiting for your answer. A short answer is fine. Or press Next to skip the chat and fill in the details yourself."}
             </span>
           </div>
 

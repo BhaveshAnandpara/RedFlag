@@ -28,6 +28,7 @@
 
 @keyframes open { from { opacity: 0; transform: translateY(8px); } }
 @keyframes sp { to { transform: rotate(360deg); } }
+@keyframes nudge { 0% { box-shadow: 0 0 0 0 rgba(244,244,242,0.55); } 70%, 100% { box-shadow: 0 0 0 12px rgba(244,244,242,0); } }
 @keyframes blink { 50% { opacity: 0.2; } }
 @keyframes bob { 50% { transform: translateY(-4px); opacity: 0.5; } }
 @keyframes mf-blink { 50% { opacity: 0.35; } }
@@ -106,6 +107,11 @@
 .d-quick .chatrow { display: flex; gap: 8px; align-items: center; }
 .d-quick .chatrow .in { flex: 1 1 0; min-width: 0; width: auto; height: 44px; }
 .d-quick .chatrow .btn { flex: none; height: 44px; padding: 0 18px; }
+.d-quick .asking i.ok { background: var(--pass); animation: none; }
+.d-quick .btn.ready { animation: nudge 1.8s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+.d-quick .btn.ready { animation: none; box-shadow: 0 0 0 3px rgba(244,244,242,0.45); }
+}
 .d-quick .kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .d-quick .kind { text-align: left; padding: 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: #0b0b0b; display: grid; gap: 6px; transition: border-color 160ms ease, background-color 160ms ease; }
 .d-quick .kind:hover { border-color: rgba(255,255,255,0.3); }

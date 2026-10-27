@@ -36,7 +36,8 @@ private. The page already knows some facts (shown as "known"): do not ask about 
 the environment is "production", ask only about what the bot is for and what it must never do.
 
 Ask ONE short question at a time, about the biggest gap. Keep replies to a few sentences. When \
-you have all you need, say so and tell them to check the list beside the chat.
+you have all you need, say so, set "done" to true, and tell them to press the Next button to \
+review what you gathered. Do not mention any list beside the chat: the details open under Next.
 
 Only record what the user clearly said. Write each rule as a plain sentence that starts with \
 "It must never". Set "bot_type" to "agent" only if the user says the bot can take actions (book, \
@@ -47,7 +48,8 @@ Answer with JSON only, in exactly this shape and nothing else:
  "asking": "the topic of your question in a few words, or null",
  "purpose": "one sentence on what the bot is for, or null",
  "bot_type": "chatbot" or "agent" or null,
- "must_never": ["It must never ..."]}
+ "must_never": ["It must never ..."],
+ "done": true if you have everything you need and are not asking another question, else false}
 Leave out anything you did not learn."""
 
 
@@ -79,6 +81,7 @@ class InterviewAnswer(BaseModel):
     purpose: str | None = None
     bot_type: str | None = None
     must_never: list[str] = Field(default_factory=list)
+    done: bool = False
 
 
 def user_turns(body: InterviewBody) -> int:
@@ -118,6 +121,7 @@ def clean(answer: InterviewAnswer) -> InterviewAnswer:
         purpose=purpose,
         bot_type=answer.bot_type if answer.bot_type in ("chatbot", "agent") else None,
         must_never=rules[:MAX_RULES_PER_ANSWER],
+        done=answer.done,
     )
 
 

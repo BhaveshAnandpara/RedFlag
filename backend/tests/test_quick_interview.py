@@ -21,6 +21,7 @@ def said(**fields: Any) -> str:
         "purpose": None,
         "bot_type": None,
         "must_never": [],
+        "done": False,
     }
     answer.update(fields)
     return json.dumps(answer)
@@ -49,6 +50,22 @@ def test_the_reply_carries_what_the_user_clearly_said_and_nothing_is_saved() -> 
         assert body["must_never"] == ["It must never refund over 100 pounds."]
         assert body["limit_reached"] is False and body["messages_left"] == 11
         assert client.get("/setups", headers=OWNER).json()["setups"] == []
+
+
+def test_the_reply_says_when_the_interview_is_done_and_defaults_to_not_done() -> None:
+    model = RoleModel(interviewer=[said(done=True), json.dumps({"reply": "Fine."})])
+    with run_client(roles=model) as (client, _, _):
+        assert chat(client).json()["done"] is True
+        assert chat(client).json()["done"] is False
+
+
+def test_the_prompt_asks_for_done_and_points_to_the_next_button() -> None:
+    model = RoleModel(interviewer=[said()])
+    with run_client(roles=model) as (client, _, _):
+        chat(client)
+        system = model.calls["interviewer"][0].messages[0].content
+        assert '"done"' in system and "press the Next button" in system
+        assert "beside the chat" in system  # only inside the instruction not to mention it
 
 
 def test_the_answer_is_cleaned_to_a_known_kind_and_short_unique_rules() -> None:
