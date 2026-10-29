@@ -25,6 +25,7 @@ from redflag_backend.quick.pack import (
     production_tests,
     starter_tests,
 )
+from redflag_backend.quick.recon import recon
 from redflag_backend.scan.catalog import load_catalog
 from redflag_backend.settings import Settings
 from redflag_backend.setups.llm import ModelFailure, SetupLLM
@@ -151,9 +152,16 @@ def build_quick_router(
         if len(recent) >= settings.quick_checks_per_window:
             return _error(429, "too_many_checks")
         recent.append(now)
-        seen = await target(body.endpoint, body.key).test_connection()
-        # Logs are optional, so a reply that could not be read is "unknown" (null), not a failure.
-        logs = await detect_logs(llm, seen.raw_reply) if seen.status == "ok" else None
+        bot = target(body.endpoint, body.key)
+        seen = await bot.test_connection()
+        # Logs and the bot's own description are optional, so a reply or description that could
+        # not be read is "unknown" (null), not a failure.
+        logs = None
+        found = None
+        if seen.status == "ok":
+            logs, found = await asyncio.gather(
+                detect_logs(llm, seen.raw_reply), recon(llm, bot, body.endpoint)
+            )
         return {
             "status": seen.status,
             "http_status": seen.http_status,
@@ -161,6 +169,7 @@ def build_quick_router(
             "parsed_reply": seen.parsed_reply,
             "error": seen.error,
             "logs": logs.model_dump() if logs else None,
+            "recon": found.model_dump() if found else None,
         }
 
     @router.post("", status_code=202, response_model=None)

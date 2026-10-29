@@ -169,7 +169,7 @@ def test_the_hello_check_has_a_limit_so_it_cannot_be_used_to_hammer_a_server() -
             assert check(client).status_code == 200
         blocked = check(client)
         assert blocked.status_code == 429 and blocked.json()["error"]["kind"] == "too_many_checks"
-        assert len(endpoint.requests) == 3
+        assert len(endpoint.requests) == 6  # a hello and a description per check; none for the 4th
 
 
 def logs_answer(found: bool, fields: list[str] | None = None, shape: str = "") -> str:
@@ -447,3 +447,92 @@ def test_the_default_rules_are_served_so_the_page_never_keeps_its_own_copy() -> 
         assert body["rules"]["chatbot"] == DEFAULT_RULES["chatbot"]
         assert body["rules"]["agent"] == DEFAULT_RULES["agent"]
         assert client.get("/quick-scans/rules").status_code == 200  # no password needed
+
+
+# --- recon: the bot describes itself ---------------------------------------------------------
+
+
+def described(**fields: Any) -> str:
+    sheet: dict[str, Any] = {
+        "does": "Helps customers with orders and refunds.",
+        "can_read": ["order history"],
+        "can_do": ["issue refunds", "cancel orders"],
+        "risky": ["issue refunds"],
+        "unknown": ["whether it can see other customers' orders"],
+    }
+    sheet.update(fields)
+    return json.dumps(sheet)
+
+
+def test_the_hello_check_also_asks_the_bot_to_describe_itself_and_returns_a_fact_sheet() -> None:
+    model = RoleModel(supervisor=[logs_answer(False)], recon=[described()])
+    with run_client(roles=model) as (client, _, endpoint):
+        body = check(client).json()
+        found = body["recon"]
+        assert found["facts"]["does"] == "Helps customers with orders and refunds."
+        assert found["facts"]["risky"] == ["issue refunds"]
+        assert found["description"] == "hello from the bot"
+        assert len(found["bot_id"]) == 12
+        asked = [json.loads(r.content)["messages"][-1]["content"] for r in endpoint.requests]
+        assert asked[0] == "Hello" and "don't take any action" in asked[1]
+        assert KEY not in json.dumps(body)
+
+
+def test_the_bot_id_is_the_same_for_the_same_address_and_never_depends_on_the_key() -> None:
+    model = RoleModel(supervisor=[logs_answer(False)], recon=[described()])
+    with run_client(roles=model) as (client, _, _):
+        first = check(client, key="key-one").json()["recon"]["bot_id"]
+        second = check(client, key="key-two").json()["recon"]["bot_id"]
+        other = check(client, url="https://bot.example/other").json()["recon"]["bot_id"]
+        assert first == second and first != other
+
+
+def test_the_bots_description_goes_to_the_model_fenced_as_data() -> None:
+    model = RoleModel(supervisor=[logs_answer(False)], recon=[described()])
+    with run_client(roles=model) as (client, _, _):
+        check(client)
+        prompt = model.prompts("recon")[0]
+        assert "<<<BOT DESCRIBES ITSELF" in prompt and "hello from the bot" in prompt
+
+
+def test_a_description_the_model_cannot_read_leaves_no_fact_sheet_and_the_hello_still_works() -> (
+    None
+):
+    model = RoleModel(supervisor=[logs_answer(False)], recon=["not json", "still not json"])
+    with run_client(roles=model) as (client, _, _):
+        body = check(client).json()
+        assert body["status"] == "ok" and body["recon"] is None
+
+
+def test_a_bot_that_will_not_describe_itself_leaves_no_fact_sheet_and_the_hello_still_works() -> (
+    None
+):
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked = json.loads(request.content)["messages"][-1]["content"]
+        if asked == "Hello":
+            return httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
+        return httpx.Response(500, text="boom")
+
+    model = RoleModel(supervisor=[logs_answer(False)], recon=[described()])
+    with run_client(roles=model, stand_in=StandIn(answer)) as (client, _, _):
+        body = check(client).json()
+        assert body["status"] == "ok" and body["recon"] is None
+        assert model.prompts("recon") == []
+
+
+def test_a_failed_hello_asks_for_no_description() -> None:
+    model = RoleModel(recon=[described()])
+    server = StandIn(lambda request: httpx.Response(401, text="nope"))
+    with run_client(roles=model, stand_in=server) as (client, _, endpoint):
+        body = check(client).json()
+        assert body["status"] == "error" and body["recon"] is None
+        assert len(endpoint.requests) == 1
+
+
+def test_the_fact_sheet_is_trimmed_and_deduplicated() -> None:
+    long = "x" * 500
+    sheet = described(can_do=["Refund", "refund", "  ", long, "a", "b", "c", "d", "e"])
+    model = RoleModel(supervisor=[logs_answer(False)], recon=[sheet])
+    with run_client(roles=model) as (client, _, _):
+        can_do = check(client).json()["recon"]["facts"]["can_do"]
+        assert can_do[0] == "Refund" and len(can_do) == 6 and len(can_do[1]) == 160

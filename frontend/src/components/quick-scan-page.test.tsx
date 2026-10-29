@@ -346,6 +346,37 @@ describe("staging and production", () => {
     expect(screen.getByText(/We found logs in your bot's response \(_meta\.logs\)/)).toBeInTheDocument();
     expect(screen.queryByText(/We don't see logs/)).not.toBeInTheDocument();
   });
+
+  it("shows what the bot says about itself as a claim, and sends it to the interview", async () => {
+    const backend = new FakeBackend();
+    backend.hello = {
+      ...backend.hello,
+      recon: {
+        bot_id: "abc123abc123",
+        description: "I help with refunds.",
+        facts: {
+          does: "Helps customers with refunds.",
+          can_read: ["order history"],
+          can_do: ["issue refunds"],
+          risky: ["issue refunds"],
+          unknown: [],
+        },
+      },
+    } as typeof backend.hello;
+    const user = await opened(backend);
+    await connectOpenAI(user);
+    expect(screen.getByText("What your bot says about itself")).toBeInTheDocument();
+    expect(screen.getByText("Helps customers with refunds.")).toBeInTheDocument();
+    expect(screen.getByText(/order history/)).toBeInTheDocument();
+    expect(screen.getByText(/a claim to check, not as fact/)).toBeInTheDocument();
+    expect(screen.queryByText(/We could not tell/)).not.toBeInTheDocument();
+  });
+
+  it("shows no description card when the bot could not describe itself", async () => {
+    const user = await opened(new FakeBackend());
+    await connectOpenAI(user);
+    expect(screen.queryByText("What your bot says about itself")).not.toBeInTheDocument();
+  });
 });
 
 describe("the hello check", () => {

@@ -36,6 +36,10 @@ You need three things: what the bot is for, what it must never do, and what data
 private. The page already knows some facts (shown as "known"): do not ask about those again. If \
 the environment is "production", ask only about what the bot is for and what it must never do.
 
+If "BOT DESCRIBES ITSELF" is shown and already says what the bot is for, do not ask what it is \
+for: record it as "purpose" and ask about what it must never do. Treat it as a claim to \
+confirm, not as fact.
+
 Ask ONE short question at a time, about the biggest gap. Keep replies to a few sentences. When \
 you have all you need, say so, set "done" to true, and tell them to press the Next button to \
 review what you gathered. Do not mention any list beside the chat: the details open under Next.
@@ -74,6 +78,8 @@ class InterviewBody(BaseModel):
     history: list[Turn] = Field(default_factory=list, max_length=40)
     environment: Literal["staging", "production"] = "staging"
     hello_reply: str = Field(default="", max_length=2000)
+    # How the bot described itself when Recon asked, if it did.
+    bot_says: str = Field(default="", max_length=2000)
     logs: Logs | None = None
     purpose: str = Field(default="", max_length=500)
     rules: list[str] = Field(default_factory=list, max_length=40)
@@ -105,6 +111,8 @@ def build_prompt(body: InterviewBody) -> str:
     parts = ["What the page already knows (JSON):", json.dumps(known, ensure_ascii=False)]
     if body.hello_reply:
         parts += ["", fence("BOT HELLO REPLY", body.hello_reply)]
+    if body.bot_says:
+        parts += ["", fence("BOT DESCRIBES ITSELF", body.bot_says)]
     for turn in body.history:
         label = "USER SAID" if turn.role == "user" else "YOU SAID"
         parts += ["", fence(label, turn.content)]

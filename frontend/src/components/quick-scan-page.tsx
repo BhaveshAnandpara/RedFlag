@@ -23,7 +23,13 @@ type Logs = { found: boolean; fields: string[]; shape: string } | null;
 /** One OWASP test a person can pick from for a live bot. */
 type Pick = { id: string; title: string; goal: string; risk: string; risk_name: string; severity: string };
 type Turn = { role: "user" | "assistant"; content: string };
-type Hello = { sig: string; ok: boolean; reply: string; error: string; logs: Logs };
+/** How the bot described itself when asked, and the short fact sheet made from it: null when it could not be done. */
+type Recon = {
+  bot_id: string;
+  description: string;
+  facts: { does: string; can_read: string[]; can_do: string[]; risky: string[]; unknown: string[] };
+} | null;
+type Hello = { sig: string; ok: boolean; reply: string; error: string; logs: Logs; recon: Recon };
 
 const NO_LOGS =
   "We don't see logs in your bot's response. We can test your bot a lot better if it returns logs with each response, but it isn't mandatory.";
@@ -272,6 +278,7 @@ export function QuickScanPage({
       parsed_reply: string;
       error: string;
       logs?: Logs;
+      recon?: Recon;
     }>(
       "POST",
       "/quick-scans/check",
@@ -288,6 +295,7 @@ export function QuickScanPage({
       reply: result.data.parsed_reply,
       error: result.data.error,
       logs: result.data.logs ?? null,
+      recon: result.data.recon ?? null,
     });
   }
 
@@ -356,6 +364,7 @@ export function QuickScanPage({
       history,
       environment: env,
       hello_reply: hello?.reply ?? "",
+      bot_says: hello?.recon?.facts.does ? hello.recon.description : "",
       logs: hello?.logs ?? null,
       purpose: purpose.trim(),
       rules: rules.filter((r) => r.on).map((r) => r.t),
@@ -834,6 +843,30 @@ export function QuickScanPage({
                     ? `We found logs in your bot's response (${shownHello.logs.fields.join(", ") || "in the reply"}). Findings can be confirmed from them.`
                     : NO_LOGS}
                 </span>
+              )}
+              {shownHello.recon?.facts.does && (
+                <div className="recon">
+                  <b>What your bot says about itself</b>
+                  <p>{shownHello.recon.facts.does}</p>
+                  {(
+                    [
+                      ["It can read", shownHello.recon.facts.can_read],
+                      ["It can do", shownHello.recon.facts.can_do],
+                      ["Risky if misused", shownHello.recon.facts.risky],
+                      ["We could not tell", shownHello.recon.facts.unknown],
+                    ] as const
+                  ).map(([label, items]) =>
+                    items.length ? (
+                      <p key={label}>
+                        <span className="hint">{label}: </span>
+                        {items.join(", ")}
+                      </p>
+                    ) : null,
+                  )}
+                  <span className="hint">
+                    This is the bot&apos;s own description, so we treat it as a claim to check, not as fact.
+                  </span>
+                </div>
               )}
               <div className="confirm">
                 <b>Is this your bot&apos;s answer?</b>

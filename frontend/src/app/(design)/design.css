@@ -97,6 +97,9 @@
 .d-quick .who.r { justify-self: end; }
 .d-quick .confirm { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; background: #0d0d0d; border: 1px solid var(--line); }
 .d-quick .confirm b { font-weight: 500; }
+.d-quick .recon { display: grid; gap: 6px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+.d-quick .recon b { font-weight: 500; }
+.d-quick .recon p { margin: 0; }
 .d-quick .ways { display: flex; gap: 8px; flex-wrap: wrap; }
 .d-quick .way { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
 .d-quick .way[aria-checked="true"] { background: var(--ink); color: #000; border-color: var(--ink); }
