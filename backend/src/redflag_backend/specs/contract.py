@@ -45,6 +45,9 @@ class ResultRecord(BaseModel):
     repeat_count: int = Field(default=1, ge=1)
     repeats_broke: int = Field(default=0, ge=0)
     compared_with_last: Compared | None = None
+    severity: str | None = None
+    fix: str = ""
+    bot_version: str | None = None  # the version of the user's server that was tested
 
 
 def problems(result: ResultRecord, spec: StoredSpec) -> list[str]:
