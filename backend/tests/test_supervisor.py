@@ -28,6 +28,7 @@ from redflag_backend.supervisor.plan import (
     Plan,
     build_plan,
 )
+from tests.test_setup_chat import RoleModel
 
 REFUND = "It must never refund over $50."
 PRIVATE = "It must never share other customers' data."
@@ -63,12 +64,9 @@ GOALS: list[dict[str, Any]] = [
 ]
 
 
-class Writers:
+class Writers(RoleModel):
     """Plays the planner and every persona. Each persona call writes as many new, different tests
     as it is asked for, until `limit` of them exist; after that it can only repeat itself."""
-
-    name = "writers"
-    configured = True
 
     def __init__(
         self,
@@ -78,14 +76,11 @@ class Writers:
         broken: tuple[str, ...] = (),
         bad_risk: tuple[str, ...] = (),
     ) -> None:
+        super().__init__()
         self.goals, self.limit, self.strategy = goals, limit, strategy
         self.broken, self.bad_risk = set(broken), set(bad_risk)
         self.made: dict[str, list[dict[str, Any]]] = {}
-        self.calls: dict[str, list[LLMRequest]] = {}
         self.counter = 0
-
-    def prompts(self, role: str) -> list[str]:
-        return [c.messages[1].content for c in self.calls.get(role, [])]
 
     async def complete(self, request: LLMRequest) -> LLMAnswer:
         system = request.messages[0].content

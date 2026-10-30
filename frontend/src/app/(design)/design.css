@@ -100,6 +100,19 @@
 .d-quick .recon { display: grid; gap: 6px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
 .d-quick .recon b { font-weight: 500; }
 .d-quick .recon p { margin: 0; }
+.d-quick .plan { display: grid; gap: 12px; }
+.d-quick .planview { display: grid; gap: 12px; }
+.d-quick .plan-head { margin: 0; font-size: 14px; color: var(--muted); }
+.d-quick .plan-head b { color: var(--ink); font-weight: 500; }
+.d-quick .goals { display: grid; gap: 8px; }
+.d-quick .goal, .d-quick .covered { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 14px; line-height: 1.5; }
+.d-quick .goal.background { opacity: 0.8; }
+.d-quick .goal > summary, .d-quick .covered > summary { cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+.d-quick .goal ul, .d-quick .covered ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.d-quick .before { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; background: #0d0d0d; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+.d-quick .before b { font-weight: 500; }
+.d-quick .before ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.d-quick .server { font-family: var(--mono); font-size: 15px; color: var(--ink); }
 .d-quick .ways { display: flex; gap: 8px; flex-wrap: wrap; }
 .d-quick .way { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
 .d-quick .way[aria-checked="true"] { background: var(--ink); color: #000; border-color: var(--ink); }

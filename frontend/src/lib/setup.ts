@@ -181,6 +181,10 @@ export function describeError(status: number, body: ErrorBody | null | undefined
       return "Choose whether your bot is a chatbot or an agent.";
     case "too_many_checks":
       return "Too many hello checks in a short time. Wait a few minutes and try again.";
+    case "too_many_plans":
+      return "Too many test plans in a short time. Wait a few minutes and try again.";
+    case "nothing_to_plan":
+      return "Say what your bot is for, or pick a rule, so we have something to plan from.";
     case "no_tests":
       return "Generate the tests first.";
     case "file_type":

@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     quick_interviews_per_window: int = 60
     quick_interview_window_seconds: float = 600.0
     quick_interview_max_messages: int = 12
+    # A plan is dozens of model calls, so it is limited far harder than a chat turn.
+    quick_plans_per_window: int = 3
+    quick_plan_window_seconds: float = 600.0
+    quick_plan_timeout_seconds: float = 240.0
     # The most tests one setup version may hold (generated tests plus attack variations).
     setup_max_tests: int = 200
     # The most requests one run may send to the user's own endpoint.

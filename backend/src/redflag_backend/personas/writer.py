@@ -220,13 +220,14 @@ async def write_tests(
     brief: Brief,
     goals: list[str] | None = None,
     count: int = 5,
+    setup_id: int = NO_SETUP,
 ) -> PersonaTests:
     """The tests this persona writes for the brief. It never raises: a model that fails or answers
     badly gives `failed`, and the supervisor carries on with the other personas."""
     system = build_system(persona, goals or [], count)
     try:
         answer = await llm.ask(
-            NO_SETUP, f"persona-{persona.id}", system, build_prompt(brief), Answer
+            setup_id, f"persona-{persona.id}", system, build_prompt(brief), Answer
         )
     except ModelFailure as failure:
         return PersonaTests(persona_id=persona.id, failed=failure.kind)

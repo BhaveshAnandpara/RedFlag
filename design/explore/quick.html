@@ -85,6 +85,20 @@
   .recon { display: grid; gap: 6px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
   .recon b { font-weight: 500; }
   .recon p { margin: 0; }
+  /* the test plan preview in step 2 */
+  .plan { display: grid; gap: 12px; }
+  .planview { display: grid; gap: 12px; }
+  .plan-head { margin: 0; font-size: 14px; color: var(--muted); }
+  .plan-head b { color: var(--ink); font-weight: 500; }
+  .goals { display: grid; gap: 8px; }
+  .goal, .covered { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 14px; line-height: 1.5; }
+  .goal.background { opacity: 0.8; }
+  .goal > summary, .covered > summary { cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+  .goal ul, .covered ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+  .before { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; background: #0d0d0d; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+  .before b { font-weight: 500; }
+  .before ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  .server { font-family: var(--mono); font-size: 15px; color: var(--ink); }
   /* the connect picker, the Staging / Production toggle and the step 2 chat on the real page */
   .ways { display: flex; gap: 8px; flex-wrap: wrap; }
   .way { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }

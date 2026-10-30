@@ -12,6 +12,7 @@ import { SetupApi } from "@/lib/setup-api";
 import { ConnectWays, usableWay, type Way } from "./connect-ways";
 import { CountUp } from "./design/count-up";
 import { FlagStrip, RaisedFlag, lookOf, lookOfResult } from "./design/flags";
+import { PlanPreview } from "./plan-preview";
 import { Step, type StepState } from "./design/step";
 import { McpPage } from "./mcp-page";
 
@@ -1149,6 +1150,14 @@ export function QuickScanPage({
                   </div>
                 </div>
               )}
+              <PlanPreview
+                api={api}
+                environment={env}
+                purpose={purpose.trim()}
+                rules={rules.filter((r) => r.on).map((r) => r.t)}
+                facts={hello?.recon?.facts ?? null}
+                server={buildEndpoint(fields).url}
+              />
               <div className="actions">
                 {live && !picks ? (
                   <button type="button" className="btn solid" disabled={listing} onClick={showTests}>

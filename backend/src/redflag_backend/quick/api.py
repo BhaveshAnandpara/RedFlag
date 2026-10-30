@@ -6,6 +6,7 @@ run, and is saved nowhere.
 """
 
 import asyncio
+import itertools
 import secrets
 from collections import deque
 from collections.abc import Callable
@@ -13,8 +14,9 @@ from typing import Any, Literal
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from redflag_backend.personas.writer import Brief, Tool
 from redflag_backend.quick.interview import LIMIT_REPLY, InterviewBody, interview, user_turns
 from redflag_backend.quick.logs import detect_logs
 from redflag_backend.quick.pack import (
@@ -25,13 +27,15 @@ from redflag_backend.quick.pack import (
     production_tests,
     starter_tests,
 )
-from redflag_backend.quick.recon import recon
+from redflag_backend.quick.recon import FactSheet, recon
 from redflag_backend.scan.catalog import load_catalog
 from redflag_backend.settings import Settings
 from redflag_backend.setups.llm import ModelFailure, SetupLLM
 from redflag_backend.setups.models import Endpoint, FieldValue, Rule, SetupData
 from redflag_backend.setups.run_api import RunDeps, launch_run
 from redflag_backend.setups.store import SetupStore
+from redflag_backend.supervisor.plan import build_plan
+from redflag_backend.supervisor.view import plan_view
 from redflag_backend.targets.http_target import EndpointConfig
 
 CRITICAL_RULES = {
@@ -50,6 +54,32 @@ class CheckBody(BaseModel):
 class ProductionTestsBody(BaseModel):
     bot_type: str
     must_never: list[str]
+
+
+class PlanBody(BaseModel):
+    """What the planner is told. The key and the address stay out: planning never calls the bot."""
+
+    environment: Literal["staging", "production"] = "staging"
+    purpose: str = Field(default="", max_length=500)
+    rules: list[str] = Field(default_factory=list, max_length=20)
+    facts: FactSheet | None = None
+
+
+def _brief(body: PlanBody) -> Brief:
+    rules = [" ".join(r.split())[:200] for r in body.rules if r.strip()]
+    facts = body.facts
+    risky = {r.lower() for r in facts.risky} if facts else set()
+    tools = [
+        Tool(name=item, effect="acts" if item.lower() in risky else "unknown")
+        for item in (facts.can_do[:10] if facts else [])
+    ]
+    return Brief(
+        environment=body.environment,
+        purpose=body.purpose.strip(),
+        rules=rules,
+        tools=tools,
+        facts=facts.model_dump() if facts else {},
+    )
 
 
 class QuickBody(BaseModel):
@@ -89,6 +119,12 @@ def build_quick_router(
     router = APIRouter(prefix="/quick-scans")
     recent: deque[float] = deque()
     recent_chats: deque[float] = deque()
+    recent_plans: deque[float] = deque()
+    # Plans run in the background and the page asks how they are getting on. They live in memory
+    # only: a restart loses them, which just means planning again.
+    plans: dict[str, dict[str, Any]] = {}
+    plan_tasks: set[asyncio.Task[None]] = set()
+    plan_ids = itertools.count(-1, -1)
 
     def target(endpoint: Endpoint, key: str | None):  # type: ignore[no-untyped-def]
         return deps.make_target(EndpointConfig(**endpoint.model_dump(), key=key))
@@ -143,6 +179,49 @@ def build_quick_router(
             "limit_reached": False,
             "messages_left": cap - user_turns(body) - 1,
         }
+
+    @router.post("/plan", status_code=202, response_model=None)
+    async def start_plan(body: PlanBody) -> dict[str, Any] | JSONResponse:
+        """Plan the tests with the supervisor. Nothing is run and the bot is not called."""
+        brief = _brief(body)
+        if not brief.purpose and not brief.rules:
+            return _error(422, "nothing_to_plan")
+        now = clock()
+        while recent_plans and now - recent_plans[0] > settings.quick_plan_window_seconds:
+            recent_plans.popleft()
+        running = sum(1 for job in plans.values() if job["status"] == "running")
+        if len(recent_plans) >= settings.quick_plans_per_window or running >= 2:
+            return _error(429, "too_many_plans")
+        recent_plans.append(now)
+        plan_id = secrets.token_urlsafe(12)
+        plans[plan_id] = {"status": "running"}
+        while len(plans) > 30:
+            plans.pop(next(iter(plans)))
+        # Its own budget key, so one plan cannot use up another's model calls.
+        budget_key = next(plan_ids)
+
+        async def work() -> None:
+            try:
+                plan = await asyncio.wait_for(
+                    build_plan(llm, brief, budget_key), settings.quick_plan_timeout_seconds
+                )
+                plans[plan_id] = {"status": "done", "plan": plan_view(plan)}
+            except TimeoutError:
+                plans[plan_id] = {"status": "error", "kind": "plan_timeout"}
+            except Exception:  # a background job must end in a state the page can show
+                plans[plan_id] = {"status": "error", "kind": "plan_failed"}
+
+        task = asyncio.create_task(work())
+        plan_tasks.add(task)
+        task.add_done_callback(plan_tasks.discard)
+        return {"plan_id": plan_id}
+
+    @router.get("/plan/{plan_id}", response_model=None)
+    async def read_plan(plan_id: str) -> dict[str, Any] | JSONResponse:
+        job = plans.get(plan_id)
+        if job is None:
+            return _error(404, "no_such_plan")
+        return job
 
     @router.post("/check", response_model=None)
     async def check(body: CheckBody) -> dict[str, Any] | JSONResponse:

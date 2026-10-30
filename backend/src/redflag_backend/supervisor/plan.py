@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from redflag_backend.personas.merge import NEEDS_TEST_COPY, Count, Skipped, needs_test_copy
 from redflag_backend.personas.registry import PERSONAS
 from redflag_backend.personas.writer import MAX_DRAFTS, Brief, Dropped, PersonaTests, write_tests
+from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
@@ -157,7 +158,7 @@ class _Book:
 
 
 async def _ask(
-    llm: SetupLLM, brief: Brief, goal: Goal, wanted: int, avoid: list[str]
+    llm: SetupLLM, brief: Brief, goal: Goal, wanted: int, avoid: list[str], setup_id: int
 ) -> list[PersonaTests]:
     """One round: every persona that fits the goal writes its share."""
     share = max(FIRST_ROUND_MIN, math.ceil(wanted / len(goal.persona_ids)))
@@ -168,7 +169,7 @@ async def _ask(
     return list(
         await asyncio.gather(
             *(
-                write_tests(llm, PERSONAS[pid], brief, goals=[text], count=share)
+                write_tests(llm, PERSONAS[pid], brief, goals=[text], count=share, setup_id=setup_id)
                 for pid in goal.persona_ids
             )
         )
@@ -190,8 +191,8 @@ def _ordered(goals: list[Goal]) -> list[Goal]:
     return [g for _, g in sorted(enumerate(goals), key=key)]
 
 
-async def build_plan(llm: SetupLLM, brief: Brief) -> Plan:
-    goals = _ordered(await make_goals(llm, brief))
+async def build_plan(llm: SetupLLM, brief: Brief, setup_id: int = NO_SETUP) -> Plan:
+    goals = _ordered(await make_goals(llm, brief, setup_id))
     fear = _biggest_fear(goals)
     book = _Book()
     planned: list[PlannedGoal] = []
@@ -200,14 +201,14 @@ async def build_plan(llm: SetupLLM, brief: Brief) -> Plan:
         target = _target(goal, fear)
         wanted = BACKGROUND_EACH if goal.background else max(target, FIRST_ROUND_MIN)
         specs: list[TestSpec] = []
-        for output in await _ask(llm, brief, goal, wanted, []):
+        for output in await _ask(llm, brief, goal, wanted, [], setup_id):
             specs += book.take(goal, output, brief.environment)
         rounds = 0
         while len(specs) < target and rounds < MAX_ROUNDS:
             rounds += 1
             before = len(specs)
             avoid = [s.opening_message[:80] for s in specs[-SEEN_IN_PROMPT:]]
-            for output in await _ask(llm, brief, goal, target - len(specs), avoid):
+            for output in await _ask(llm, brief, goal, target - len(specs), avoid, setup_id):
                 specs += book.take(goal, output, brief.environment)
             if len(specs) == before:
                 break

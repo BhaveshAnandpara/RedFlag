@@ -142,12 +142,12 @@ def _background() -> list[Goal]:
     ]
 
 
-async def make_goals(llm: SetupLLM, brief: Brief) -> list[Goal]:
+async def make_goals(llm: SetupLLM, brief: Brief, setup_id: int = NO_SETUP) -> list[Goal]:
     """The goals for this bot. A model that fails still leaves every rule and the background
     checks, so a plan can always be made from what the user said."""
     try:
         answer = await llm.ask(
-            NO_SETUP, "planner", PLANNER_SYSTEM, build_prompt(brief), GoalsAnswer
+            setup_id, "planner", PLANNER_SYSTEM, build_prompt(brief), GoalsAnswer
         )
         drafts = answer.goals
     except ModelFailure:
