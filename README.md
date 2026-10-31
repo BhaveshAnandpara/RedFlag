@@ -183,6 +183,26 @@ pnpm dev
 
 On Windows PowerShell, use `Copy-Item` instead of `cp`.
 
+### Testing a bot that runs on your own machine
+
+Redflag's backend refuses to call a private or local address (such as `localhost`), because on a
+server that would let anyone aim it at the host's own network. When you run Redflag yourself you
+can switch that off for your own machine:
+
+1. In `backend/.env`, set `ENV=dev` and add at least one model key (`GROQ_API_KEY`,
+   `GEMINI_API_KEY` or `OPENROUTER_API_KEY`). Redflag's own models write the plan and judge the
+   results, so they need a key.
+2. Use a database of its own (for example `redflag_dev`), not the one the tests use: the tests
+   empty their database before each test.
+3. Run the backend and the page as above. If something else already uses port 3000 (Open WebUI
+   does), start the page on another port, for example `pnpm dev -p 3001`, and set
+   `FRONTEND_ORIGIN=http://localhost:3001` in `backend/.env`.
+4. In the page, give your bot's address as `http://localhost:<port>/...`.
+
+Only the exact value `dev` turns this on, a log line warns when it is on, and a server that says it
+is Render ignores it. Never set `ENV=dev` on a deployed service. The tests always run as
+production, whatever `.env` says.
+
 ## Tests and checks
 
 ```bash

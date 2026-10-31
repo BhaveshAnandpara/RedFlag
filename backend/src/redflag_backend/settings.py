@@ -1,3 +1,5 @@
+import os
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,6 +21,9 @@ class Settings(BaseSettings):
 
     database_url: str = Field(repr=False)  # a secret: it holds the database password
     frontend_origin: str
+    # "dev" lets Redflag call a bot at a local or private address (for example localhost), for a
+    # developer running it on their own machine. Anything else, including nothing, is production.
+    env: str = "prod"
     app_version: str = "0.1.0"
     commit_sha: str | None = None
     # Saved answers: kept for a week, and capped well inside Neon's 0.5 GB free plan.
@@ -143,6 +148,13 @@ class Settings(BaseSettings):
     owner_token: str | None = Field(default=None, repr=False)
     # Neon can take several seconds to wake from idle; allow for that before saying "degraded".
     db_timeout_seconds: float = 10.0
+
+    @property
+    def allow_private_targets(self) -> bool:
+        """True only when ENV is exactly "dev" and this is not a hosted deployment. Calling a
+        private address from a public server would let anyone aim it at the host's own network, so
+        a host that says it is Render never allows it, whatever ENV says."""
+        return self.env.strip().lower() == "dev" and not os.environ.get("RENDER")
 
     @field_validator("database_url")
     @classmethod

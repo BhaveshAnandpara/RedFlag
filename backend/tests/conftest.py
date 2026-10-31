@@ -14,6 +14,14 @@ from tests.helpers import TEST_DB_URL
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def production_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test runs as production, whatever is in the developer's own .env. A developer who
+    sets ENV=dev there (to call a bot on localhost) must not change what the tests check."""
+    monkeypatch.setenv("ENV", "prod")
+    monkeypatch.delenv("RENDER", raising=False)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def migrated_database() -> Iterator[None]:
     """Apply every migration to the test database, exactly as a deploy would."""

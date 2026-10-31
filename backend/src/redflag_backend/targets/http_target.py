@@ -95,7 +95,11 @@ class HttpTarget:
         blocked_hosts: Iterable[str] = (),
         timeout: float = 20.0,
         max_reply_bytes: int = 65_536,
+        allow_private: bool = False,
     ) -> None:
+        # Only for a developer running Redflag on their own machine (see Settings.env). It lets the
+        # bot be at a private or local address. Everything else about an address is still checked.
+        self._allow_private = allow_private
         self._config = config
         self._resolver = resolver
         self._transport = transport
@@ -178,7 +182,7 @@ class HttpTarget:
         addresses = await self._addresses(host, port)
         if not addresses:
             raise _Refused("Could not resolve that address.")
-        if not all(_is_public(address) for address in addresses):
+        if not self._allow_private and not all(_is_public(address) for address in addresses):
             raise _Refused(
                 "That address is not allowed: it points to a private or internal address."
             )

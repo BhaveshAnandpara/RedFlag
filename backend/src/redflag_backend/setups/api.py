@@ -228,6 +228,7 @@ def build_setup_router(
             resolver=resolver or system_resolver,
             transport=transport,
             blocked_hosts=blocked,
+            allow_private=settings.allow_private_targets,
         )
         check = await target.test_connection()
 

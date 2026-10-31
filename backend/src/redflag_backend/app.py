@@ -1,3 +1,4 @@
+import logging
 import time
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
@@ -155,6 +156,11 @@ def create_app(
         concurrency=1,
     )
     own_hosts = [settings.public_backend_host] if settings.public_backend_host else []
+    if settings.allow_private_targets:
+        logging.getLogger(__name__).warning(
+            "ENV=dev: Redflag may call bots at local and private addresses. "
+            "Never use this on a server."
+        )
 
     def make_target(config: EndpointConfig) -> HttpTarget:
         return HttpTarget(
@@ -162,6 +168,7 @@ def create_app(
             resolver=target_resolver or system_resolver,
             transport=target_transport,
             blocked_hosts=own_hosts,
+            allow_private=settings.allow_private_targets,
         )
 
     run_deps = RunDeps(

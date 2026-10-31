@@ -67,7 +67,9 @@ def target(
 ) -> tuple[HttpTarget, StandIn]:
     server = stand_in or StandIn()
     options = {
-        k: changes.pop(k) for k in ("blocked_hosts", "timeout", "max_reply_bytes") if k in changes
+        k: changes.pop(k)
+        for k in ("blocked_hosts", "timeout", "max_reply_bytes", "allow_private")
+        if k in changes
     }
     return (
         HttpTarget(
@@ -331,3 +333,59 @@ def test_test_connection_reports_a_failure_instead_of_raising() -> None:
     seen = check(http_target)
     assert seen.status == "error" and seen.http_status == 401 and "401" in seen.error
     assert seen.raw_reply == "nope"
+
+
+# --- a developer's own machine -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost:3000/api/chat/completions",
+        "http://127.0.0.1:3000/x",
+        "http://[::1]:3000/x",
+        "http://10.0.0.5/x",
+        "http://192.168.1.20:8080/x",
+    ],
+)
+def test_a_local_or_private_address_can_be_called_when_the_developer_switch_is_on(url: str) -> None:
+    http_target, server = target(url=url, names={"localhost": ["127.0.0.1"]}, allow_private=True)
+    result = send(http_target)
+    assert result.status == "ok", result.error
+    assert len(server.requests) == 1
+
+
+def test_a_name_that_resolves_to_a_private_address_is_allowed_only_with_the_switch() -> None:
+    names = {"bot.example": ["10.1.2.3"]}
+    refused, server = target(names=names)
+    assert send(refused).status == "error" and server.requests == []
+    allowed, server = target(names=names, allow_private=True)
+    assert send(allowed).status == "ok" and len(server.requests) == 1
+
+
+def test_the_switch_changes_nothing_else_about_which_addresses_are_allowed() -> None:
+    for url in (
+        "ftp://localhost/x",
+        "file:///etc/passwd",
+        "https://user:pass@localhost/x",
+        "not a url",
+    ):
+        http_target, server = target(
+            url=url, names={"localhost": ["127.0.0.1"]}, allow_private=True
+        )
+        result = send(http_target)
+        assert result.status == "error" and "not allowed" in result.error, url
+        assert server.requests == []
+    own, server = target(
+        url="http://redflag.example/x", blocked_hosts=["redflag.example"], allow_private=True
+    )
+    assert "Redflag's own" in send(own).error and server.requests == []
+    nothing, server = target(names={"bot.example": []}, allow_private=True)
+    assert "resolve" in send(nothing).error
+
+
+def test_a_local_address_is_still_refused_when_nothing_turns_the_switch_on() -> None:
+    http_target, server = target(url="http://localhost:3000/x", names={"localhost": ["127.0.0.1"]})
+    result = send(http_target)
+    assert result.status == "error" and "private or internal" in result.error
+    assert server.requests == []
