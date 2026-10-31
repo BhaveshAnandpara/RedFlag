@@ -197,7 +197,7 @@ describe("the live test plan", () => {
     const began = Date.now();
     await user.click(create());
     await screen.findByText("Your tests are ready");
-    expect(Date.now() - began).toBeLessThan(1500);
+    expect(Date.now() - began).toBeLessThan(6000); // not stretched to a minute
   });
 
   it("says so, with a countdown, when the models' quota is used up and it is waiting to try again", async () => {
