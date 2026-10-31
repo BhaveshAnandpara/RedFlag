@@ -33,11 +33,16 @@ def plan_body(**changes: Any) -> dict[str, Any]:
 
 
 def finished(client: TestClient, plan_id: str) -> dict[str, Any]:
-    for _ in range(100):
-        job: dict[str, Any] = client.get(f"/quick-scans/plan/{plan_id}").json()
+    """Ask for the next items again and again, as the page does, until the plan is handed over."""
+    after = 0
+    for _ in range(3000):
+        job: dict[str, Any] = client.get(f"/quick-scans/plan/{plan_id}?after={after}").json()
         if job["status"] != "running":
             return job
-        time.sleep(0.1)
+        if job["events"]:
+            after = job["next"]
+        else:
+            time.sleep(0.02)
     raise AssertionError("the plan never finished")
 
 

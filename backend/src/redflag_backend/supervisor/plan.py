@@ -238,7 +238,9 @@ async def build_plan(
         if progress is not None:
             progress.asking(goal.persona_ids)
         for output in await _ask(llm, brief, goal, wanted, [], setup_id, progress):
-            specs += book.take(goal, output, brief.environment)
+            kept = book.take(goal, output, brief.environment)
+            _show(progress, goal, kept, _room(goal, background_left, specs))
+            specs += kept
         rounds = 0
         while len(specs) < target and rounds < MAX_ROUNDS:
             rounds += 1
@@ -250,19 +252,53 @@ async def build_plan(
             for output in await _ask(
                 llm, brief, goal, target - len(specs), avoid, setup_id, progress
             ):
-                specs += book.take(goal, output, brief.environment)
+                kept = book.take(goal, output, brief.environment)
+                _show(progress, goal, kept, _room(goal, background_left, specs))
+                specs += kept
             if len(specs) == before:
                 break
         note = None
         if len(specs) < target:
             note = f"We could only find {len(specs)} truly different attacks for this goal."
+            if progress is not None:
+                progress.say(note)
         if goal.background:
             specs = specs[:background_left]
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
     if progress is not None:
         progress.working_on("Putting the plan together")
-    return _finish(planned, fear, book)
+        removed = len(book.removed)
+        progress.say(
+            f"Removed {removed} repeated {'idea' if removed == 1 else 'ideas'}."
+            if removed
+            else "No repeated ideas to remove."
+        )
+    plan = _finish(planned, fear, book)
+    if progress is not None:
+        progress.say(
+            "Some of your rules have no tests yet."
+            if plan.blocked
+            else "Every one of your rules has at least one test."
+        )
+        progress.say(f"Plan ready: {plan.summary.tests} tests.")
+    return plan
+
+
+def _room(goal: Goal, background_left: int, specs: list[TestSpec]) -> int | None:
+    """How many more tests this goal may still show: the background checks are capped."""
+    return max(0, background_left - len(specs)) if goal.background else None
+
+
+def _show(progress: Progress | None, goal: Goal, kept: list[TestSpec], limit: int | None) -> None:
+    """Add each new test to the page as a card, in the order it was written."""
+    if progress is None:
+        return
+    for spec in kept[:limit]:
+        persona_id = next(p.id for p in PERSONAS.values() if p.name == spec.persona)
+        progress.test(
+            persona_id, spec.persona, goal.question, spec.opening_message, spec.changes_data
+        )
 
 
 def _finish(planned: list[PlannedGoal], fear: Goal | None, book: _Book) -> Plan:

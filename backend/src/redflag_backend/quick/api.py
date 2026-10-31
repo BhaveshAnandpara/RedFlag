@@ -208,11 +208,11 @@ def build_quick_router(
                     build_plan(llm, brief, budget_key, progress),
                     settings.quick_plan_timeout_seconds,
                 )
-                plans[plan_id] = {"status": "done", "plan": plan_view(plan)}
+                plans[plan_id] = {"status": "done", "plan": plan_view(plan), "progress": progress}
             except TimeoutError:
-                plans[plan_id] = {"status": "error", "kind": "plan_timeout"}
+                plans[plan_id] = {"status": "error", "kind": "plan_timeout", "progress": progress}
             except Exception:  # a background job must end in a state the page can show
-                plans[plan_id] = {"status": "error", "kind": "plan_failed"}
+                plans[plan_id] = {"status": "error", "kind": "plan_failed", "progress": progress}
 
         task = asyncio.create_task(work())
         plan_tasks.add(task)
@@ -220,13 +220,17 @@ def build_quick_router(
         return {"plan_id": plan_id}
 
     @router.get("/plan/{plan_id}", response_model=None)
-    async def read_plan(plan_id: str) -> dict[str, Any] | JSONResponse:
+    async def read_plan(plan_id: str, after: int = 0) -> dict[str, Any] | JSONResponse:
         job = plans.get(plan_id)
         if job is None:
             return _error(404, "no_such_plan")
-        if job["status"] == "running":
-            return {"status": "running", **job["progress"].snapshot()}
-        return job
+        progress: Progress = job["progress"]
+        if job["status"] == "error":
+            return {"status": "error", "kind": job["kind"]}
+        if job["status"] == "running" or not progress.drained(after):
+            # Items are handed out a few at a time, so the page can show the plan being written.
+            return {"status": "running", **progress.snapshot(after)}
+        return {"status": "done", "plan": job["plan"]}
 
     @router.post("/check", response_model=None)
     async def check(body: CheckBody) -> dict[str, Any] | JSONResponse:

@@ -113,13 +113,14 @@ def test_the_countdown_runs_while_waiting_and_clears_when_the_wait_is_over() -> 
     patience.on_wait(60, 1, 5)
     snap = progress.snapshot()
     assert snap["waiting"] is True and snap["seconds_left"] == 60
-    assert "quota" in snap["feed"][-1] and "Waiting a minute" in snap["feed"][-1]
+    last = progress.events[-1]
+    assert last["kind"] == "wait" and "Waiting a minute" in last["text"]
     now[0] = 130.0
     assert progress.snapshot()["seconds_left"] == 30
     now[0] = 160.0
     patience.on_resume()
     snap = progress.snapshot()
-    assert snap["waiting"] is False and snap["feed"][-1] == "Trying again…"
+    assert snap["waiting"] is False and progress.events[-1]["text"] == "Trying again…"
 
 
 def test_several_personas_hitting_the_quota_together_make_one_wait_and_one_line() -> None:
@@ -128,23 +129,53 @@ def test_several_personas_hitting_the_quota_together_make_one_wait_and_one_line(
     assert on_wait is not None
     for _ in range(3):
         on_wait(60, 1, 5)
-    assert len([line for line in progress.snapshot()["feed"] if "quota" in line]) == 1
+    assert [e["kind"] for e in progress.events] == ["wait"]
 
 
-def test_the_feed_keeps_only_the_latest_lines_and_names_who_is_being_asked() -> None:
+def test_each_step_and_each_test_is_an_event_with_a_number_and_who_is_being_asked() -> None:
     progress = Progress(lambda: 0.0, 60, 5)
-    for n in range(20):
-        progress.say(f"line {n}")
-    feed = progress.snapshot()["feed"]
-    assert feed[-1] == "line 19" and len(feed) == 8
+    progress.say("line 0")
     progress.asking(["content_poisoner"])
-    assert progress.snapshot()["feed"][-1] == (
+    progress.asking(["social_engineer", "fake_insider", "data_harvester"], retry_round=2)
+    progress.test("fake_insider", "fake insider", "Reveal codes?", "Hi, IT here.", False)
+    assert [e["seq"] for e in progress.events] == [0, 1, 2, 3]
+    assert progress.events[1]["text"] == (
         "Asking the content poisoner to hide instructions inside data…"
     )
-    progress.asking(["social_engineer", "fake_insider", "data_harvester"], retry_round=2)
-    last = progress.snapshot()["feed"][-1]
-    assert "the fake insider to pose as staff and the data harvester" in last
-    assert last.endswith("for different angles (try 2 of 3)…")
+    assert "the fake insider to pose as staff and the data harvester" in progress.events[2]["text"]
+    assert progress.events[2]["text"].endswith("for different angles (try 2 of 3)…")
+    card = progress.events[3]
+    assert card["kind"] == "test" and card["text"] == "Hi, IT here."
+    assert card["persona"] == "fake insider" and card["goal"] == "Reveal codes?"
+    assert card["persona_id"] == "fake_insider" and card["changes_data"] is False
+    assert progress.tests == 1
+
+
+def test_items_are_handed_out_one_at_a_time_from_where_the_page_left_off() -> None:
+    progress = Progress(lambda: 0.0, 60, 5)
+    for n in range(5):
+        progress.say(f"line {n}")
+    first = progress.snapshot(0)
+    assert [e["text"] for e in first["events"]] == ["line 0"] and first["next"] == 1
+    assert first["total"] == 5
+    third = progress.snapshot(2)
+    assert [e["text"] for e in third["events"]] == ["line 2"] and third["next"] == 3
+    assert progress.snapshot(5)["events"] == [] and progress.drained(5)
+    assert not progress.drained(4)
+    assert progress.snapshot(-3)["events"][0]["text"] == "line 0"  # nonsense is read as the start
+
+
+def test_when_many_items_are_waiting_several_are_handed_out_so_a_big_plan_still_ends() -> None:
+    progress = Progress(lambda: 0.0, 60, 5)
+    for n in range(300):
+        progress.say(f"line {n}")
+    items, upto = progress.next_items(0)
+    assert len(items) == 5 and upto == 5  # 300 waiting over at most 60 beats
+    beats, after = 0, 0
+    while not progress.drained(after):
+        after = progress.next_items(after)[1]
+        beats += 1
+    assert beats <= 70
 
 
 # --- a whole plan -----------------------------------------------------------------------------
@@ -164,7 +195,7 @@ def test_a_plan_rides_out_the_quota_and_still_gets_every_persona_through() -> No
     plan = asyncio.run(build_plan(llm_for(model), BRIEF, -1, progress))
     assert plan.blocked is None and plan.summary.tests > 0
     assert all(c.failed is None for c in plan.counts)
-    assert any("quota" in line for line in progress.lines)
+    assert any(e["kind"] == "wait" for e in progress.events)
     assert progress.goal_total == len(plan.goals) and progress.goal_index == len(plan.goals)
 
 
@@ -204,22 +235,68 @@ def test_while_a_plan_waits_for_the_quota_the_page_can_see_the_countdown() -> No
             time.sleep(0.02)
         assert waiting is not None, "never saw the wait"
         assert waiting["seconds_left"] >= 0 and waiting["headline"]
-        assert any("quota" in line for line in waiting["feed"])
         assert finished(client, plan_id)["status"] == "done"
 
 
-def test_a_running_plan_reports_a_headline_and_a_feed_and_never_the_internals() -> None:
+def test_a_running_plan_hands_out_items_and_never_the_internals() -> None:
     with run_client(roles=Writers(GOALS)) as (client, _, _):
         plan_id = start(client).json()["plan_id"]
         job = client.get(f"/quick-scans/plan/{plan_id}").json()
-        if job["status"] == "running":
-            assert set(job) == {
-                "status",
-                "headline",
-                "feed",
-                "goal_index",
-                "goal_total",
-                "waiting",
-                "seconds_left",
-            }
+        assert job["status"] == "running"
+        assert set(job) == {
+            "status",
+            "headline",
+            "events",
+            "next",
+            "total",
+            "tests",
+            "goal_index",
+            "goal_total",
+            "waiting",
+            "seconds_left",
+        }
+        # one at a time, or a few at a time once the plan has grown past 60 items
+        assert 1 <= len(job["events"]) <= max(1, -(-job["total"] // 60))
+        assert job["next"] == len(job["events"])
         assert finished(client, plan_id)["status"] == "done"
+
+
+def test_every_test_in_the_plan_arrives_as_a_card_in_the_order_it_was_written() -> None:
+    with run_client(roles=Writers(GOALS)) as (client, _, _):
+        plan_id = start(client).json()["plan_id"]
+        cards: list[dict[str, Any]] = []
+        lines: list[str] = []
+        after = 0
+        for _ in range(3000):
+            job = client.get(f"/quick-scans/plan/{plan_id}?after={after}").json()
+            if job["status"] == "done":
+                break
+            for event in job["events"]:
+                (cards if event["kind"] == "test" else lines).append(event)
+            after = job["next"] if job["events"] else after
+            if not job["events"]:
+                time.sleep(0.02)
+        plan = job["plan"]
+        assert len(cards) == plan["summary"]["tests"] > 0
+        assert all(c["persona"] and c["goal"] and c["text"] for c in cards)
+        assert len({c["text"] for c in cards}) == len(cards)  # a repeat never becomes a card
+        assert [c["seq"] for c in cards] == sorted(c["seq"] for c in cards)
+        texts = [e["text"] for e in lines]
+        assert texts[0].startswith("Asking the planner") and texts[-1].startswith("Plan ready")
+        assert any(t.startswith("Goal 1 of") for t in texts)
+        assert any("Every one of your rules has at least one test" in t for t in texts)
+
+
+def test_the_background_checks_only_show_as_many_cards_as_the_plan_keeps() -> None:
+    with run_client(roles=Writers(GOALS)) as (client, _, _):
+        plan_id = start(client).json()["plan_id"]
+        after, cards = 0, 0
+        for _ in range(3000):
+            job = client.get(f"/quick-scans/plan/{plan_id}?after={after}").json()
+            if job["status"] == "done":
+                break
+            cards += sum(1 for e in job["events"] if e["kind"] == "test")
+            after = job["next"] if job["events"] else after
+            if not job["events"]:
+                time.sleep(0.02)
+        assert cards == job["plan"]["summary"]["tests"]
