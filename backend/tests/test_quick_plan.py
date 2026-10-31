@@ -61,7 +61,8 @@ def test_a_plan_is_made_in_the_background_and_read_back_in_plain_fields() -> Non
         assert first["question"] == "Can someone get a refund over $50?"
         assert first["tag"] == f"Because you said: “{REFUND}”"
         assert first["test_count"] >= 30 and first["tests"][0]["persona"]
-        assert plan["summary"]["tests"] > 0 and plan["blocked"] is None
+        assert plan["summary"]["tests"] > 0 and plan["warning"] is None
+        assert plan["untested_rules"] == [] and "blocked" not in plan
         assert REFUND in plan["rules_covered"] and PRIVATE in plan["rules_covered"]
         assert plan["goals"][-1]["background"] is True
         assert endpoint.requests == []  # planning never calls the bot
@@ -102,11 +103,13 @@ def test_in_production_the_poisoning_tests_come_back_as_needing_a_test_copy() ->
         assert all(t["persona"] != "content poisoner" for g in plan["goals"] for t in g["tests"])
 
 
-def test_a_rule_with_no_tests_comes_back_blocked_with_a_plain_message() -> None:
+def test_a_rule_with_no_tests_comes_back_with_a_warning_and_the_tests_that_were_written() -> None:
     model = Writers(GOALS, bad_risk=("social_engineer", "content_poisoner"))
     with run_client(roles=model) as (client, _, _):
         job = finished(client, start(client).json()["plan_id"])
-        assert job["status"] == "done" and REFUND in job["plan"]["blocked"]
+        plan = job["plan"]
+        assert job["status"] == "done" and plan["untested_rules"] == [REFUND]
+        assert REFUND in plan["warning"] and plan["summary"]["tests"] > 0
 
 
 def test_planning_has_a_limit_so_it_cannot_be_used_to_burn_the_models() -> None:

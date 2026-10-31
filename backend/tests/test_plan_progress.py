@@ -193,7 +193,7 @@ def test_a_plan_rides_out_the_quota_and_still_gets_every_persona_through() -> No
     )
     progress = Recording(time.time, WAIT, 5)
     plan = asyncio.run(build_plan(llm_for(model), BRIEF, -1, progress))
-    assert plan.blocked is None and plan.summary.tests > 0
+    assert plan.warning is None and plan.summary.tests > 0
     assert all(c.failed is None for c in plan.counts)
     assert any(e["kind"] == "wait" for e in progress.events)
     assert progress.goal_total == len(plan.goals) and progress.goal_index == len(plan.goals)
@@ -212,9 +212,10 @@ def test_the_progress_names_the_goal_and_the_personas_as_the_plan_goes() -> None
 def test_a_plan_that_never_gets_through_blames_the_models_not_the_rule() -> None:
     model = Writers(GOALS, broken=("social_engineer", "content_poisoner"))
     plan = asyncio.run(build_plan(llm_for(model), BRIEF, -1, Progress(time.time, WAIT, 1)))
-    assert plan.blocked is not None and REFUND in plan.blocked
-    assert "because the AI models did not answer" in plan.blocked
-    assert "Reword" not in plan.blocked
+    assert plan.warning is not None and REFUND in plan.warning
+    assert "The AI models did not answer for it" in plan.warning
+    assert "create the plan again in a few minutes" in plan.warning
+    assert "Reword" not in plan.warning
 
 
 # --- over HTTP --------------------------------------------------------------------------------

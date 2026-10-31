@@ -11,7 +11,8 @@ afterEach(cleanup);
 const REFUND = "It must never refund over $50.";
 const PLAN = {
   summary: { ideas: 14, repeats_removed: 3, tests: 2, data_changing: 1 },
-  blocked: null as string | null,
+  warning: null as string | null,
+  untested_rules: [] as string[],
   rules_covered: [REFUND],
   skipped: [] as { persona: string; goal: string; reason: string }[],
 };
@@ -258,13 +259,17 @@ describe("the live test plan", () => {
     show(
       planApi(EVENTS, {}, {
         ...PLAN,
-        blocked: "We could not write any test for: “It must never swear.”. Reword the rule or take it out, then plan again.",
+        warning: "1 of your 2 rules has no tests: “It must never swear.”. The tests we did write will still run.",
+        untested_rules: ["It must never swear."],
         skipped: [{ persona: "content poisoner", goal: "x", reason: "needs a test copy" }],
       }).api,
       { environment: "production" },
     );
     await user.click(create());
-    expect(await screen.findByText(/Reword the rule or take it out/)).toBeInTheDocument();
+    const notice = await screen.findByText(/1 of your 2 rules has no tests/);
+    expect(notice).toBeInTheDocument();
+    expect(notice).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText(/1 test needs a test copy/)).toBeInTheDocument();
     expect(screen.getByText(/only run tests that do not make it act/)).toBeInTheDocument();
   });
@@ -347,7 +352,7 @@ describe("the live test plan", () => {
     expect(seen[seen.length - 1]).toEqual({
       id: "p1",
       tests: 2,
-      blocked: false,
+      untested: 0,
       messages: [4, 8, 12, 16, 20],
     });
     // what the plan was made from changes: it is no longer a plan to run
@@ -367,14 +372,19 @@ describe("the live test plan", () => {
     await waitFor(() => expect(seen[seen.length - 1]).toBeNull());
   });
 
-  it("says a plan with a rule left without tests is blocked", async () => {
-    const seen: ({ blocked: boolean } | null)[] = [];
-    const { api } = planApi(EVENTS, {}, { ...PLAN, blocked: "We could not write any test for: a rule." });
+  it("reports how many rules have no tests, and the plan still counts as ready to run", async () => {
+    const seen: ({ untested: number; tests: number } | null)[] = [];
+    const plan = {
+      ...PLAN,
+      warning: "2 of your 2 rules have no tests.",
+      untested_rules: ["A rule.", "Another rule."],
+    };
+    const { api } = planApi(EVENTS, {}, plan);
     const user = userEvent.setup();
     show(api, { onPlan: (p) => seen.push(p) });
     await user.click(create());
     await screen.findByText("Your tests are ready");
-    expect(seen[seen.length - 1]?.blocked).toBe(true);
+    expect(seen[seen.length - 1]).toMatchObject({ untested: 2, tests: 2 });
   });
 
   it("lets go of the plan, and shows the button again, when the page says to reset", async () => {

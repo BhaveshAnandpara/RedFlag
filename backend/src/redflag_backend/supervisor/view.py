@@ -17,7 +17,8 @@ def plan_view(plan: Plan) -> dict[str, Any]:
             "messages_by_runs": messages_by_runs(plan),
         },
         "biggest_fear": plan.biggest_fear,
-        "blocked": plan.blocked,
+        "warning": plan.warning,
+        "untested_rules": plan.untested_rules,
         "rules_covered": [rule for rule in covered if rule],
         "skipped": [s.model_dump() for s in plan.skipped],
         "goals": [

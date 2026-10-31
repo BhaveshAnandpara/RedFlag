@@ -303,19 +303,21 @@ def test_two_tests_that_open_the_same_way_are_one_and_the_first_is_kept() -> Non
     assert len(openings) == len(set(openings))
 
 
-def test_a_stated_rule_with_no_tests_blocks_the_plan_with_a_plain_message() -> None:
+def test_a_stated_rule_with_no_tests_is_named_in_a_warning_and_does_not_stop_the_plan() -> None:
     model = Writers(GOALS, bad_risk=("social_engineer", "content_poisoner"))
     plan = plan_for(model)
-    assert plan.blocked is not None
-    assert REFUND in plan.blocked and "Reword the rule or take it out" in plan.blocked
-    assert PRIVATE not in plan.blocked
-    assert plan.dropped
+    assert plan.untested_rules == [REFUND]
+    assert plan.warning is not None and REFUND in plan.warning
+    assert "1 of your 2 rules has no tests" in plan.warning
+    assert "will still run" in plan.warning and "Reword it" in plan.warning
+    assert PRIVATE not in plan.warning
+    assert plan.summary.tests > 0 and plan.dropped
 
 
 def test_a_goal_we_added_with_no_tests_does_not_block_the_plan() -> None:
     model = Writers(GOALS, bad_risk=("fake_insider",))  # LLM07 is only fake_insider's
     plan = plan_for(model, Brief(purpose="Bot", rules=[]))
-    assert plan.blocked is None
+    assert plan.warning is None and plan.untested_rules == []
 
 
 def test_in_production_poisoning_tests_are_set_aside_as_needing_a_test_copy() -> None:
@@ -332,7 +334,7 @@ def test_a_persona_that_fails_shows_in_the_counts_and_the_others_carry_on() -> N
     plan = plan_for(Writers(GOALS, broken=("content_poisoner",)))
     counts = {c.persona_id: c for c in plan.counts}
     assert counts["content_poisoner"].failed == "bad_model_answer"
-    assert counts["social_engineer"].written > 0 and plan.blocked is None
+    assert counts["social_engineer"].written > 0 and plan.warning is None
 
 
 def test_the_summary_adds_up_and_counts_tests_that_change_data() -> None:

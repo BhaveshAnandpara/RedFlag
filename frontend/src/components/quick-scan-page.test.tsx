@@ -464,7 +464,8 @@ describe("step 2: what the bot does and what it must never do", () => {
             status: "done",
             plan: {
               summary: { ideas: 1, repeats_removed: 0, tests: 0, data_changing: 0 },
-              blocked: null,
+              warning: null,
+              untested_rules: [],
               rules_covered: [],
               skipped: [],
             },
@@ -987,7 +988,8 @@ describe("running the test plan", () => {
       data_changing: 0,
       messages_by_runs: [10, 20, 30, 1200, 50],
     },
-    blocked: null as string | null,
+    warning: null as string | null,
+    untested_rules: [] as string[],
     rules_covered: [] as string[],
     skipped: [] as { persona: string; goal: string; reason: string }[],
   };
@@ -1100,14 +1102,53 @@ describe("running the test plan", () => {
     expect(screen.queryByText("Your tests are ready")).not.toBeInTheDocument();
   });
 
-  it("does not run a plan that has a rule with no tests, and says to reword it", async () => {
+  it("still runs a plan that has rules with no tests, and says the report will list them", async () => {
     const backend = new FakeBackend();
-    withPlan(backend, { ...PLAN, blocked: "We could not write any test for: the swearing rule." });
+    withPlan(backend, {
+      ...PLAN,
+      warning: "2 of your 8 rules have no tests: the swearing rule; the tone rule.",
+      untested_rules: ["the swearing rule", "the tone rule"],
+    });
     const user = await staged(backend);
     await make(user);
-    expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled();
+    expect(screen.getByText(/2 of your 8 rules have no tests/, { selector: ".notice" })).toBeInTheDocument();
+    const run = screen.getByRole("button", { name: "Run my plan · 11 tests" });
+    expect(run).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Run my scan" })).not.toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Run each attack" })).toBeInTheDocument();
+    expect(screen.getByText("2 of your rules have no tests, so the report will list them as not tested.")).toBeInTheDocument();
+    await user.click(run);
+    await screen.findByText("Scan #31");
+    expect(backend.bodies("/quick-scans")[0]).toMatchObject({ plan_id: "p1" });
+  });
+
+  it("says one rule, not a count of rules, when only one has no tests", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend, { ...PLAN, warning: "1 of your 8 rules has no tests.", untested_rules: ["the tone rule"] });
+    const user = await staged(backend);
+    await make(user);
+    expect(screen.getByText("1 of your rules has no tests, so the report will list it as not tested.")).toBeInTheDocument();
+  });
+
+  it("says nothing about missing tests when every rule has some", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await staged(backend);
+    await make(user);
+    expect(screen.queryByText(/no tests, so the report will list/)).not.toBeInTheDocument();
+    expect(document.querySelector(".notice")).toBeNull();
+  });
+
+  it("says so, and drops the plan, when the server finds it has no tests", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    backend.overrides["POST /quick-scans"] = () => json(422, { error: { kind: "plan_empty" } });
+    const user = await staged(backend);
+    await make(user);
+    await user.click(screen.getByRole("button", { name: "Run my plan · 11 tests" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no tests to run/);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled());
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
-    expect(screen.getByText(/a rule with no tests, so Run uses the standard tests/)).toBeInTheDocument();
   });
 
   it("says so, and drops the plan, when the server no longer has it", async () => {

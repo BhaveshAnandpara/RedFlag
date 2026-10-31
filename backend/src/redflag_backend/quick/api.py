@@ -310,8 +310,10 @@ def build_quick_router(
             if live and body.bot_type == "agent":
                 return _error(422, "plan_not_for_live_agent")
             chosen_plan = job["plan_obj"]
-            if chosen_plan.blocked or not chosen_plan.summary.tests:
-                return _error(422, "plan_blocked")
+            # A rule with no tests does not stop the run: the tests that were written still run.
+            # Only a plan with nothing in it has nothing to run.
+            if not chosen_plan.summary.tests:
+                return _error(422, "plan_empty")
 
         # One hello before anything is created, so a wrong address or key leaves nothing behind.
         seen = await target(body.endpoint, body.key).test_connection()
@@ -319,6 +321,7 @@ def build_quick_router(
             return _error(422, "connection_failed", seen.error or "The bot did not answer.")
 
         options: RunOptions | None = None
+        plan_info: dict[str, Any] | None = None
         if chosen_plan is not None:
             stored = await asyncio.to_thread(save_specs, specs, chosen_plan)
             tests = build_tests(chosen_plan, body.runs, stored)
@@ -327,6 +330,12 @@ def build_quick_router(
                 max_requests=min(needed, settings.run_plan_max_endpoint_requests),
                 on_test_done=proof_saver(results, body.key),
             )
+            # Saved with the scan, so its report can say what ran and which rules had no tests.
+            plan_info = {
+                "tests": len(tests),
+                "runs": body.runs,
+                "untested_rules": chosen_plan.untested_rules,
+            }
         elif live:
             offered = {t["id"]: t for t in production_tests(body.bot_type, chosen, custom)}
             if not body.test_ids:
@@ -370,6 +379,7 @@ def build_quick_router(
             body.key,
             view_key=view_key,
             options=options,
+            plan_info=plan_info,
         )
         if isinstance(started, JSONResponse):
             return started

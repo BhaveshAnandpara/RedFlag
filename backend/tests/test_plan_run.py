@@ -280,13 +280,28 @@ def test_a_live_chatbot_can_run_a_plan_without_the_poisoning_tests() -> None:
     assert not any("hidden text" in m for m in sent)  # nothing is planted on a live bot
 
 
-def test_a_plan_with_a_rule_that_got_no_tests_cannot_be_run() -> None:
+def test_a_plan_with_a_rule_that_got_no_tests_still_runs_the_tests_it_has() -> None:
     writers = Writers(GOALS, bad_risk=("social_engineer", "content_poisoner"))
     with run_client(GaveInJudge(), refusing(), roles=writers) as (client, _, _):
         plan_id = made_plan(client, rules=[REFUND])
-        refused = run_plan(client, plan_id)
-        assert refused.status_code == 422 and kind_of(refused) == "plan_blocked"
-        assert nothing_made(client)
+        plan = client.get(f"/quick-scans/plan/{plan_id}?after=9999").json()["plan"]
+        started = run_plan(client, plan_id)
+        assert started.status_code == 202
+        scan = ran(client, started)
+    assert plan["untested_rules"] == [REFUND] and plan["summary"]["tests"] > 0
+    assert len(scan["results"]) == plan["summary"]["tests"]
+    assert scan["scan"]["settings"]["plan"] == {
+        "tests": plan["summary"]["tests"],
+        "runs": 1,
+        "untested_rules": [REFUND],
+    }
+
+
+def test_a_scan_of_the_standard_tests_says_nothing_about_a_plan() -> None:
+    with run_client(GaveInJudge(), refusing(), roles=small()) as (client, _, _):
+        started = quick(client)
+        scan = ran(client, started)
+    assert "plan" not in scan["scan"]["settings"]
 
 
 def test_a_plan_with_no_tests_at_all_cannot_be_run() -> None:
@@ -294,7 +309,8 @@ def test_a_plan_with_no_tests_at_all_cannot_be_run() -> None:
     with run_client(GaveInJudge(), refusing(), roles=writers) as (client, _, _):
         plan_id = made_plan(client)
         refused = run_plan(client, plan_id)
-        assert refused.status_code == 422 and kind_of(refused) == "plan_blocked"
+        assert refused.status_code == 422 and kind_of(refused) == "plan_empty"
+        assert nothing_made(client)
 
 
 def test_a_plan_that_is_still_being_made_cannot_be_run_yet() -> None:

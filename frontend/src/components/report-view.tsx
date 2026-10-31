@@ -369,6 +369,7 @@ function BotReport({ detail }: { detail: ScanDetail }) {
   const { scan, results } = detail;
   // A Runs column only when some test ran from a plan, so older reports keep their shape.
   const withProof = results.some((r) => r.proof);
+  const noTests = scan.settings.plan?.untested_rules ?? [];
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const opening = useOpening((id) => setExpanded((c) => new Set(c).add(id)));
   const [fRes, setFRes] = useState<"all" | "fail" | "pass">("all");
@@ -478,6 +479,24 @@ function BotReport({ detail }: { detail: ScanDetail }) {
         <CoverCard rows={m.cover} unit={(c) => (c.f ? `${c.f} of ${c.n} got through` : `${c.n} held`)} />
       </Rise>
 
+      {noTests.length > 0 && (
+        <Rise className="jb norules">
+          <div className="h">
+            <b>Rules with no tests</b>
+            <span className="runs bad">
+              {noTests.length} of your rules
+            </span>
+          </div>
+          This scan says nothing about {noTests.length === 1 ? "this rule" : "these rules"}, because the plan had no
+          test for {noTests.length === 1 ? "it" : "them"}:
+          <ul>
+            {noTests.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </Rise>
+      )}
+
       <Rise className="sec-head">
         <h2>All tests</h2>
         <span id="t-count">
@@ -573,6 +592,14 @@ function BotReport({ detail }: { detail: ScanDetail }) {
           rows={[
             ["Target", host],
             ["Test suite", `${results.length} tests · ${scan.settings.catalog_version}`],
+            [
+              "Tests",
+              scan.settings.plan
+                ? `From your test plan, each attack up to ${scan.settings.plan.runs} ${
+                    scan.settings.plan.runs === 1 ? "time" : "times"
+                  }`
+                : "The standard tests",
+            ],
             ["AI judge", judges.length ? judges.join(", ") : "none recorded"],
             ["Budget", `${scan.settings.budget.requests} requests to your bot`],
             ["Access key", "Used for this scan only. Not stored."],

@@ -84,7 +84,13 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
   if (settings.setup) {
     lines.push(`- Setup version ${settings.setup.version} (setup ${settings.setup.setup_id})`);
     lines.push(`- Target: ${settings.setup.target_host}`);
-    lines.push(`- Tests run: ${settings.test_count}, chosen by the owner from the generated tests`);
+    lines.push(
+      settings.plan
+        ? `- Tests run: ${settings.test_count}, from your test plan (each attack up to ${settings.plan.runs} ${
+            settings.plan.runs === 1 ? "time" : "times"
+          })`
+        : `- Tests run: ${settings.test_count}, the standard tests`,
+    );
   } else {
     lines.push(`- Suite version: ${settings.suite_version} (${settings.test_count} tests)`);
   }
@@ -228,6 +234,19 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
           : "no close ATLAS match";
       lines.push(`- ${risk.id} ${risk.name}: ${tags}`);
     }
+    lines.push("");
+  }
+
+  const noTests = detail.scan.settings.plan?.untested_rules ?? [];
+  if (noTests.length > 0) {
+    lines.push("## Rules with no tests", "");
+    lines.push(
+      `${noTests.length} of the rules you gave had no test in the plan, so this scan says nothing about ${
+        noTests.length === 1 ? "it" : "them"
+      }:`,
+      "",
+    );
+    for (const rule of noTests) lines.push(`- ${rule}`);
     lines.push("");
   }
 

@@ -28,7 +28,9 @@ type PlanView = {
     /** The most messages a run could send to the bot, for 1 to 5 runs per attack (first is for 1). */
     messages_by_runs: number[];
   };
-  blocked: string | null;
+  // The rules that got no test, and a plain message about them. They do not stop the run.
+  warning: string | null;
+  untested_rules: string[];
   rules_covered: string[];
   skipped: { persona: string; goal: string; reason: string }[];
 };
@@ -89,7 +91,7 @@ type Props = {
   reset?: number;
 };
 
-export type ReadyPlan = { id: string; tests: number; blocked: boolean; messages: number[] };
+export type ReadyPlan = { id: string; tests: number; untested: number; messages: number[] };
 
 /** Writes the test plan in front of the user: steps and test cards arrive one beat at a time. */
 export function PlanPreview({
@@ -141,7 +143,7 @@ export function PlanPreview({
       onPlan?.({
         id: planId,
         tests: plan.summary.tests,
-        blocked: Boolean(plan.blocked),
+        untested: plan.untested_rules.length,
         messages: plan.summary.messages_by_runs,
       });
     }
@@ -406,9 +408,9 @@ function Summary({
         <b>{plan.summary.tests} tests</b> from {plan.summary.ideas} ideas · {plan.summary.repeats_removed} repeats
         removed · {plan.summary.data_changing} change data
       </p>
-      {plan.blocked && (
-        <div className="alert" role="alert">
-          {plan.blocked}
+      {plan.warning && (
+        <div className="notice" role="status">
+          {plan.warning}
         </div>
       )}
       {plan.rules_covered.length > 0 && (

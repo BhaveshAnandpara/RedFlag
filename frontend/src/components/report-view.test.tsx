@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -555,5 +555,64 @@ describe("the proof in the Markdown report", () => {
     expect(text).not.toContain("| Runs |");
     expect(text).not.toContain("- Runs:");
     expect(text).not.toContain("replay this attack");
+  });
+});
+
+describe("the rules with no tests, and what ran", () => {
+  const none = ["It must never produce code or markup that could attack the reader.", "It must refuse endless repetition."];
+  const planned = (untested: string[] = none, runs = 3) =>
+    makeScan([planned1], {
+      id: 17,
+      botId: "target-8",
+      setup: { version: 1, rules: [] },
+      plan: { tests: 1, runs, untested_rules: untested },
+    });
+  const planned1 = makeResult({ test_id: "p-1", title: "A planned test", status: "pass" });
+
+  it("lists the rules that got no test, and says the scan says nothing about them", () => {
+    render(<ReportView detail={planned()} />);
+    expect(screen.getByText("Rules with no tests")).toBeInTheDocument();
+    expect(screen.getByText("2 of your rules")).toBeInTheDocument();
+    expect(screen.getByText(/This scan says nothing about these rules/)).toBeInTheDocument();
+    const list = document.querySelector(".norules ul") as HTMLElement;
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual(none);
+  });
+
+  it("says it in the singular for one rule", () => {
+    render(<ReportView detail={planned([none[0]])} />);
+    expect(screen.getByText("1 of your rules")).toBeInTheDocument();
+    expect(screen.getByText(/This scan says nothing about this rule, because the plan had no test for it/)).toBeInTheDocument();
+  });
+
+  it("shows no such section when every rule had a test, or the scan had no plan", () => {
+    const { unmount } = render(<ReportView detail={planned([])} />);
+    expect(screen.queryByText("Rules with no tests")).not.toBeInTheDocument();
+    unmount();
+    render(<ReportView detail={botScan()} />);
+    expect(screen.queryByText("Rules with no tests")).not.toBeInTheDocument();
+  });
+
+  it("says in the scan details whether the tests came from a plan or were the standard ones", () => {
+    const { unmount } = render(<ReportView detail={planned([], 3)} />);
+    expect(screen.getByText("From your test plan, each attack up to 3 times")).toBeInTheDocument();
+    unmount();
+    render(<ReportView detail={planned([], 1)} />);
+    expect(screen.getByText("From your test plan, each attack up to 1 time")).toBeInTheDocument();
+    cleanup();
+    render(<ReportView detail={botScan()} />);
+    expect(screen.getByText("The standard tests")).toBeInTheDocument();
+  });
+
+  it("puts both in the Markdown report, and nothing extra when there is no plan", () => {
+    const text = buildReport(planned());
+    expect(text).toContain("- Tests run: 16, from your test plan (each attack up to 3 times)");
+    expect(text).toContain("## Rules with no tests");
+    expect(text).toContain("2 of the rules you gave had no test in the plan, so this scan says nothing about them:");
+    expect(text).toContain("- It must refuse endless repetition.");
+    expect(text.indexOf("## Rules with no tests")).toBeLessThan(text.indexOf("## Risks not tested"));
+    const plain = buildReport(botScan());
+    expect(plain).toContain("- Tests run: 16, the standard tests");
+    expect(plain).not.toContain("## Rules with no tests");
+    expect(buildReport(planned([]))).not.toContain("## Rules with no tests");
   });
 });

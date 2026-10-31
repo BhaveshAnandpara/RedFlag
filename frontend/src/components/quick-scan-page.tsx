@@ -324,9 +324,10 @@ export function QuickScanPage({
   const showRun = attemptedRun ? runErrors : { kind: "", purpose: "", rules: "" };
   const ticked = (picks ?? []).filter((p) => !off.has(p.id));
   const live = env === "production";
-  // Run runs the plan when there is one that can run here: not one with a rule left without tests,
-  // and not on a live bot that can act, where the attacks could change real things.
-  const usePlan = readyPlan !== null && !readyPlan.blocked && readyPlan.tests > 0 && !(live && kind === "agent");
+  // Run runs the plan when there is one that can run here: one with tests in it (a rule that got
+  // none does not stop it), and not on a live bot that can act, where the attacks could change
+  // real things.
+  const usePlan = readyPlan !== null && readyPlan.tests > 0 && !(live && kind === "agent");
 
   function changeRules(next: Rule[]) {
     setRules(next);
@@ -466,7 +467,7 @@ export function QuickScanPage({
       setRunProblem(problemFor(started.status, started.data));
       // The plan is gone or not allowed: drop it, so Run does not offer it again.
       const kind = (started.data as { error?: { kind?: string } } | null)?.error?.kind;
-      if (kind === "plan_expired" || kind === "plan_blocked") setPlanReset((n) => n + 1);
+      if (kind === "plan_expired" || kind === "plan_empty") setPlanReset((n) => n + 1);
       return;
     }
     viewKey.current = started.data.view_key;
@@ -1231,9 +1232,13 @@ export function QuickScanPage({
               </div>
               {!usePlan && !live && (
                 <p className="hint">
-                  {readyPlan?.blocked
-                    ? "This plan has a rule with no tests, so Run uses the standard tests. Reword the rule and create the plan again to run your own."
-                    : "Run uses the standard tests. Create a test plan above to run tests made for your bot."}
+                  Run uses the standard tests. Create a test plan above to run tests made for your bot.
+                </p>
+              )}
+              {usePlan && readyPlan && readyPlan.untested > 0 && (
+                <p className="hint">
+                  {readyPlan.untested} of your rules {readyPlan.untested === 1 ? "has" : "have"} no tests, so the
+                  report will list {readyPlan.untested === 1 ? "it" : "them"} as not tested.
                 </p>
               )}
               {readyPlan && live && kind === "agent" && (

@@ -142,6 +142,9 @@ export type ScanSettings = {
     rerun_of?: number;
   };
   judge_providers?: string[];
+  // Present only for a run of a made test plan: how many tests ran, how many times at most each
+  // attack ran, and the rules the user gave that got no test.
+  plan?: { tests: number; runs: number; untested_rules: string[] };
   // Present only for a check of an MCP server (W8).
   mcp?: {
     target_host: string;

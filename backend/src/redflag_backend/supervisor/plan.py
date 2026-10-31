@@ -60,8 +60,10 @@ class Plan(BaseModel):
     dropped: list[Dropped] = Field(default_factory=list)
     skipped: list[Skipped] = Field(default_factory=list)
     counts: list[Count] = Field(default_factory=list)
-    # A plain message when the plan cannot start, such as a rule that got no tests.
-    blocked: str | None = None
+    # The rules the user gave that got no test, and a plain message about them. They do not stop
+    # the plan: the tests that were written still run, and the report lists these as not tested.
+    untested_rules: list[str] = Field(default_factory=list)
+    warning: str | None = None
 
 
 def _words(text: str) -> str:
@@ -278,7 +280,7 @@ async def build_plan(
     if progress is not None:
         progress.say(
             "Some of your rules have no tests yet."
-            if plan.blocked
+            if plan.warning
             else "Every one of your rules has at least one test."
         )
         progress.say(f"Plan ready: {plan.summary.tests} tests.")
@@ -302,20 +304,29 @@ def _show(progress: Progress | None, goal: Goal, kept: list[TestSpec], limit: in
 
 
 def _finish(planned: list[PlannedGoal], fear: Goal | None, book: _Book) -> Plan:
-    empty = [p.goal for p in planned if p.goal.source == "user" and not p.specs]
-    blocked = None
+    wanted = [p for p in planned if p.goal.source == "user"]
+    empty = [p.goal for p in wanted if not p.specs]
+    untested = [g.rule for g in empty if g.rule]
+    warning = None
     if empty:
-        rules = "; ".join(f"“{g.rule}”" for g in empty)
+        many = len(empty) > 1
+        rules = "; ".join(f"“{rule}”" for rule in untested)
         failed = {c.persona_id for c in book.counts.values() if c.failed}
+        warning = (
+            f"{len(empty)} of your {len(wanted)} rules {'have' if many else 'has'} no tests: "
+            f"{rules}. The tests we did write will still run, and the report will list "
+            f"{'these rules' if many else 'this rule'} as not tested. "
+        )
         if any(set(g.persona_ids) & failed for g in empty):
-            blocked = (
-                f"We could not write any test for: {rules}, because the AI models did not "
-                "answer. Wait a few minutes and plan again."
+            warning += (
+                f"The AI models did not answer for {'them' if many else 'it'}: create the plan "
+                "again in a few minutes to cover "
+                f"{'them' if many else 'it'}."
             )
         else:
-            blocked = (
-                f"We could not write any test for: {rules}. Reword the rule or take it out, "
-                "then plan again."
+            warning += (
+                f"Reword {'them' if many else 'it'} and create the plan again to cover "
+                f"{'them' if many else 'it'}."
             )
     tests = [s for p in planned for s in p.specs]
     return Plan(
@@ -331,5 +342,6 @@ def _finish(planned: list[PlannedGoal], fear: Goal | None, book: _Book) -> Plan:
         dropped=book.dropped,
         skipped=book.skipped,
         counts=list(book.counts.values()),
-        blocked=blocked,
+        untested_rules=untested,
+        warning=warning,
     )

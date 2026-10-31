@@ -183,8 +183,8 @@ export function describeError(status: number, body: ErrorBody | null | undefined
       return "Too many hello checks in a short time. Wait a few minutes and try again.";
     case "plan_expired":
       return "That test plan is no longer available (the server may have restarted, or the details changed). Create the plan again, then run it.";
-    case "plan_blocked":
-      return "That plan has a rule with no tests, or no tests at all. Reword the rule and create the plan again.";
+    case "plan_empty":
+      return "That plan has no tests to run. Create the plan again.";
     case "plan_not_for_live_agent":
       return "A live bot that can take actions cannot run a made plan, because the attacks could make it act for real. Pick from the OWASP tests instead.";
     case "too_many_plans":

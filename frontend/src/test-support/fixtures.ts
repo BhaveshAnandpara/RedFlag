@@ -78,6 +78,8 @@ export function makeScan(
     suiteVersion?: number;
     startedAt?: number;
     setup?: { version: number; rules: { text: string; kind: string; status: string }[] };
+    // Set for a scan that ran a made test plan.
+    plan?: { tests: number; runs: number; untested_rules: string[] };
   } = {},
 ): ScanDetail {
   const counts = { pass: 0, fail: 0, inconclusive: 0, error: 0, not_applicable: 0 };
@@ -103,6 +105,7 @@ export function makeScan(
         suite_version: options.suiteVersion ?? 2,
         test_count: 16,
         canary: options.setup ? "" : "CANARY-abc123",
+        ...(options.plan ? { plan: options.plan } : {}),
         ...(options.setup
           ? {
               setup: {
