@@ -16,7 +16,7 @@ from redflag_backend.personas.registry import PERSONAS
 from redflag_backend.personas.writer import Brief
 from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.scan.catalog import load_catalog
-from redflag_backend.setups.llm import ModelFailure, SetupLLM
+from redflag_backend.setups.llm import ModelFailure, Patience, SetupLLM
 from redflag_backend.setups.models import Severity
 from redflag_backend.setups.prompts import fence
 
@@ -142,12 +142,17 @@ def _background() -> list[Goal]:
     ]
 
 
-async def make_goals(llm: SetupLLM, brief: Brief, setup_id: int = NO_SETUP) -> list[Goal]:
+async def make_goals(
+    llm: SetupLLM,
+    brief: Brief,
+    setup_id: int = NO_SETUP,
+    patience: Patience | None = None,
+) -> list[Goal]:
     """The goals for this bot. A model that fails still leaves every rule and the background
     checks, so a plan can always be made from what the user said."""
     try:
         answer = await llm.ask(
-            setup_id, "planner", PLANNER_SYSTEM, build_prompt(brief), GoalsAnswer
+            setup_id, "planner", PLANNER_SYSTEM, build_prompt(brief), GoalsAnswer, patience
         )
         drafts = answer.goals
     except ModelFailure:

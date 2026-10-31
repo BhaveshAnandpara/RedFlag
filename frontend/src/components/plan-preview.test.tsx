@@ -76,8 +76,8 @@ describe("the plan preview", () => {
     const { api, call } = fakeApi(done());
     const user = userEvent.setup();
     show(api);
-    await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
-    expect(screen.getByText(/Planning your tests/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    expect(screen.getByText(/Creating your plan/)).toBeInTheDocument();
     expect(await screen.findByText("11 tests")).toBeInTheDocument();
     expect(screen.getByText(/14 ideas · 3\s+repeats removed · 2 change data/)).toBeInTheDocument();
     expect(screen.getByText("Can someone get a refund over $50?")).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("the plan preview", () => {
     const { api } = fakeApi(done());
     const user = userEvent.setup();
     show(api);
-    await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
     expect(await screen.findByText("Testing https://bot.example/v1/chat")).toBeInTheDocument();
     expect(screen.getByText(/the attacks are real.*Only use a copy you can reset/)).toBeInTheDocument();
     expect(
@@ -115,7 +115,7 @@ describe("the plan preview", () => {
     const { api } = fakeApi(done());
     const user = userEvent.setup();
     show(api, { environment: "production" });
-    await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
     expect(await screen.findByText(/On a live bot we only run tests that do not make it act/)).toBeInTheDocument();
     expect(screen.queryByText(/the attacks are real/)).not.toBeInTheDocument();
   });
@@ -129,7 +129,7 @@ describe("the plan preview", () => {
     const { api } = fakeApi(done(plan));
     const user = userEvent.setup();
     show(api);
-    await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Reword the rule or take it out");
     expect(screen.getByText(/1 test needs a test copy, so it is left out for a live bot/)).toBeInTheDocument();
   });
@@ -155,9 +155,9 @@ describe("the plan preview", () => {
       const { api } = fakeApi(replies);
       const user = userEvent.setup();
       const view = show(api);
-      await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
+      await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
       expect(await screen.findByRole("alert")).toHaveTextContent(words);
-      expect(screen.getByRole("button", { name: "Preview the test plan" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Create Test Plan" })).toBeEnabled();
       view.unmount();
     }
   });
@@ -166,7 +166,7 @@ describe("the plan preview", () => {
     const { api } = fakeApi(done());
     const user = userEvent.setup();
     const view = show(api);
-    await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
     await screen.findByText("11 tests");
     view.rerender(
       <PlanPreview
@@ -180,7 +180,7 @@ describe("the plan preview", () => {
       />,
     );
     await waitFor(() => expect(screen.queryByText("11 tests")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Preview the test plan" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create Test Plan" })).toBeEnabled();
   });
 
   it("does not let the button be pressed twice while a plan is being made", async () => {
@@ -192,8 +192,70 @@ describe("the plan preview", () => {
     );
     const user = userEvent.setup();
     show(api, { pollMs: 20 });
-    await user.click(screen.getByRole("button", { name: "Preview the test plan" }));
-    expect(screen.getByRole("button", { name: /Planning your tests/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    expect(screen.getByRole("button", { name: /Creating your plan/ })).toBeDisabled();
     expect(call.mock.calls.filter(([method]) => method === "POST")).toHaveLength(1);
   });
+
+  it("shows what is happening while the plan is made: the goal, the feed, and who is being asked", async () => {
+    const doing = {
+      headline: "Goal 2 of 5: Can someone read another customer's order?",
+      feed: ["Asking the planner what your bot should be tested for…", "Asking the data harvester to ask for other people's data…"],
+      goal_index: 2,
+      goal_total: 5,
+      waiting: false,
+      seconds_left: 0,
+    };
+    const { api, call } = fakeApi([]);
+    call.mockImplementation(async (method: string) =>
+      method === "POST"
+        ? { ok: true, status: 202, data: { plan_id: "p1" } }
+        : { ok: true, status: 200, data: { status: "running", ...doing } },
+    );
+    const user = userEvent.setup();
+    show(api, { pollMs: 5 });
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    expect(await screen.findByText(/Goal 2 of 5/)).toBeInTheDocument();
+    expect(screen.getByText(/Asking the planner/)).toBeInTheDocument();
+    expect(screen.getByText(/Asking the data harvester/)).toBeInTheDocument();
+    expect(screen.getByText(/Keep this tab open/)).toBeInTheDocument();
+    expect(screen.queryByText(/Quota reached/)).not.toBeInTheDocument();
+  });
+
+  it("says so, with a countdown, when the models' quota is used up and it is waiting to try again", async () => {
+    const doing = {
+      headline: "Goal 1 of 5: Can someone get a refund over $50?",
+      feed: ["The AI models' quota for this minute is used up. Waiting a minute, then trying again (wait 1 of 6)."],
+      goal_index: 1,
+      goal_total: 5,
+      waiting: true,
+      seconds_left: 42,
+    };
+    const { api, call } = fakeApi([]);
+    call.mockImplementation(async (method: string) =>
+      method === "POST"
+        ? { ok: true, status: 202, data: { plan_id: "p1" } }
+        : { ok: true, status: 200, data: { status: "running", ...doing } },
+    );
+    const user = userEvent.setup();
+    show(api, { pollMs: 5 });
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    expect(await screen.findByText(/Quota reached\. Waiting \d+ seconds, then we try again on our own/)).toBeInTheDocument();
+    expect(screen.getByText(/quota for this minute is used up/)).toBeInTheDocument();
+  });
+
+  it("keeps waiting past the old time limit and ends with the plan once it is done", async () => {
+    const running = { status: "running", headline: "Goal 1 of 2: x", feed: ["Asking…"], goal_index: 1, goal_total: 2, waiting: false, seconds_left: 0 };
+    const replies: Reply[] = [
+      { ok: true, status: 202, data: { plan_id: "p1" } },
+      ...Array.from({ length: 150 }, () => ({ ok: true, status: 200, data: running }) as Reply),
+      { ok: true, status: 200, data: { status: "done", plan: PLAN } },
+    ];
+    const { api } = fakeApi(replies);
+    const user = userEvent.setup();
+    show(api);
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    expect(await screen.findByText("11 tests", {}, { timeout: 20000 })).toBeInTheDocument();
+    expect(screen.queryByText(/Goal 1 of 2/)).not.toBeInTheDocument();
+  }, 30000);
 });

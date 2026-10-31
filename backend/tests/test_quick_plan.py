@@ -69,7 +69,18 @@ def test_the_bots_own_description_becomes_its_tools_for_the_planner() -> None:
         finished(client, start(client).json()["plan_id"])
         prompt = model.prompts("planner")[0]
         assert '"name": "issue refunds"' in prompt and '"effect": "acts"' in prompt
-        assert '"name": "look up orders"' in prompt and "<<<BOT DESCRIBES ITSELF" in prompt
+        assert "look up orders" not in prompt.split("<<<BOT DESCRIBES ITSELF")[0]
+        assert "<<<BOT DESCRIBES ITSELF" in prompt
+
+
+def test_a_bot_that_only_answers_questions_has_no_tools_to_misuse() -> None:
+    chat_only = {**FACTS, "can_do": ["explain fees", "share opening hours"], "risky": []}
+    model = Writers(GOALS)
+    with run_client(roles=model) as (client, _, _):
+        job = finished(client, start(client, facts=chat_only).json()["plan_id"])
+        assert '"tools": []' in model.prompts("planner")[0]
+        questions = [g["question"] for g in job["plan"]["goals"]]
+        assert "Can someone get a refund over $50?" not in questions
 
 
 def test_a_plan_with_nothing_to_go_on_is_refused() -> None:

@@ -99,6 +99,14 @@
   .before b { font-weight: 500; }
   .before ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
   .server { font-family: var(--mono); font-size: 15px; color: var(--ink); }
+  /* the live view while a plan is made */
+  .progress { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+  .progress > b { font-weight: 500; }
+  .bar { height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--ink); transition: width .4s ease; }
+  .wait { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid #5a4a1a; background: #1a1608; color: #f0c75e; }
+  .feed { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; color: var(--faint); }
+  .feed li.now { color: var(--ink); }
   /* the connect picker, the Staging / Production toggle and the step 2 chat on the real page */
   .ways { display: flex; gap: 8px; flex-wrap: wrap; }
   .way { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }

@@ -14,7 +14,7 @@ import pytest
 
 from redflag_backend.llm.budget import BudgetBook, BudgetCaps
 from redflag_backend.llm.router import Router
-from redflag_backend.llm.types import LLMAnswer, LLMRequest
+from redflag_backend.llm.types import LLMAnswer, LLMRequest, RateLimited
 from redflag_backend.personas.merge import NEEDS_TEST_COPY
 from redflag_backend.personas.registry import PERSONAS
 from redflag_backend.personas.writer import Brief, Tool
@@ -75,10 +75,13 @@ class Writers(RoleModel):
         strategy: str | None = None,
         broken: tuple[str, ...] = (),
         bad_risk: tuple[str, ...] = (),
+        quota: dict[str, int] | None = None,
     ) -> None:
         super().__init__()
         self.goals, self.limit, self.strategy = goals, limit, strategy
         self.broken, self.bad_risk = set(broken), set(bad_risk)
+        # Per role: how many calls hit the models' per-minute quota before one gets through.
+        self.quota = dict(quota or {})
         self.made: dict[str, list[dict[str, Any]]] = {}
         self.counter = 0
 
@@ -86,6 +89,9 @@ class Writers(RoleModel):
         system = request.messages[0].content
         role = system.splitlines()[0].removeprefix("ROLE: ").strip()
         self.calls.setdefault(role, []).append(request)
+        if self.quota.get(role, 0) > 0:
+            self.quota[role] -= 1
+            raise RateLimited(retry_after=0.001)
         if role == "planner":
             text = self.goals if isinstance(self.goals, str) else json.dumps({"goals": self.goals})
             return LLMAnswer(text or "not json", "writers", 10, 5)

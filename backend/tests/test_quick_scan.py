@@ -536,3 +536,11 @@ def test_the_fact_sheet_is_trimmed_and_deduplicated() -> None:
     with run_client(roles=model) as (client, _, _):
         can_do = check(client).json()["recon"]["facts"]["can_do"]
         assert can_do[0] == "Refund" and len(can_do) == 6 and len(can_do[1]) == 160
+
+
+def test_the_models_own_thinking_text_is_not_a_log_the_supervisor_is_told() -> None:
+    model = RoleModel(supervisor=[logs_answer(False)])
+    with run_client(roles=model) as (client, _, _):
+        check(client)
+        system = model.calls["supervisor"][0].messages[0].content
+        assert "thinking or reasoning text" in system and "is not a record" in system

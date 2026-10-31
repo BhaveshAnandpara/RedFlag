@@ -19,6 +19,7 @@ from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
+from redflag_backend.supervisor.progress import Progress
 
 BIGGEST_FEAR_MIN = 30
 CRITICAL_MIN = 15
@@ -158,7 +159,13 @@ class _Book:
 
 
 async def _ask(
-    llm: SetupLLM, brief: Brief, goal: Goal, wanted: int, avoid: list[str], setup_id: int
+    llm: SetupLLM,
+    brief: Brief,
+    goal: Goal,
+    wanted: int,
+    avoid: list[str],
+    setup_id: int,
+    progress: Progress | None,
 ) -> list[PersonaTests]:
     """One round: every persona that fits the goal writes its share."""
     share = max(FIRST_ROUND_MIN, math.ceil(wanted / len(goal.persona_ids)))
@@ -166,14 +173,27 @@ async def _ask(
     text = goal.question
     if avoid:
         text += " Find different angles from these openings already written: " + " | ".join(avoid)
-    return list(
-        await asyncio.gather(
-            *(
-                write_tests(llm, PERSONAS[pid], brief, goals=[text], count=share, setup_id=setup_id)
-                for pid in goal.persona_ids
-            )
+    patience = progress.patience if progress else None
+
+    async def one(persona_id: str) -> PersonaTests:
+        written = await write_tests(
+            llm,
+            PERSONAS[persona_id],
+            brief,
+            goals=[text],
+            count=share,
+            setup_id=setup_id,
+            patience=patience,
         )
-    )
+        if progress is not None:
+            name = PERSONAS[persona_id].name
+            if written.failed:
+                progress.say(f"The {name} could not answer ({written.failed.replace('_', ' ')}).")
+            else:
+                progress.say(f"The {name} wrote {len(written.specs)} tests.")
+        return written
+
+    return list(await asyncio.gather(*(one(pid) for pid in goal.persona_ids)))
 
 
 def _ordered(goals: list[Goal]) -> list[Goal]:
@@ -191,24 +211,45 @@ def _ordered(goals: list[Goal]) -> list[Goal]:
     return [g for _, g in sorted(enumerate(goals), key=key)]
 
 
-async def build_plan(llm: SetupLLM, brief: Brief, setup_id: int = NO_SETUP) -> Plan:
-    goals = _ordered(await make_goals(llm, brief, setup_id))
+async def build_plan(
+    llm: SetupLLM,
+    brief: Brief,
+    setup_id: int = NO_SETUP,
+    progress: Progress | None = None,
+) -> Plan:
+    if progress is not None:
+        progress.working_on("Reading your rules and what your bot said about itself")
+        progress.say("Asking the planner what your bot should be tested for…")
+    goals = _ordered(
+        await make_goals(llm, brief, setup_id, progress.patience if progress else None)
+    )
+    if progress is not None:
+        progress.say(f"Found {len(goals)} goals to test, scariest first.")
     fear = _biggest_fear(goals)
     book = _Book()
     planned: list[PlannedGoal] = []
     background_left = BACKGROUND_CAP
-    for goal in goals:
+    for number, goal in enumerate(goals, start=1):
+        if progress is not None:
+            progress.goal(number, len(goals), goal.question)
         target = _target(goal, fear)
         wanted = BACKGROUND_EACH if goal.background else max(target, FIRST_ROUND_MIN)
         specs: list[TestSpec] = []
-        for output in await _ask(llm, brief, goal, wanted, [], setup_id):
+        if progress is not None:
+            progress.asking(goal.persona_ids)
+        for output in await _ask(llm, brief, goal, wanted, [], setup_id, progress):
             specs += book.take(goal, output, brief.environment)
         rounds = 0
         while len(specs) < target and rounds < MAX_ROUNDS:
             rounds += 1
             before = len(specs)
             avoid = [s.opening_message[:80] for s in specs[-SEEN_IN_PROMPT:]]
-            for output in await _ask(llm, brief, goal, target - len(specs), avoid, setup_id):
+            if progress is not None:
+                progress.say(f"Only {len(specs)} of {target} so far.")
+                progress.asking(goal.persona_ids, rounds)
+            for output in await _ask(
+                llm, brief, goal, target - len(specs), avoid, setup_id, progress
+            ):
                 specs += book.take(goal, output, brief.environment)
             if len(specs) == before:
                 break
@@ -219,6 +260,8 @@ async def build_plan(llm: SetupLLM, brief: Brief, setup_id: int = NO_SETUP) -> P
             specs = specs[:background_left]
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
+    if progress is not None:
+        progress.working_on("Putting the plan together")
     return _finish(planned, fear, book)
 
 
@@ -227,10 +270,17 @@ def _finish(planned: list[PlannedGoal], fear: Goal | None, book: _Book) -> Plan:
     blocked = None
     if empty:
         rules = "; ".join(f"“{g.rule}”" for g in empty)
-        blocked = (
-            f"We could not write any test for: {rules}. Reword the rule or take it out, "
-            "then plan again."
-        )
+        failed = {c.persona_id for c in book.counts.values() if c.failed}
+        if any(set(g.persona_ids) & failed for g in empty):
+            blocked = (
+                f"We could not write any test for: {rules}, because the AI models did not "
+                "answer. Wait a few minutes and plan again."
+            )
+        else:
+            blocked = (
+                f"We could not write any test for: {rules}. Reword the rule or take it out, "
+                "then plan again."
+            )
     tests = [s for p in planned for s in p.specs]
     return Plan(
         goals=planned,

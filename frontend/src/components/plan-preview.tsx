@@ -23,9 +23,22 @@ type PlanView = {
   skipped: { persona: string; goal: string; reason: string }[];
   goals: PlanGoal[];
 };
-type Job = { status: "running" } | { status: "done"; plan: PlanView } | { status: "error"; kind: string };
+/** What a plan in the making says about itself: where it is, what just happened, any wait. */
+type Doing = {
+  headline: string;
+  feed: string[];
+  goal_index: number;
+  goal_total: number;
+  waiting: boolean;
+  seconds_left: number;
+};
+type Job =
+  | ({ status: "running" } & Partial<Doing>)
+  | { status: "done"; plan: PlanView }
+  | { status: "error"; kind: string };
 
-const POLLS = 120;
+// A plan waits out the models' per-minute quota, so it can take a while: poll for up to ~25 minutes.
+const POLLS = 750;
 const CONTACT_WARNING =
   "Our tests only point your AI at Redflag's own links and addresses, but we can't stop it from contacting anyone else it chooses.";
 
@@ -44,11 +57,63 @@ type Props = {
   pollMs?: number;
 };
 
+const SECOND = 1000;
+
+/** Counts the seconds down between polls, so the wait looks alive. A new poll restarts it. */
+function Countdown({ from }: { from: number }) {
+  const [left, setLeft] = useState(from);
+  useEffect(() => {
+    const timer = setInterval(() => setLeft((n) => Math.max(0, n - 1)), SECOND);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span>
+      Quota reached. Waiting {left > 0 ? `${left} seconds` : "a moment"}, then we try again on our own.
+    </span>
+  );
+}
+
+/** The live view while a plan is made: where it is, what just happened, and any wait for quota. */
+function Working({ doing }: { doing: (Doing & { at: number }) | null }) {
+  if (!doing) {
+    return (
+      <div className="progress" role="status" aria-live="polite">
+        <b>Starting up…</b>
+      </div>
+    );
+  }
+  const share = doing.goal_total ? Math.round((doing.goal_index / doing.goal_total) * 100) : 0;
+  return (
+    <div className="progress" role="status" aria-live="polite">
+      <b>{doing.headline}</b>
+      {doing.goal_total > 0 && (
+        <div className="bar" aria-hidden="true">
+          <span style={{ width: `${share}%` }} />
+        </div>
+      )}
+      {doing.waiting && (
+        <div className="wait">
+          <span className="spin" />
+          <Countdown key={doing.at} from={doing.seconds_left} />
+        </div>
+      )}
+      <ul className="feed">
+        {doing.feed.map((line, i) => (
+          <li key={`${i}-${line}`} className={i === doing.feed.length - 1 ? "now" : ""}>
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** A read-only look at the tests the supervisor would write, before anything runs. */
-export function PlanPreview({ api, environment, purpose, rules, facts, server, pollMs = 3000 }: Props) {
+export function PlanPreview({ api, environment, purpose, rules, facts, server, pollMs = 2000 }: Props) {
   const [phase, setPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [doing, setDoing] = useState<(Doing & { at: number }) | null>(null);
   const alive = useRef(true);
   const made = useRef("");
   const inputs = JSON.stringify([environment, purpose, rules, facts]);
@@ -73,6 +138,7 @@ export function PlanPreview({ api, environment, purpose, rules, facts, server, p
     setPhase("working");
     setProblem(null);
     setPlan(null);
+    setDoing(null);
     made.current = inputs;
     const started = await api.call<{ plan_id: string }>("POST", "/quick-scans/plan", {
       environment,
@@ -96,6 +162,11 @@ export function PlanPreview({ api, environment, purpose, rules, facts, server, p
         setPhase("error");
         return;
       }
+      if (job.data.status === "running") {
+        const { status: _status, ...rest } = job.data;
+        void _status;
+        if (rest.headline !== undefined) setDoing({ ...(rest as Doing), at: Date.now() });
+      }
       if (job.data.status === "done") {
         setPlan(job.data.plan);
         setPhase("done");
@@ -118,18 +189,19 @@ export function PlanPreview({ api, environment, purpose, rules, facts, server, p
           {phase === "working" ? (
             <>
               <span className="spin" />
-              Planning your tests…
+              Creating your plan…
             </>
           ) : (
-            "Preview the test plan"
+            "Create Test Plan"
           )}
         </button>
         <span className="hint">
           {phase === "working"
-            ? "This can take a minute or two. Nothing is sent to your bot."
+            ? "This can take several minutes. Keep this tab open. Nothing is sent to your bot."
             : "See the tests we would write for your bot, before anything runs."}
         </span>
       </div>
+      {phase === "working" && <Working doing={doing} />}
       {phase === "error" && problem && (
         <div className="alert" role="alert">
           {problem}

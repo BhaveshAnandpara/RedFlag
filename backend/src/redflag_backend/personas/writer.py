@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from redflag_backend.personas.registry import DOOR_MODE, Persona
 from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.scan.catalog import load_catalog
-from redflag_backend.setups.llm import ModelFailure, SetupLLM
+from redflag_backend.setups.llm import ModelFailure, Patience, SetupLLM
 from redflag_backend.setups.prompts import fence
 from redflag_backend.specs.spec import Setup, TestSpec
 
@@ -200,7 +200,9 @@ def to_spec(persona: Persona, draft: Draft, brief: Brief) -> TestSpec | str:
                 "setup": Setup(planted_text=planted if door == "poisoned_content" else None),
                 "opening_message": draft.opening_message,
                 "max_turns": min(max(draft.max_turns, 1), persona.turn_limit),
-                "changes_data": draft.changes_data or door == "poisoned_content",
+                # Hidden text on a bot with nothing to act with changes no data.
+                "changes_data": draft.changes_data
+                or (door == "poisoned_content" and any(t.effect == "acts" for t in brief.tools)),
                 "repeats": min(max(draft.repeats, 1), persona.repeat_limit),
                 "rule": draft.rule,
                 "severity": draft.severity,
@@ -221,13 +223,19 @@ async def write_tests(
     goals: list[str] | None = None,
     count: int = 5,
     setup_id: int = NO_SETUP,
+    patience: Patience | None = None,
 ) -> PersonaTests:
     """The tests this persona writes for the brief. It never raises: a model that fails or answers
     badly gives `failed`, and the supervisor carries on with the other personas."""
     system = build_system(persona, goals or [], count)
     try:
         answer = await llm.ask(
-            setup_id, f"persona-{persona.id}", system, build_prompt(brief), Answer
+            setup_id,
+            f"persona-{persona.id}",
+            system,
+            build_prompt(brief),
+            Answer,
+            patience,
         )
     except ModelFailure as failure:
         return PersonaTests(persona_id=persona.id, failed=failure.kind)

@@ -35,6 +35,7 @@ from redflag_backend.setups.models import Endpoint, FieldValue, Rule, SetupData
 from redflag_backend.setups.run_api import RunDeps, launch_run
 from redflag_backend.setups.store import SetupStore
 from redflag_backend.supervisor.plan import build_plan
+from redflag_backend.supervisor.progress import Progress
 from redflag_backend.supervisor.view import plan_view
 from redflag_backend.targets.http_target import EndpointConfig
 
@@ -68,11 +69,9 @@ class PlanBody(BaseModel):
 def _brief(body: PlanBody) -> Brief:
     rules = [" ".join(r.split())[:200] for r in body.rules if r.strip()]
     facts = body.facts
-    risky = {r.lower() for r in facts.risky} if facts else set()
-    tools = [
-        Tool(name=item, effect="acts" if item.lower() in risky else "unknown")
-        for item in (facts.can_do[:10] if facts else [])
-    ]
+    # Only what the bot says could do harm counts as a tool. "Explain fees" is not a tool, and a
+    # bot with none must not be planned for tool misuse.
+    tools = [Tool(name=item, effect="acts") for item in (facts.risky[:10] if facts else [])]
     return Brief(
         environment=body.environment,
         purpose=body.purpose.strip(),
@@ -194,7 +193,10 @@ def build_quick_router(
             return _error(429, "too_many_plans")
         recent_plans.append(now)
         plan_id = secrets.token_urlsafe(12)
-        plans[plan_id] = {"status": "running"}
+        progress = Progress(
+            clock, settings.quick_plan_quota_wait_seconds, settings.quick_plan_max_waits
+        )
+        plans[plan_id] = {"status": "running", "progress": progress}
         while len(plans) > 30:
             plans.pop(next(iter(plans)))
         # Its own budget key, so one plan cannot use up another's model calls.
@@ -203,7 +205,8 @@ def build_quick_router(
         async def work() -> None:
             try:
                 plan = await asyncio.wait_for(
-                    build_plan(llm, brief, budget_key), settings.quick_plan_timeout_seconds
+                    build_plan(llm, brief, budget_key, progress),
+                    settings.quick_plan_timeout_seconds,
                 )
                 plans[plan_id] = {"status": "done", "plan": plan_view(plan)}
             except TimeoutError:
@@ -221,6 +224,8 @@ def build_quick_router(
         job = plans.get(plan_id)
         if job is None:
             return _error(404, "no_such_plan")
+        if job["status"] == "running":
+            return {"status": "running", **job["progress"].snapshot()}
         return job
 
     @router.post("/check", response_model=None)

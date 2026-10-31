@@ -115,7 +115,10 @@ class Settings(BaseSettings):
     # A plan is dozens of model calls, so it is limited far harder than a chat turn.
     quick_plans_per_window: int = 3
     quick_plan_window_seconds: float = 600.0
-    quick_plan_timeout_seconds: float = 240.0
+    # A plan waits out the models' per-minute quota instead of failing, so it can take a while.
+    quick_plan_timeout_seconds: float = 1200.0
+    quick_plan_quota_wait_seconds: float = 60.0
+    quick_plan_max_waits: int = 6
     # The most tests one setup version may hold (generated tests plus attack variations).
     setup_max_tests: int = 200
     # The most requests one run may send to the user's own endpoint.
