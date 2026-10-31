@@ -60,8 +60,14 @@ type Props = {
 const SECOND = 1000;
 
 /** Counts the seconds down between polls, so the wait looks alive. A new poll restarts it. */
-function Countdown({ from }: { from: number }) {
+function Countdown({ from, at }: { from: number; at: number }) {
   const [left, setLeft] = useState(from);
+  const [synced, setSynced] = useState(at);
+  if (synced !== at) {
+    // A new poll says how long is really left, so start from that, without replacing the element.
+    setSynced(at);
+    setLeft(from);
+  }
   useEffect(() => {
     const timer = setInterval(() => setLeft((n) => Math.max(0, n - 1)), SECOND);
     return () => clearInterval(timer);
@@ -94,7 +100,7 @@ function Working({ doing }: { doing: (Doing & { at: number }) | null }) {
       {doing.waiting && (
         <div className="wait">
           <span className="spin" />
-          <Countdown key={doing.at} from={doing.seconds_left} />
+          <Countdown from={doing.seconds_left} at={doing.at} />
         </div>
       )}
       <ul className="feed">
