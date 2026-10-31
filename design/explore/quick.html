@@ -99,6 +99,12 @@
   .before b { font-weight: 500; }
   .before ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
   .server { font-family: var(--mono); font-size: 15px; color: var(--ink); }
+  /* the repeats slider beside Run, shown once a test plan is ready */
+  .repeats { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: #0d0d0d; }
+  .repeats label { font-size: 14px; font-weight: 500; }
+  .repeats input[type=range] { width: 100%; accent-color: var(--red); cursor: pointer; margin: 4px 0 0; }
+  .repeats .ticks { display: flex; justify-content: space-between; padding: 0 6px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .repeats .hint { margin: 0; }
   /* the live timeline while a plan is written: steps and test cards arriving one beat at a time */
   .live { display: grid; gap: 14px; padding: 18px; border-radius: 14px; border: 1px solid var(--line); background: #080808; }
   .lv-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 15px; }

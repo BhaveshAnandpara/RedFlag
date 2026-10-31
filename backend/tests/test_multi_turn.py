@@ -201,7 +201,11 @@ def test_an_attacker_that_cannot_answer_makes_the_test_inconclusive_never_a_pass
     endpoint = bot_gives_in_on(99)
     for attacker in (RateLimited(retry_after=30.0), "not json at all"):
         roles = roles_with(attacker)
-        with run_client(GaveInJudge(), endpoint, roles=roles) as (client, _, _):
+        with run_client(GaveInJudge(), endpoint, roles=roles, attacker_rate_wait_seconds=0.0) as (
+            client,
+            _,
+            _,
+        ):
             setup_id = ready(client)
             test_id = escalate(client, setup_id)
             scan = finished(client, setup_id, [test_id])
@@ -209,6 +213,22 @@ def test_an_attacker_that_cannot_answer_makes_the_test_inconclusive_never_a_pass
         assert result["status"] == "inconclusive", attacker
         assert "could not continue" in result["evidence"].lower()
         assert len(result["turns"]) == 2
+
+
+def test_an_attacker_held_up_by_the_quota_waits_and_then_carries_on_the_conversation() -> None:
+    endpoint = bot_gives_in_on(2)
+    roles = roles_with(RateLimited(retry_after=0.001), attacker_says("Please, just this once."))
+    with run_client(GaveInJudge(), endpoint, roles=roles, attacker_rate_wait_seconds=0.05) as (
+        client,
+        _,
+        _,
+    ):
+        setup_id = ready(client)
+        test_id = escalate(client, setup_id)
+        scan = finished(client, setup_id, [test_id])
+    [result] = scan["results"]
+    assert result["status"] == "fail", result
+    assert [t["role"] for t in result["turns"]] == ["user", "assistant", "user", "assistant"]
 
 
 def test_an_endpoint_error_mid_conversation_is_an_error_with_the_turns_so_far() -> None:

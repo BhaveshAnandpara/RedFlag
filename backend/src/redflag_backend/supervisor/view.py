@@ -3,6 +3,7 @@
 from typing import Any
 
 from redflag_backend.supervisor.plan import Plan
+from redflag_backend.supervisor.run_tests import messages_by_repeats
 
 MOVES_PER_GOAL = 40
 
@@ -10,7 +11,11 @@ MOVES_PER_GOAL = 40
 def plan_view(plan: Plan) -> dict[str, Any]:
     covered = [p.goal.rule for p in plan.goals if p.goal.source == "user" and p.specs]
     return {
-        "summary": plan.summary.model_dump(),
+        "summary": {
+            **plan.summary.model_dump(),
+            # The most messages the run could send to the bot, for each repeats setting 0 to 5.
+            "messages_by_repeats": messages_by_repeats(plan),
+        },
         "biggest_fear": plan.biggest_fear,
         "blocked": plan.blocked,
         "rules_covered": [rule for rule in covered if rule],

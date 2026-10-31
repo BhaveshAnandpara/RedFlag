@@ -91,6 +91,17 @@ class ScanStore:
                 {"now": now, "id": scan_id},
             )
 
+    def touch(self, scan_id: int, now: float) -> None:
+        """Say the run is still working. A long test can go minutes between saved results, and a
+        scan with no sign of life is treated as interrupted."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE scans SET last_progress_at = :now WHERE id = :id AND status = 'running'"
+                ),
+                {"now": now, "id": scan_id},
+            )
+
     def finish_scan(self, scan_id: int, status: str, now: float, note: str | None = None) -> None:
         with self._engine.begin() as conn:
             conn.execute(

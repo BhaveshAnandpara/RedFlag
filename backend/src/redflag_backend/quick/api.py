@@ -29,13 +29,22 @@ from redflag_backend.quick.pack import (
 )
 from redflag_backend.quick.recon import FactSheet, recon
 from redflag_backend.scan.catalog import load_catalog
+from redflag_backend.scan.target_runner import RunOptions
 from redflag_backend.settings import Settings
 from redflag_backend.setups.llm import ModelFailure, SetupLLM
 from redflag_backend.setups.models import Endpoint, FieldValue, Rule, SetupData
 from redflag_backend.setups.run_api import RunDeps, launch_run
 from redflag_backend.setups.store import SetupStore
-from redflag_backend.supervisor.plan import build_plan
+from redflag_backend.specs.results import ResultStore
+from redflag_backend.specs.store import SpecStore
+from redflag_backend.supervisor.plan import Plan, build_plan
 from redflag_backend.supervisor.progress import Progress
+from redflag_backend.supervisor.run_tests import (
+    MAX_REPEATS,
+    build_tests,
+    proof_saver,
+    save_specs,
+)
 from redflag_backend.supervisor.view import plan_view
 from redflag_backend.targets.http_target import EndpointConfig
 
@@ -93,6 +102,10 @@ class QuickBody(BaseModel):
     test_ids: list[str] | None = None
     # An agent can act, so in staging the owner confirms it is a test or sandbox environment.
     sandbox_confirmed: bool = False
+    # A test plan made with Create Test Plan. Run then runs exactly its tests, each repeated up to
+    # `repeats` extra times (0 runs every test once), instead of the standard tests.
+    plan_id: str | None = None
+    repeats: int = Field(default=2, ge=0, le=MAX_REPEATS)
 
 
 def _split_rules(bot_type: str, must_never: list[str]) -> tuple[list[str], list[str]]:
@@ -114,6 +127,8 @@ def build_quick_router(
     deps: RunDeps,
     clock: Callable[[], float],
     llm: SetupLLM,
+    specs: SpecStore,
+    results: ResultStore,
 ) -> APIRouter:
     router = APIRouter(prefix="/quick-scans")
     recent: deque[float] = deque()
@@ -196,7 +211,11 @@ def build_quick_router(
         progress = Progress(
             clock, settings.quick_plan_quota_wait_seconds, settings.quick_plan_max_waits
         )
-        plans[plan_id] = {"status": "running", "progress": progress}
+        plans[plan_id] = {
+            "status": "running",
+            "progress": progress,
+            "environment": brief.environment,
+        }
         while len(plans) > 30:
             plans.pop(next(iter(plans)))
         # Its own budget key, so one plan cannot use up another's model calls.
@@ -208,7 +227,13 @@ def build_quick_router(
                     build_plan(llm, brief, budget_key, progress),
                     settings.quick_plan_timeout_seconds,
                 )
-                plans[plan_id] = {"status": "done", "plan": plan_view(plan), "progress": progress}
+                plans[plan_id] = {
+                    "status": "done",
+                    "plan": plan_view(plan),
+                    "plan_obj": plan,
+                    "progress": progress,
+                    "environment": brief.environment,
+                }
             except TimeoutError:
                 plans[plan_id] = {"status": "error", "kind": "plan_timeout", "progress": progress}
             except Exception:  # a background job must end in a state the page can show
@@ -275,12 +300,34 @@ def build_quick_router(
         if deps.gate.busy():
             return _error(409, "scan_running")
 
+        # A plan made with Create Test Plan is what runs, if there is one. It is checked first, so
+        # a plan that is gone or not allowed here stops the run before anything is sent or saved.
+        chosen_plan: Plan | None = None
+        if body.plan_id:
+            job = plans.get(body.plan_id)
+            if job is None or job["status"] != "done" or job["environment"] != body.environment:
+                return _error(422, "plan_expired")
+            if live and body.bot_type == "agent":
+                return _error(422, "plan_not_for_live_agent")
+            chosen_plan = job["plan_obj"]
+            if chosen_plan.blocked or not chosen_plan.summary.tests:
+                return _error(422, "plan_blocked")
+
         # One hello before anything is created, so a wrong address or key leaves nothing behind.
         seen = await target(body.endpoint, body.key).test_connection()
         if seen.status != "ok":
             return _error(422, "connection_failed", seen.error or "The bot did not answer.")
 
-        if live:
+        options: RunOptions | None = None
+        if chosen_plan is not None:
+            stored = await asyncio.to_thread(save_specs, specs, chosen_plan)
+            tests = build_tests(chosen_plan, body.repeats, stored)
+            needed = sum(t["runs"] * t["max_turns"] for t in tests)
+            options = RunOptions(
+                max_requests=min(needed, settings.run_plan_max_endpoint_requests),
+                on_test_done=proof_saver(results, body.key),
+            )
+        elif live:
             offered = {t["id"]: t for t in production_tests(body.bot_type, chosen, custom)}
             if not body.test_ids:
                 return _error(422, "no_tests_selected")
@@ -322,6 +369,7 @@ def build_quick_router(
             [t["id"] for t in tests],
             body.key,
             view_key=view_key,
+            options=options,
         )
         if isinstance(started, JSONResponse):
             return started

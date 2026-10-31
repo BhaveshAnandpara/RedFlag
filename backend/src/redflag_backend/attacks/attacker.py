@@ -6,12 +6,14 @@ instruction to the attacker. It never raises: if it cannot answer, the conversat
 continue, and the test is inconclusive.
 """
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+import asyncio
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from redflag_backend.judge.judge import RATE_LIMITED
 from redflag_backend.llm.budget import BudgetCaps, SessionBudget
 from redflag_backend.llm.router import Router, RouterFailure
 from redflag_backend.llm.types import LLMRequest, Message
@@ -66,14 +68,33 @@ class AttackerStep:
 
 
 class Attacker:
-    def __init__(self, router: Router, caps: BudgetCaps, clock: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        router: Router,
+        caps: BudgetCaps,
+        clock: Callable[[], float],
+        rate_wait: float = 20.0,
+        rate_retries: int = 4,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         self._router = router
         self._caps = caps
         self._clock = clock
+        self._rate_wait = rate_wait
+        self._rate_retries = rate_retries
+        self._sleep = sleep
 
-    def new_budget(self) -> SessionBudget:
-        """A fresh budget for one run, so one run cannot use up another's."""
-        return SessionBudget(self._caps, started=self._clock())
+    def new_budget(
+        self, requests: int | None = None, seconds: float | None = None
+    ) -> SessionBudget:
+        """A fresh budget for one run, so one run cannot use up another's. A run that was planned
+        and approved may need more than the usual share, so it can ask for more."""
+        caps = self._caps
+        if requests is not None and requests > caps.requests:
+            caps = replace(caps, requests=requests, tokens=max(caps.tokens, requests * 3000))
+        if seconds is not None and seconds > caps.seconds:
+            caps = replace(caps, seconds=seconds)
+        return SessionBudget(caps, started=self._clock())
 
     async def next_message(
         self,
@@ -106,10 +127,17 @@ class Attacker:
             temperature=0.7,
             max_output_tokens=512,
         )
-        for _ in range(ATTEMPTS):
+        waits_left = self._rate_retries
+        bad_answers = 0
+        while bad_answers < ATTEMPTS:
             try:
                 result = await self._router.complete(request, budget)
             except RouterFailure as failure:
+                # The models' per-minute quota is used up: wait for it to clear, then ask again.
+                if waits_left > 0 and any(a.outcome in RATE_LIMITED for a in failure.attempts):
+                    waits_left -= 1
+                    await self._sleep(self._rate_wait)
+                    continue
                 return AttackerStep("unavailable", reason=failure.kind)
             except Exception as error:  # logged by type only, never the message
                 return AttackerStep("unavailable", reason=type(error).__name__)
@@ -118,4 +146,5 @@ class Attacker:
                 if parsed.give_up:
                     return AttackerStep("gave_up")
                 return AttackerStep("message", message=parsed.message.strip())
+            bad_answers += 1
         return AttackerStep("unavailable", reason="malformed answer")

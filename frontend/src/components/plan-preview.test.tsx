@@ -335,6 +335,85 @@ describe("the live test plan", () => {
     expect(screen.queryByRole("button", { name: /Jump to the latest/ })).not.toBeInTheDocument();
   });
 
+  it("reports the plan that is ready to run, and takes it back when it goes away", async () => {
+    const plan = { ...PLAN, summary: { ...PLAN.summary, messages_by_repeats: [4, 8, 12, 16, 20, 24] } };
+    const seen: (unknown | null)[] = [];
+    const onPlan = (p: unknown | null) => seen.push(p);
+    const { api } = planApi(EVENTS, {}, plan);
+    const user = userEvent.setup();
+    const view = show(api, { onPlan });
+    await user.click(create());
+    await screen.findByText("Your tests are ready");
+    expect(seen[seen.length - 1]).toEqual({
+      id: "p1",
+      tests: 2,
+      blocked: false,
+      messages: [4, 8, 12, 16, 20, 24],
+    });
+    // what the plan was made from changes: it is no longer a plan to run
+    view.rerender(
+      <PlanPreview
+        api={api}
+        environment="staging"
+        purpose="A different bot."
+        rules={[REFUND]}
+        facts={null}
+        server="https://bot.example/v1/chat"
+        beatMs={1}
+        minMs={0}
+        onPlan={onPlan}
+      />,
+    );
+    await waitFor(() => expect(seen[seen.length - 1]).toBeNull());
+  });
+
+  it("says a plan with a rule left without tests is blocked", async () => {
+    const seen: ({ blocked: boolean } | null)[] = [];
+    const { api } = planApi(EVENTS, {}, { ...PLAN, blocked: "We could not write any test for: a rule." });
+    const user = userEvent.setup();
+    show(api, { onPlan: (p) => seen.push(p) });
+    await user.click(create());
+    await screen.findByText("Your tests are ready");
+    expect(seen[seen.length - 1]?.blocked).toBe(true);
+  });
+
+  it("lets go of the plan, and shows the button again, when the page says to reset", async () => {
+    const seen: (unknown | null)[] = [];
+    const onPlan = (p: unknown | null) => seen.push(p);
+    const { api } = planApi(EVENTS);
+    const user = userEvent.setup();
+    const props = {
+      api,
+      environment: "staging" as const,
+      purpose: "A support bot.",
+      rules: [REFUND],
+      facts: null,
+      server: "https://bot.example/v1/chat",
+      beatMs: 1,
+      minMs: 0,
+      onPlan,
+    };
+    const view = render(<PlanPreview {...props} reset={0} />);
+    await user.click(create());
+    await screen.findByText("Your tests are ready");
+    view.rerender(<PlanPreview {...props} reset={1} />);
+    await waitFor(() => expect(screen.queryByText("Your tests are ready")).not.toBeInTheDocument());
+    expect(seen[seen.length - 1]).toBeNull();
+    expect(create()).toBeEnabled();
+  });
+
+  it("takes the plan back when the panel goes away", async () => {
+    const seen: (unknown | null)[] = [];
+    const { api } = planApi(EVENTS);
+    const user = userEvent.setup();
+    const view = show(api, { onPlan: (p) => seen.push(p) });
+    await user.click(create());
+    await screen.findByText("Your tests are ready");
+    expect(seen[seen.length - 1]).not.toBeNull();
+    view.unmount();
+    expect(seen[seen.length - 1]).toBeNull();
+  });
+
   it("clears the list when what the plan was made from changes", async () => {
     const { api } = planApi(EVENTS);
     const user = userEvent.setup();

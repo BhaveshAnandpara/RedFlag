@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -975,5 +975,186 @@ describe("choosing how to connect", () => {
     render(<QuickScanPage apiUrl={API} initialWay="mcp" />);
     expect(screen.getByRole("radio", { name: "HTTP endpoint" })).toBeChecked();
     expect(screen.getByLabelText(/Your bot's address/)).toBeInTheDocument();
+  });
+});
+
+describe("running the test plan", () => {
+  const PLAN = {
+    summary: {
+      ideas: 14,
+      repeats_removed: 3,
+      tests: 11,
+      data_changing: 0,
+      messages_by_repeats: [10, 20, 30, 1200, 50, 60],
+    },
+    blocked: null as string | null,
+    rules_covered: [] as string[],
+    skipped: [] as { persona: string; goal: string; reason: string }[],
+  };
+
+  function withPlan(backend: FakeBackend, plan = PLAN) {
+    backend.overrides["POST /quick-scans/plan"] = () => json(202, { plan_id: "p1" });
+    backend.overrides["GET /quick-scans/plan/p1"] = () => json(200, { status: "done", plan });
+    backend.scans = [makeScan([], { id: 31, status: "running", botId: "target-8", setup: { version: 1, rules: [] } })];
+  }
+
+  async function staged(backend: FakeBackend) {
+    const user = await confirmedAnswer(backend);
+    await user.click(screen.getByRole("radio", { name: /Answers questions/ }));
+    await user.type(screen.getByLabelText(/What is it for/), "A support bot for a bank.");
+    return user;
+  }
+
+  const make = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    await screen.findByText("Your tests are ready");
+  };
+
+  it("runs the standard tests until a plan is made, and says so", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    await staged(backend);
+    expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled();
+    expect(screen.getByText(/Run uses the standard tests/)).toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+  });
+
+  it("offers to run the plan once it is ready, with a repeats slider from 0 to 5 that starts at 2", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await staged(backend);
+    await make(user);
+    expect(screen.getByRole("button", { name: "Run my plan · 11 tests" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Run my scan" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Run uses the standard tests/)).not.toBeInTheDocument();
+    const slider = screen.getByRole("slider", { name: "Repeat each attack" });
+    expect(slider).toHaveAttribute("min", "0");
+    expect(slider).toHaveAttribute("max", "5");
+    expect(slider).toHaveValue("2");
+    expect(screen.getByText("up to 2 extra times")).toBeInTheDocument();
+    expect(screen.getByText(/up to 30 messages to your bot/)).toBeInTheDocument();
+  });
+
+  it("shows what each setting costs in messages, and 0 means every test runs once", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await staged(backend);
+    await make(user);
+    const slider = screen.getByRole("slider", { name: "Repeat each attack" });
+    fireEvent.change(slider, { target: { value: "0" } });
+    expect(screen.getByText("none: every test runs once")).toBeInTheDocument();
+    expect(screen.getByText(/up to 10 messages to your bot/)).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "1" } });
+    expect(screen.getByText("up to 1 extra time")).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "3" } });
+    expect(screen.getByText(/up to 1,200 messages to your bot/)).toBeInTheDocument();
+  });
+
+  it("sends the plan and the repeats, and the standard tests never", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await staged(backend);
+    await make(user);
+    fireEvent.change(screen.getByRole("slider", { name: "Repeat each attack" }), { target: { value: "0" } });
+    await user.click(screen.getByRole("button", { name: "Run my plan · 11 tests" }));
+    await screen.findByText("Scan #31");
+    const [body] = backend.bodies("/quick-scans") as Record<string, unknown>[];
+    expect(body).toMatchObject({ plan_id: "p1", repeats: 0, environment: "staging" });
+    expect(body).not.toHaveProperty("test_ids");
+  });
+
+  it("holds Run until the plan is ready, so a half-made plan cannot be run", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    backend.overrides["GET /quick-scans/plan/p1"] = () =>
+      json(200, {
+        status: "running",
+        events: [],
+        next: 0,
+        total: 0,
+        goal_index: 0,
+        goal_total: 0,
+        waiting: false,
+        seconds_left: 0,
+      });
+    const user = await staged(backend);
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeDisabled());
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+  });
+
+  it("goes back to the standard tests when the rules change after the plan was made", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await staged(backend);
+    await make(user);
+    expect(screen.getByRole("slider", { name: "Repeat each attack" })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("switch")[0]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled());
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your tests are ready")).not.toBeInTheDocument();
+  });
+
+  it("does not run a plan that has a rule with no tests, and says to reword it", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend, { ...PLAN, blocked: "We could not write any test for: the swearing rule." });
+    const user = await staged(backend);
+    await make(user);
+    expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(screen.getByText(/a rule with no tests, so Run uses the standard tests/)).toBeInTheDocument();
+  });
+
+  it("says so, and drops the plan, when the server no longer has it", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    backend.overrides["POST /quick-scans"] = () => json(422, { error: { kind: "plan_expired" } });
+    const user = await staged(backend);
+    await make(user);
+    await user.click(screen.getByRole("button", { name: "Run my plan · 11 tests" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no longer available/);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled());
+    expect(screen.queryByText("Your tests are ready")).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+  });
+
+  async function live(backend: FakeBackend, way: RegExp) {
+    backend.overrides["POST /quick-scans/production-tests"] = () => json(200, { tests: [] });
+    backend.install();
+    const user = userEvent.setup();
+    render(<QuickScanPage apiUrl={API} pollMs={5} />);
+    await screen.findByRole("heading", { name: "Quick scan" });
+    await user.click(screen.getByRole("radio", { name: "Production" }));
+    await connectOpenAI(user);
+    await user.click(screen.getByRole("button", { name: "Yes, that's my bot's answer" }));
+    await user.click(await screen.findByRole("button", { name: "Next" }));
+    await user.click(await screen.findByRole("radio", { name: way }));
+    await user.type(screen.getByLabelText(/What is it for/), "A bot for a bank.");
+    return user;
+  }
+
+  it("lets a live chatbot run its plan instead of picking OWASP tests", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await live(backend, /Answers questions/);
+    expect(screen.getByRole("button", { name: "Show the tests" })).toBeInTheDocument();
+    await make(user);
+    expect(screen.queryByRole("button", { name: "Show the tests" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Run my plan · 11 tests" }));
+    await screen.findByText("Scan #31");
+    const [body] = backend.bodies("/quick-scans") as Record<string, unknown>[];
+    expect(body).toMatchObject({ plan_id: "p1", environment: "production" });
+    expect(body).not.toHaveProperty("test_ids");
+  });
+
+  it("never offers a plan to a live bot that can take actions", async () => {
+    const backend = new FakeBackend();
+    withPlan(backend);
+    const user = await live(backend, /Takes actions too/);
+    await make(user);
+    expect(screen.getByRole("button", { name: "Show the tests" })).toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Run my plan/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/cannot run a made plan/)).toBeInTheDocument();
   });
 });

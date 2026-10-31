@@ -12,7 +12,7 @@ import { SetupApi } from "@/lib/setup-api";
 import { ConnectWays, usableWay, type Way } from "./connect-ways";
 import { CountUp } from "./design/count-up";
 import { FlagStrip, RaisedFlag, lookOf, lookOfResult } from "./design/flags";
-import { PlanPreview } from "./plan-preview";
+import { PlanPreview, type ReadyPlan } from "./plan-preview";
 import { Step, type StepState } from "./design/step";
 import { McpPage } from "./mcp-page";
 
@@ -131,6 +131,11 @@ export function QuickScanPage({
   const [stage, setStage] = useState<1 | 2 | 3>(1);
   // True while a test plan is being written: the scan cannot be started until it is ready.
   const [planning, setPlanning] = useState(false);
+  // The test plan that is ready to run, how many extra times to repeat each attack, and a counter
+  // that throws the plan away when the server says it no longer has it.
+  const [readyPlan, setReadyPlan] = useState<ReadyPlan | null>(null);
+  const [repeats, setRepeats] = useState(2);
+  const [planReset, setPlanReset] = useState(0);
   const [way, setWay] = useState<Way>(usableWay(initialWay));
   // Staging is the safer starting point: it asks for the "dev or test copy" tick before going on.
   const [env, setEnv] = useState<Env>("staging");
@@ -319,6 +324,9 @@ export function QuickScanPage({
   const showRun = attemptedRun ? runErrors : { kind: "", purpose: "", rules: "" };
   const ticked = (picks ?? []).filter((p) => !off.has(p.id));
   const live = env === "production";
+  // Run runs the plan when there is one that can run here: not one with a rule left without tests,
+  // and not on a live bot that can act, where the attacks could change real things.
+  const usePlan = readyPlan !== null && !readyPlan.blocked && readyPlan.tests > 0 && !(live && kind === "agent");
 
   function changeRules(next: Rule[]) {
     setRules(next);
@@ -448,13 +456,17 @@ export function QuickScanPage({
         purpose: purpose.trim(),
         must_never: rules.filter((r) => r.on).map((r) => r.t),
         environment: env,
-        ...(live ? { test_ids: ticked.map((p) => p.id) } : {}),
+        ...(live && !usePlan ? { test_ids: ticked.map((p) => p.id) } : {}),
+        ...(usePlan && readyPlan ? { plan_id: readyPlan.id, repeats } : {}),
         // Staging's tick is the one confirmation that this is a test copy.
         sandbox_confirmed: kind === "agent" && !live && stagingTick,
       },
     );
     if (!started.ok) {
       setRunProblem(problemFor(started.status, started.data));
+      // The plan is gone or not allowed: drop it, so Run does not offer it again.
+      const kind = (started.data as { error?: { kind?: string } } | null)?.error?.kind;
+      if (kind === "plan_expired" || kind === "plan_blocked") setPlanReset((n) => n + 1);
       return;
     }
     viewKey.current = started.data.view_key;
@@ -1160,9 +1172,42 @@ export function QuickScanPage({
                 facts={hello?.recon?.facts ?? null}
                 server={buildEndpoint(fields).url}
                 onBusy={setPlanning}
+                onPlan={setReadyPlan}
+                reset={planReset}
               />
+              {usePlan && readyPlan && (
+                <div className="repeats">
+                  <div className="lab">
+                    <label htmlFor="repeats">Repeat each attack</label>
+                    <small>
+                      {repeats === 0
+                        ? "none: every test runs once"
+                        : `up to ${repeats} extra ${repeats === 1 ? "time" : "times"}`}
+                    </small>
+                  </div>
+                  <input
+                    id="repeats"
+                    type="range"
+                    min={0}
+                    max={5}
+                    step={1}
+                    value={repeats}
+                    onChange={(e) => setRepeats(Number(e.target.value))}
+                    aria-valuetext={repeats === 0 ? "No repeats" : `${repeats} repeats`}
+                  />
+                  <div className="ticks" aria-hidden="true">
+                    {[0, 1, 2, 3, 4, 5].map((n) => (
+                      <span key={n}>{n}</span>
+                    ))}
+                  </div>
+                  <p className="hint">
+                    Some attacks only work some of the time, so repeating them finds more. It also takes longer: up
+                    to {readyPlan.messages[repeats]?.toLocaleString()} messages to your bot.
+                  </p>
+                </div>
+              )}
               <div className="actions">
-                {live && !picks ? (
+                {live && !picks && !usePlan ? (
                   <button type="button" className="btn solid" disabled={listing || planning} onClick={showTests}>
                     {listing ? (
                       <>
@@ -1177,13 +1222,30 @@ export function QuickScanPage({
                   <button
                     type="button"
                     className="btn solid"
-                    disabled={planning || (live && ticked.length === 0)}
+                    disabled={planning || (live && !usePlan && ticked.length === 0)}
                     onClick={runScan}
                   >
-                    {live ? `Run ${ticked.length} ${ticked.length === 1 ? "test" : "tests"}` : "Run my scan"}
+                    {usePlan && readyPlan
+                      ? `Run my plan · ${readyPlan.tests} ${readyPlan.tests === 1 ? "test" : "tests"}`
+                      : live
+                        ? `Run ${ticked.length} ${ticked.length === 1 ? "test" : "tests"}`
+                        : "Run my scan"}
                   </button>
                 )}
               </div>
+              {!usePlan && !live && (
+                <p className="hint">
+                  {readyPlan?.blocked
+                    ? "This plan has a rule with no tests, so Run uses the standard tests. Reword the rule and create the plan again to run your own."
+                    : "Run uses the standard tests. Create a test plan above to run tests made for your bot."}
+                </p>
+              )}
+              {readyPlan && live && kind === "agent" && (
+                <p className="hint">
+                  A live bot that can take actions cannot run a made plan, because the attacks could make it act for
+                  real. Pick from the OWASP tests instead.
+                </p>
+              )}
             </>
           )}
         </Step>

@@ -20,7 +20,7 @@ from redflag_backend.llm.budget import BudgetCaps
 from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.gate import ScanGate
 from redflag_backend.scan.store import ScanStore
-from redflag_backend.scan.target_runner import TargetScanRunner
+from redflag_backend.scan.target_runner import RunOptions, TargetScanRunner
 from redflag_backend.setups.models import Endpoint
 from redflag_backend.setups.store import NoSuchSetup, NoSuchVersion, SetupStore
 from redflag_backend.setups.supervisor import judge_context_for_version, render_judge_context
@@ -61,6 +61,7 @@ async def launch_run(
     rerun_of: int | None = None,
     gate: dict[str, Any] | None = None,
     view_key: str | None = None,
+    options: RunOptions | None = None,
 ) -> dict[str, int] | JSONResponse:
     """Start a run of the chosen tests of a confirmed setup version. Used by the owner's page,
     by Run again and by the CI endpoints, so they all keep the same rules."""
@@ -106,7 +107,7 @@ async def launch_run(
             "seconds": deps.judge_caps.seconds,
         },
         "budget": {
-            "requests": deps.runner.max_requests,
+            "requests": (options.max_requests if options else None) or deps.runner.max_requests,
             "tokens": 0,
             "seconds": 0,
             "concurrency": 1,
@@ -134,7 +135,9 @@ async def launch_run(
     # The key lives only inside this object, for the length of the run.
     target = deps.make_target(EndpointConfig(**endpoint.model_dump(), key=key))
     deps.gate.start(
-        deps.runner.run(scan_id, chosen, target, render_judge_context(context), tools, host)
+        deps.runner.run(
+            scan_id, chosen, target, render_judge_context(context), tools, host, options
+        )
     )
     return {"scan_id": scan_id}
 

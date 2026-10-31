@@ -38,6 +38,8 @@ from redflag_backend.setups.api import build_setup_router
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.setups.run_api import RunDeps
 from redflag_backend.setups.store import SetupStore
+from redflag_backend.specs.results import ResultStore
+from redflag_backend.specs.store import SpecStore
 from redflag_backend.targets.http_target import (
     EndpointConfig,
     HttpTarget,
@@ -176,6 +178,8 @@ def create_app(
                     concurrency=1,
                 ),
                 now,
+                rate_wait=settings.attacker_rate_wait_seconds,
+                rate_retries=settings.attacker_rate_retries,
             ),
             max_turns=settings.multi_turn_max_turns,
         ),
@@ -219,7 +223,13 @@ def create_app(
     )
     ci_tokens = CiTokenStore(engine, clock=now)
     app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))
-    app.include_router(build_quick_router(settings, setup_store, run_deps, now, setup_llm))
+    spec_store = SpecStore(engine, clock=now)
+    result_store = ResultStore(engine, spec_store, clock=now)
+    app.include_router(
+        build_quick_router(
+            settings, setup_store, run_deps, now, setup_llm, spec_store, result_store
+        )
+    )
     app.include_router(
         build_setup_router(
             settings,

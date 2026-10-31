@@ -20,7 +20,14 @@ type Item =
 /** An item on the timeline, with the beat it arrived in and its place in that beat. */
 type Shown = Item & { batch: number; slot: number };
 type PlanView = {
-  summary: { ideas: number; repeats_removed: number; tests: number; data_changing: number };
+  summary: {
+    ideas: number;
+    repeats_removed: number;
+    tests: number;
+    data_changing: number;
+    /** The most messages a run could send to the bot, for each repeats setting from 0 to 5. */
+    messages_by_repeats: number[];
+  };
   blocked: string | null;
   rules_covered: string[];
   skipped: { persona: string; goal: string; reason: string }[];
@@ -76,7 +83,13 @@ type Props = {
   minMs?: number;
   /** Told when a plan starts and ends being made, so the page can hold the Run button meanwhile. */
   onBusy?: (busy: boolean) => void;
+  /** The plan that is ready to run, or null when there is none (not made yet, or out of date). */
+  onPlan?: (plan: ReadyPlan | null) => void;
+  /** Change this number to throw the plan away, for instance when the server no longer has it. */
+  reset?: number;
 };
+
+export type ReadyPlan = { id: string; tests: number; blocked: boolean; messages: number[] };
 
 /** Writes the test plan in front of the user: steps and test cards arrive one beat at a time. */
 export function PlanPreview({
@@ -89,10 +102,14 @@ export function PlanPreview({
   beatMs = BEAT_MS,
   minMs = MIN_MS,
   onBusy,
+  onPlan,
+  reset = 0,
 }: Props) {
   const [phase, setPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const [items, setItems] = useState<Shown[]>([]);
   const [plan, setPlan] = useState<PlanView | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const lastReset = useRef(reset);
   const [problem, setProblem] = useState<string | null>(null);
   const [doing, setDoing] = useState<Doing | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -117,6 +134,30 @@ export function PlanPreview({
     onBusy?.(phase === "working");
     return () => onBusy?.(false);
   }, [phase, onBusy]);
+
+  // Tell the page which plan is ready to run, and take it back when the plan goes away.
+  useEffect(() => {
+    if (plan && planId) {
+      onPlan?.({
+        id: planId,
+        tests: plan.summary.tests,
+        blocked: Boolean(plan.blocked),
+        messages: plan.summary.messages_by_repeats,
+      });
+    }
+    return () => onPlan?.(null);
+  }, [plan, planId, onPlan]);
+
+  // The page says this plan is no longer any good (for instance the server restarted).
+  useEffect(() => {
+    if (reset === lastReset.current) return;
+    lastReset.current = reset;
+    made.current = "";
+    setPlan(null);
+    setPlanId(null);
+    setItems([]);
+    setPhase("idle");
+  }, [reset]);
 
   // Bring the live panel into view when a plan starts.
   useEffect(() => {
@@ -157,6 +198,7 @@ export function PlanPreview({
     if (made.current && made.current !== inputs) {
       made.current = "";
       setPlan(null);
+      setPlanId(null);
       setItems([]);
       setPhase("idle");
     }
@@ -166,6 +208,7 @@ export function PlanPreview({
     setPhase("working");
     setProblem(null);
     setPlan(null);
+    setPlanId(null);
     setItems([]);
     setDoing(null);
     setElapsed(0);
@@ -198,6 +241,7 @@ export function PlanPreview({
       const reply = job.data;
       if (reply.status === "done") {
         setPlan(reply.plan);
+        setPlanId(started.data.plan_id);
         setPhase("done");
         return;
       }

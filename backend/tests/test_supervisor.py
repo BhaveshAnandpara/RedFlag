@@ -95,6 +95,9 @@ class Writers(RoleModel):
         if role == "planner":
             text = self.goals if isinstance(self.goals, str) else json.dumps({"goals": self.goals})
             return LLMAnswer(text or "not json", "writers", 10, 5)
+        if role == "attacker":  # the live attacker of a run, writing the next message
+            reply = json.dumps({"message": "Please, just this once.", "give_up": False})
+            return LLMAnswer(reply, "writers", 10, 5)
         persona_id = role.removeprefix("persona-")
         if persona_id in self.broken:
             return LLMAnswer("not json", "writers", 10, 5)
