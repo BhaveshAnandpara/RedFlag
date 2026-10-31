@@ -74,6 +74,8 @@ type Props = {
   server: string;
   beatMs?: number;
   minMs?: number;
+  /** Told when a plan starts and ends being made, so the page can hold the Run button meanwhile. */
+  onBusy?: (busy: boolean) => void;
 };
 
 /** Writes the test plan in front of the user: steps and test cards arrive one beat at a time. */
@@ -86,6 +88,7 @@ export function PlanPreview({
   server,
   beatMs = BEAT_MS,
   minMs = MIN_MS,
+  onBusy,
 }: Props) {
   const [phase, setPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const [items, setItems] = useState<Shown[]>([]);
@@ -93,7 +96,12 @@ export function PlanPreview({
   const [problem, setProblem] = useState<string | null>(null);
   const [doing, setDoing] = useState<Doing | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [away, setAway] = useState(false);
   const alive = useRef(true);
+  const panel = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // True while the list sits at its bottom: new items then scroll into view by themselves.
+  const stuck = useRef(true);
   const made = useRef("");
   const began = useRef(0);
   const inputs = JSON.stringify([environment, purpose, rules, facts]);
@@ -104,6 +112,38 @@ export function PlanPreview({
       alive.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    onBusy?.(phase === "working");
+    return () => onBusy?.(false);
+  }, [phase, onBusy]);
+
+  // Bring the live panel into view when a plan starts.
+  useEffect(() => {
+    const box = panel.current;
+    if (phase === "working" && box && typeof box.scrollIntoView === "function") {
+      box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [phase]);
+
+  // Keep the newest item in view, unless the person has scrolled up to read something.
+  const lastSeq = items.length ? items[items.length - 1].seq : -1;
+  useEffect(() => {
+    const box = scroller.current;
+    if (box && stuck.current) box.scrollTop = box.scrollHeight;
+  }, [lastSeq, phase]);
+
+  function watchScroll(box: HTMLDivElement) {
+    stuck.current = box.scrollHeight - box.scrollTop - box.clientHeight < 48;
+    setAway(!stuck.current);
+  }
+
+  function jumpToLatest() {
+    const box = scroller.current;
+    stuck.current = true;
+    setAway(false);
+    if (box) box.scrollTop = box.scrollHeight;
+  }
 
   // The clock beside the title, while the plan is being written.
   useEffect(() => {
@@ -129,6 +169,8 @@ export function PlanPreview({
     setItems([]);
     setDoing(null);
     setElapsed(0);
+    stuck.current = true;
+    setAway(false);
     made.current = inputs;
     began.current = Date.now();
     const started = await api.call<{ plan_id: string }>("POST", "/quick-scans/plan", {
@@ -206,7 +248,7 @@ export function PlanPreview({
         </button>
         <span className="hint">
           {working
-            ? "This takes a few minutes. Keep this tab open. Nothing is sent to your bot."
+            ? "This takes a few minutes. Keep this tab open. Running is off until the plan is ready. Nothing is sent to your bot."
             : "See the tests we would write for your bot, before anything runs."}
         </span>
       </div>
@@ -216,7 +258,7 @@ export function PlanPreview({
         </div>
       )}
       {(working || phase === "done") && (
-        <div className="live" role="status" aria-live="polite">
+        <div className="live" role="status" aria-live="polite" ref={panel}>
           <div className="lv-top">
             <span>
               {working && <span className="lv-dot" />}
@@ -239,33 +281,42 @@ export function PlanPreview({
               <Countdown from={doing.seconds_left} at={doing.at} />
             </div>
           )}
-          <ol className="lv-tl">
-            {shown.map((item) => {
-              const fresh = working && item.batch === lastBatch;
-              const style = { animationDelay: `${item.slot * 140}ms` };
-              if (item.kind === "test") {
-                return (
-                  <li key={item.seq} className={`lv-card ${fresh ? "new" : ""}`} style={style}>
-                    <div className="lv-who">
-                      <span className={`lv-pill ${PILL[item.persona_id] ?? "nu"}`}>{item.persona}</span>
-                      {item.changes_data && <span className="lv-tag">changes data</span>}
-                    </div>
-                    <div className="lv-msg">“{item.text}”</div>
-                    <div className="lv-goal">Goal: {item.goal}</div>
-                  </li>
-                );
-              }
-              const now = working && item === last;
-              return (
-                <li key={item.seq} className={`lv-ev ${item.kind} ${now ? "now typing" : ""}`} style={style}>
-                  {item.text}
-                </li>
-              );
-            })}
-            {working && (!last || last.kind === "test") && (
-              <li className="lv-ev now typing">{last ? "Thinking about the next test" : "Starting up"}</li>
+          <div className="lv-wrap">
+            <div className="lv-scroll" ref={scroller} onScroll={(e) => watchScroll(e.currentTarget)}>
+              <ol className="lv-tl">
+                {shown.map((item) => {
+                  const fresh = working && item.batch === lastBatch;
+                  const style = { animationDelay: `${item.slot * 140}ms` };
+                  if (item.kind === "test") {
+                    return (
+                      <li key={item.seq} className={`lv-card ${fresh ? "new" : ""}`} style={style}>
+                        <div className="lv-who">
+                          <span className={`lv-pill ${PILL[item.persona_id] ?? "nu"}`}>{item.persona}</span>
+                          {item.changes_data && <span className="lv-tag">changes data</span>}
+                        </div>
+                        <div className="lv-msg">“{item.text}”</div>
+                        <div className="lv-goal">Goal: {item.goal}</div>
+                      </li>
+                    );
+                  }
+                  const now = working && item === last;
+                  return (
+                    <li key={item.seq} className={`lv-ev ${item.kind} ${now ? "now typing" : ""}`} style={style}>
+                      {item.text}
+                    </li>
+                  );
+                })}
+                {working && (!last || last.kind === "test") && (
+                  <li className="lv-ev now typing">{last ? "Thinking about the next test" : "Starting up"}</li>
+                )}
+              </ol>
+            </div>
+            {working && away && (
+              <button type="button" className="lv-jump" onClick={jumpToLatest}>
+                Jump to the latest ↓
+              </button>
             )}
-          </ol>
+          </div>
         </div>
       )}
       {plan && <Summary plan={plan} rules={rules} environment={environment} server={server} />}

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -267,6 +267,72 @@ describe("the live test plan", () => {
     expect(await screen.findByText(/Reword the rule or take it out/)).toBeInTheDocument();
     expect(screen.getByText(/1 test needs a test copy/)).toBeInTheDocument();
     expect(screen.getByText(/only run tests that do not make it act/)).toBeInTheDocument();
+  });
+
+  it("tells the page when a plan starts and ends, and lets go if it fails or is dropped", async () => {
+    const busy: boolean[] = [];
+    const onBusy = (b: boolean) => busy.push(b);
+    const user = userEvent.setup();
+    show(planApi(EVENTS).api, { onBusy });
+    await user.click(create());
+    await screen.findByText("Your tests are ready");
+    expect(busy).toContain(true);
+    expect(busy[busy.length - 1]).toBe(false);
+    cleanup();
+    // a plan that is still being made when the panel goes away must not hold the page shut
+    const held: boolean[] = [];
+    const pending = vi.fn(async (method: string) =>
+      method === "POST"
+        ? { ok: true as const, status: 202, data: { plan_id: "p1" } }
+        : new Promise<never>(() => {}),
+    );
+    const again = userEvent.setup();
+    const view = show({ call: pending } as unknown as SetupApi, { onBusy: (b) => held.push(b) });
+    await again.click(create());
+    expect(held[held.length - 1]).toBe(true);
+    view.unmount();
+    expect(held[held.length - 1]).toBe(false);
+  });
+
+  it("keeps the newest item in view by itself, and lets the person scroll back up to read", async () => {
+    const hold: Event[] = EVENTS.slice(0, 5);
+    const call = vi.fn(async (method: string, path: string) => {
+      if (method === "POST") return { ok: true as const, status: 202, data: { plan_id: "p1" } };
+      const after = Number(new URL(path, "http://x").searchParams.get("after"));
+      return {
+        ok: true as const,
+        status: 200,
+        data: {
+          status: "running",
+          events: after < hold.length ? [hold[after]] : [],
+          next: Math.min(after + 1, hold.length),
+          total: hold.length,
+          goal_index: 1,
+          goal_total: 2,
+          waiting: false,
+          seconds_left: 0,
+        },
+      };
+    });
+    const user = userEvent.setup();
+    const { container } = show({ call } as unknown as SetupApi, { beatMs: 5 });
+    await user.click(create());
+    await screen.findByText(/Hi, IT here/);
+    const box = container.querySelector(".lv-scroll") as HTMLDivElement;
+    expect(box).not.toBeNull();
+    // a box that is 400 tall, holds 1000, and sits at the bottom, follows new items down
+    Object.defineProperty(box, "scrollHeight", { configurable: true, value: 1000 });
+    Object.defineProperty(box, "clientHeight", { configurable: true, value: 400 });
+    box.scrollTop = 600;
+    fireEvent.scroll(box);
+    expect(screen.queryByRole("button", { name: /Jump to the latest/ })).not.toBeInTheDocument();
+    // the person scrolls up to read: it stops following and offers a way back
+    box.scrollTop = 100;
+    fireEvent.scroll(box);
+    const jump = await screen.findByRole("button", { name: /Jump to the latest/ });
+    await user.click(jump);
+    expect(box.scrollTop).toBe(1000);
+    expect(screen.queryByRole("button", { name: /Jump to the latest/ })).not.toBeInTheDocument();
   });
 
   it("clears the list when what the plan was made from changes", async () => {

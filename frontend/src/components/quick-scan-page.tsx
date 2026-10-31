@@ -129,6 +129,8 @@ export function QuickScanPage({
   // key that starting it returned, kept only here in memory.
   const api = useMemo(() => new SetupApi(apiUrl, ""), [apiUrl]);
   const [stage, setStage] = useState<1 | 2 | 3>(1);
+  // True while a test plan is being written: the scan cannot be started until it is ready.
+  const [planning, setPlanning] = useState(false);
   const [way, setWay] = useState<Way>(usableWay(initialWay));
   // Staging is the safer starting point: it asks for the "dev or test copy" tick before going on.
   const [env, setEnv] = useState<Env>("staging");
@@ -1157,10 +1159,11 @@ export function QuickScanPage({
                 rules={rules.filter((r) => r.on).map((r) => r.t)}
                 facts={hello?.recon?.facts ?? null}
                 server={buildEndpoint(fields).url}
+                onBusy={setPlanning}
               />
               <div className="actions">
                 {live && !picks ? (
-                  <button type="button" className="btn solid" disabled={listing} onClick={showTests}>
+                  <button type="button" className="btn solid" disabled={listing || planning} onClick={showTests}>
                     {listing ? (
                       <>
                         <span className="spin" />
@@ -1174,7 +1177,7 @@ export function QuickScanPage({
                   <button
                     type="button"
                     className="btn solid"
-                    disabled={live && ticked.length === 0}
+                    disabled={planning || (live && ticked.length === 0)}
                     onClick={runScan}
                   >
                     {live ? `Run ${ticked.length} ${ticked.length === 1 ? "test" : "tests"}` : "Run my scan"}

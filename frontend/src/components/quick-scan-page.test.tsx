@@ -454,6 +454,42 @@ describe("step 2: what the bot does and what it must never do", () => {
     expect(screen.getByText("Pick at least one thing it must never do, or add your own.")).toBeInTheDocument();
   });
 
+  it("holds the Run button while a test plan is being written, and lets go when it is ready", async () => {
+    const backend = new FakeBackend();
+    let ready = false;
+    backend.overrides["POST /quick-scans/plan"] = () => json(202, { plan_id: "p1" });
+    backend.overrides["GET /quick-scans/plan/p1"] = () =>
+      ready
+        ? json(200, {
+            status: "done",
+            plan: {
+              summary: { ideas: 1, repeats_removed: 0, tests: 0, data_changing: 0 },
+              blocked: null,
+              rules_covered: [],
+              skipped: [],
+            },
+          })
+        : json(200, {
+            status: "running",
+            events: [],
+            next: 0,
+            total: 0,
+            goal_index: 0,
+            goal_total: 0,
+            waiting: false,
+            seconds_left: 0,
+          });
+    const user = await confirmedAnswer(backend);
+    expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeDisabled());
+    expect(screen.getByText(/Running is off until the plan is ready/)).toBeInTheDocument();
+    ready = true;
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled(), {
+      timeout: 8000,
+    });
+  }, 15000);
+
   it("adds the person's own rule to the list, marked as theirs", async () => {
     const user = await confirmedAnswer(new FakeBackend());
     await user.click(screen.getByRole("radio", { name: /Answers questions/ }));
