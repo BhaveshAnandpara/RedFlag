@@ -10,7 +10,7 @@ import {
   ruleOutput,
   type JudgeState,
 } from "@/lib/analytics";
-import type { JudgeAccuracy, ScanDetail, ScanResult, Status } from "@/lib/scan";
+import type { JudgeAccuracy, Proof, ScanDetail, ScanResult, Status } from "@/lib/scan";
 
 const STATUS_WORD: Record<Status, string> = {
   pass: "PASS",
@@ -26,6 +26,22 @@ const JUDGE_WORD: Record<JudgeState, string> = {
   unavailable: "UNAVAILABLE",
   not_run: "NOT RUN",
 };
+
+/** How sure a result is, in plain words. */
+export const HOW_SURE: Record<NonNullable<Proof["how_sure"]>, string> = {
+  confirmed_by_logs: "Confirmed by your bot's logs",
+  confirmed_by_checks: "Confirmed by Redflag's own checks",
+  reply_only: "Based on your bot's reply only: nothing else confirmed it",
+  couldnt_confirm: "Could not be confirmed",
+};
+
+/** How often a test broke, for a test that ran from a plan: "Broke in 2 of 3 runs". */
+export function runsText(proof: Proof): string {
+  const n = proof.repeat_count;
+  const runs = `${n} ${n === 1 ? "run" : "runs"}`;
+  if (proof.repeats_broke > 0) return `Broke in ${proof.repeats_broke} of ${runs}`;
+  return n === 1 ? "Ran once" : `Held in all ${runs}`;
+}
 
 const cell = (text: string) => text.replace(/\|/g, "\\|").replace(/\n/g, " ");
 // A merged finding (e.g. the open-parameter check) carries one line per tool. Indent the
@@ -122,13 +138,16 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
   }
 
   lines.push("## What was tested", "");
+  // A "Runs" column only when some test ran from a plan, so older reports keep their shape.
+  const withProof = results.some((r) => r.proof);
   lines.push(
-    "| Test | Risk | Severity | Result | AI judge | Model |",
-    "|---|---|---|---|---|---|",
+    `| Test | Risk | Severity | Result | AI judge | Model |${withProof ? " Runs |" : ""}`,
+    `|---|---|---|---|---|---|${withProof ? "---|" : ""}`,
   );
   for (const r of results) {
+    const runs = withProof ? ` ${r.proof ? cell(runsText(r.proof)) : "none"} |` : "";
     lines.push(
-      `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${STATUS_WORD[r.status]} | ${JUDGE_WORD[judgeState(r)]} | ${r.model ?? "none"} |`,
+      `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${STATUS_WORD[r.status]} | ${JUDGE_WORD[judgeState(r)]} | ${r.model ?? "none"} |${runs}`,
     );
   }
   lines.push("");
@@ -140,12 +159,24 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
     lines.push(`### ${r.title}`, "");
     lines.push(`- Severity: ${severityText(r)}`);
     lines.push(`- Evidence: ${nested(r.evidence)}`);
+    if (r.proof) {
+      lines.push(`- Runs: ${runsText(r.proof)}`);
+      lines.push(`- How sure: ${r.proof.how_sure ? HOW_SURE[r.proof.how_sure] : "not decided"}`);
+      lines.push(`- Test: ${r.proof.spec_id} (version ${r.proof.spec_version}, hash ${r.proof.spec_hash})`);
+    }
     if (r.turns && r.turns.length > 0) {
       const count = Math.ceil(r.turns.length / 2);
       lines.push(`- Conversation (${count} ${count === 1 ? "turn" : "turns"}):`);
-      for (const turn of r.turns) {
-        lines.push(`  - ${turn.role === "user" ? "Tester" : "Bot"}: ${turn.content.replace(/\n/g, " ")}`);
-      }
+      r.turns.forEach((turn, i) => {
+        const here = r.proof?.broke_at_turn === i ? " **(it broke here)**" : "";
+        lines.push(`  - ${turn.role === "user" ? "Tester" : "Bot"}: ${turn.content.replace(/\n/g, " ")}${here}`);
+      });
+    }
+    if (r.proof && r.proof.attacker_messages.length > 0) {
+      lines.push("- The attacker's exact messages, to replay this attack:");
+      r.proof.attacker_messages.forEach((message, i) => {
+        lines.push(`  - ${i + 1}. ${message.replace(/\n/g, " ")}`);
+      });
     }
     if (judgeState(r) !== "not_run") {
       const rules = ruleOutput(r);

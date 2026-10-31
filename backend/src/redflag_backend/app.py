@@ -64,6 +64,8 @@ def create_app(
         connect_args={"connect_timeout": int(settings.db_timeout_seconds)},
     )
     scan_store = ScanStore(engine)
+    spec_store = SpecStore(engine, clock=now)
+    result_store = ResultStore(engine, spec_store, clock=now)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -127,10 +129,11 @@ def create_app(
             active_bot_providers,
             catalog,
             gate,
+            result_store,
         )
     )
 
-    app.include_router(build_open_scan_router(settings, scan_store, catalog))
+    app.include_router(build_open_scan_router(settings, scan_store, catalog, result_store))
 
     # Setups: what the owner tells Redflag about their own bot. Never calls an address inside.
     setup_llm = SetupLLM(
@@ -223,8 +226,6 @@ def create_app(
     )
     ci_tokens = CiTokenStore(engine, clock=now)
     app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))
-    spec_store = SpecStore(engine, clock=now)
-    result_store = ResultStore(engine, spec_store, clock=now)
     app.include_router(
         build_quick_router(
             settings, setup_store, run_deps, now, setup_llm, spec_store, result_store

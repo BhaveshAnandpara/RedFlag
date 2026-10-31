@@ -16,9 +16,12 @@ from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.summary import summarize
 from redflag_backend.settings import Settings
+from redflag_backend.specs.results import ResultStore
 
 
-def build_open_scan_router(settings: Settings, store: ScanStore, catalog: Catalog) -> APIRouter:
+def build_open_scan_router(
+    settings: Settings, store: ScanStore, catalog: Catalog, proofs: ResultStore
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/open-scans/{scan_id}")
@@ -35,6 +38,9 @@ def build_open_scan_router(settings: Settings, store: ScanStore, catalog: Catalo
         scan["settings"] = {k: v for k, v in scan["settings"].items() if k != "view_key"}
         scan["models_used"] = sorted({r["model"] for r in results if r["model"]})
         scan["previous_scan_id"] = None
+        saved = await asyncio.to_thread(proofs.proofs_for_scan, scan_id)
+        for r in results:
+            r["proof"] = saved.get(r["test_id"])
         return {"scan": scan, "results": results, "summary": summarize(results, catalog)}
 
     return router

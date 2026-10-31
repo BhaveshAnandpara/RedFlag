@@ -19,6 +19,7 @@ from redflag_backend.scan.runner import ScanRunner, new_canary
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.scan.summary import summarize, zero_counts
 from redflag_backend.settings import Settings
+from redflag_backend.specs.results import ResultStore
 
 
 class StartScan(BaseModel):
@@ -41,6 +42,7 @@ def build_scan_router(
     providers: Sequence[Provider],
     catalog: Catalog,
     gate: ScanGate,
+    proofs: ResultStore,
 ) -> APIRouter:
     def require_owner(x_owner_token: str | None = Header(default=None)) -> None:
         expected = settings.owner_token
@@ -130,8 +132,10 @@ def build_scan_router(
         scan["models_used"] = sorted({r["model"] for r in results if r["model"]})
         scan["previous_scan_id"] = await asyncio.to_thread(store.previous_scan_id, scan_id)
         labels = await asyncio.to_thread(store.labels, scan_id)
+        saved = await asyncio.to_thread(proofs.proofs_for_scan, scan_id)
         for r in results:
             r["label"] = labels.get(r["test_id"])
+            r["proof"] = saved.get(r["test_id"])
         return {"scan": scan, "results": results, "summary": summarize(results, catalog)}
 
     @router.put("/scans/{scan_id}/results/{test_id}/label", response_model=None)

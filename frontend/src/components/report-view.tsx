@@ -13,8 +13,8 @@ import {
   when,
   type Cover,
 } from "@/lib/report-model";
-import { buildReport } from "@/lib/report";
-import type { ScanDetail, ScanResult, Status } from "@/lib/scan";
+import { HOW_SURE, buildReport, runsText } from "@/lib/report";
+import type { Proof, ScanDetail, ScanResult, Status } from "@/lib/scan";
 
 type Look = "pass" | "fail" | "unclear" | "grey";
 
@@ -199,7 +199,10 @@ function Finding({
           <small>{result.risk}</small>
         </span>
         <span className="chev">›</span>
-        <span className="s-ev">{evidence}</span>
+        <span className="s-ev">
+          {result.proof && <b className="runs bad">{runsText(result.proof)}. </b>}
+          {evidence}
+        </span>
         <span className="s-fix">
           <b>Fix</b>
           {result.remediation ?? "—"}
@@ -280,14 +283,18 @@ function useOpening(onRow: (id: string) => void) {
 
 function BotDetail({ r }: { r: ScanResult }) {
   const turns = r.turns && r.turns.length > 0 ? r.turns : null;
+  const proof = r.proof ?? null;
+  const brokeAt = proof?.outcome === "broke" ? proof.broke_at_turn : null;
   return (
     <div className="detail">
+      {proof && <ProofBox proof={proof} />}
       {turns ? (
         <div className="dl">
           <span>Conversation</span>
           {turns.map((t, i) => (
-            <div key={i} className={`quote ${t.role === "user" ? "att" : ""}`}>
+            <div key={i} className={`quote ${t.role === "user" ? "att" : ""} ${brokeAt === i ? "broke" : ""}`}>
               {t.role === "user" ? "Tester" : "Your bot"}: {t.content}
+              {brokeAt === i && <b className="here">It broke here</b>}
             </div>
           ))}
         </div>
@@ -299,7 +306,10 @@ function BotDetail({ r }: { r: ScanResult }) {
           </div>
           <div className="dl">
             <span>Your bot&apos;s reply</span>
-            <div className="quote">{r.reply || "(no reply)"}</div>
+            <div className={`quote ${brokeAt === 1 ? "broke" : ""}`}>
+              {r.reply || "(no reply)"}
+              {brokeAt === 1 && <b className="here">It broke here</b>}
+            </div>
           </div>
         </>
       )}
@@ -323,10 +333,42 @@ function BotDetail({ r }: { r: ScanResult }) {
   );
 }
 
+/** The saved proof of a test that ran from a plan: how often it ran and broke, how sure the
+ *  result is, the attacker's exact messages, and which saved test it belongs to. */
+function ProofBox({ proof }: { proof: Proof }) {
+  return (
+    <div className="proof">
+      <div className="h">
+        <b>Proof</b>
+        <span className={`runs ${proof.repeats_broke > 0 ? "bad" : ""}`}>{runsText(proof)}</span>
+      </div>
+      <div className="row">
+        <span>How sure</span>
+        {proof.how_sure ? HOW_SURE[proof.how_sure] : "Not decided"}
+      </div>
+      {proof.attacker_messages.length > 0 && (
+        <div className="row">
+          <span>The attacker&apos;s exact messages, to replay this attack</span>
+          <ol>
+            {proof.attacker_messages.map((message, i) => (
+              <li key={i}>{message}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+      <div className="row ref">
+        Saved as test {proof.spec_id} · version {proof.spec_version} · hash {proof.spec_hash}
+      </div>
+    </div>
+  );
+}
+
 function BotReport({ detail }: { detail: ScanDetail }) {
   const m = botModel(detail);
   const actions = useReportActions(detail);
   const { scan, results } = detail;
+  // A Runs column only when some test ran from a plan, so older reports keep their shape.
+  const withProof = results.some((r) => r.proof);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const opening = useOpening((id) => setExpanded((c) => new Set(c).add(id)));
   const [fRes, setFRes] = useState<"all" | "fail" | "pass">("all");
@@ -478,12 +520,13 @@ function BotReport({ detail }: { detail: ScanDetail }) {
               <th className="t-risk">Risk</th>
               <th>Severity</th>
               <th className="t-model">Decided by</th>
+              {withProof && <th>Runs</th>}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="nomatch">
+                <td colSpan={withProof ? 6 : 5} className="nomatch">
                   No tests match those filters.
                 </td>
               </tr>
@@ -511,8 +554,10 @@ function BotReport({ detail }: { detail: ScanDetail }) {
                       <SevTag s={r.kind === "positive" ? null : r.severity} />
                     </td>
                     <td className="mono t-model">AI judge</td>
+                    {withProof && <td className="mono">{r.proof ? runsText(r.proof) : "none"}</td>}
                   </>
                 }
+                columns={withProof ? 6 : 5}
               >
                 <BotDetail r={r} />
               </RowPair>
@@ -544,12 +589,14 @@ function RowPair({
   expanded,
   toggle,
   cells,
+  columns = 5,
   children,
 }: {
   id: string;
   expanded: boolean;
   toggle: () => void;
   cells: ReactNode;
+  columns?: number;
   children: ReactNode;
 }) {
   return (
@@ -559,7 +606,7 @@ function RowPair({
       </tr>
       {expanded && (
         <tr className="exp">
-          <td colSpan={5}>{children}</td>
+          <td colSpan={columns}>{children}</td>
         </tr>
       )}
     </>

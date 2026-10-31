@@ -17,6 +17,25 @@ export type ToolRecord = {
   detail: string;
 };
 
+/** What proves a test: how it was decided, how often it broke, and the attacker's exact messages.
+ *  Saved for tests that ran from a made plan. Standard tests, and scans from before, have none. */
+export type Proof = {
+  outcome: "broke" | "held" | "refused" | "couldnt_test" | "skipped" | "needs_review";
+  how_sure: "confirmed_by_logs" | "confirmed_by_checks" | "reply_only" | "couldnt_confirm" | null;
+  reason: string;
+  what_happened: string;
+  repeat_count: number;
+  repeats_broke: number;
+  // Index into `conversation` of the bot reply where it broke.
+  broke_at_turn: number | null;
+  conversation: { role: "user" | "assistant"; content: string }[];
+  attacker_messages: string[];
+  spec_id: string;
+  spec_version: number;
+  spec_hash: string;
+  compared_with_last: "new" | "still_broken" | "fixed" | "first_run" | null;
+};
+
 export type ScanResult = {
   test_id: string;
   risk: string | null;
@@ -47,6 +66,7 @@ export type ScanResult = {
   judge_provider?: string | null;
   // What the owner says the right verdict was (W7). Null or missing when not labeled.
   label?: "pass" | "fail" | null;
+  proof?: Proof | null;
 };
 
 export type AccuracyRisk = {

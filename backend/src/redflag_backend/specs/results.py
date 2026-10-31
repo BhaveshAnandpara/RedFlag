@@ -117,6 +117,15 @@ class ResultStore:
             ).all()
         return [_stored(r) for r in rows]
 
+    def proofs_for_scan(self, scan_id: int) -> dict[str, dict[str, Any]]:
+        """The proof of each test of a scan, by the test's id in that scan. A scan that saved no
+        proof (the standard tests) gives none."""
+        return {
+            s.result.test_id: proof_view(s)
+            for s in self.for_run(f"scan-{scan_id}")
+            if s.result.test_id
+        }
+
     def _spec_for(self, record: ResultRecord) -> StoredSpec:
         """The saved version the result names. A hash that matches no version is checked against
         the latest, so the 'does not point at this spec' reason is the one the caller sees."""
@@ -125,6 +134,27 @@ class ResultStore:
             if version.hash == record.spec_hash:
                 return version
         return history[-1]
+
+
+def proof_view(stored: StoredResult) -> dict[str, Any]:
+    """The proof as a report shows it: what decided the test, how sure it is, how often it broke,
+    and the attacker's exact messages. The spec hash is shortened: it only has to be recognised."""
+    r = stored.result
+    return {
+        "outcome": r.outcome,
+        "how_sure": r.how_sure,
+        "reason": r.reason,
+        "what_happened": r.what_happened,
+        "repeat_count": r.repeat_count,
+        "repeats_broke": r.repeats_broke,
+        "broke_at_turn": r.broke_at_turn,
+        "conversation": [{"role": t.role, "content": t.content} for t in r.conversation],
+        "attacker_messages": r.attacker_messages,
+        "spec_id": r.spec_id,
+        "spec_version": stored.spec_version,
+        "spec_hash": r.spec_hash[:12],
+        "compared_with_last": r.compared_with_last,
+    }
 
 
 def as_json(result: StoredResult) -> str:

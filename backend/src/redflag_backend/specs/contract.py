@@ -32,6 +32,8 @@ class ResultRecord(BaseModel):
 
     spec_id: str
     spec_hash: str
+    # The id of the test inside its run, so a report can put the proof beside its test.
+    test_id: str | None = None
     outcome: Outcome
     what_happened: str = ""
     conversation: list[Turn] = Field(default_factory=list)

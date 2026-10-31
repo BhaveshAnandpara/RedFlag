@@ -395,3 +395,55 @@ def test_the_standard_pack_ignores_the_repeats_slider(repeats: int) -> None:
         info = quick(client, repeats=repeats).json()
         wait_for_scan(client, info["scan_id"], timeout=90)
     assert info["test_count"] == 31 and len(all_rules("chatbot")) > 0
+
+
+# --- the report reads the proof ---------------------------------------------------------------
+
+
+def test_the_open_report_carries_the_proof_of_every_test_beside_its_result() -> None:
+    with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
+        plan_id = made_plan(client)
+        info = run_plan(client, plan_id, repeats=2).json()
+        ran_scan = wait_for_scan(client, info["scan_id"], timeout=90)
+        report = client.get(f"/open-scans/{info['scan_id']}", params={"key": info["view_key"]})
+    assert report.status_code == 200
+    results = report.json()["results"]
+    assert len(results) == len(ran_scan["results"]) > 0 and all(r["proof"] for r in results)
+    attack = next(r for r in results if r["kind"] == "negative")
+    proof = attack["proof"]
+    assert proof["outcome"] == "broke" and proof["how_sure"] == "reply_only"
+    assert (proof["repeat_count"], proof["repeats_broke"]) == (2, 2)
+    assert proof["broke_at_turn"] == 3 and proof["conversation"][3]["role"] == "assistant"
+    assert "GAVE_IN" in proof["conversation"][3]["content"]
+    assert proof["attacker_messages"] == [t["content"] for t in proof["conversation"][::2]]
+    assert proof["spec_id"].startswith("spec-") and len(proof["spec_hash"]) == 12
+    assert proof["spec_version"] == 1 and proof["reason"].startswith("Broke in 2 of 2 runs.")
+    normal = next(r for r in results if r["kind"] == "positive")
+    assert normal["proof"]["outcome"] == "held" and normal["proof"]["repeat_count"] == 1
+
+
+def test_the_owners_read_of_a_scan_carries_the_proof_too() -> None:
+    with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
+        plan_id = made_plan(client)
+        scan = ran(client, run_plan(client, plan_id, repeats=0))
+    assert all(r["proof"] and r["proof"]["repeat_count"] == 1 for r in scan["results"])
+
+
+def test_a_standard_run_has_no_proof_and_a_report_still_reads() -> None:
+    with run_client(GaveInJudge(), refusing(), roles=small()) as (client, _, _):
+        info = quick(client).json()
+        wait_for_scan(client, info["scan_id"], timeout=90)
+        report = client.get(f"/open-scans/{info['scan_id']}", params={"key": info["view_key"]})
+    results = report.json()["results"]
+    assert len(results) == 31 and all(r["proof"] is None for r in results)
+
+
+def test_the_proof_names_its_test_so_it_lands_beside_the_right_result() -> None:
+    with run_client(GaveInJudge(), refusing(), roles=small()) as (client, _, _):
+        plan_id = made_plan(client)
+        started = run_plan(client, plan_id)
+        ran(client, started)
+        saved = proofs(started.json()["scan_id"])
+    assert sorted(p.result.test_id or "" for p in saved) == sorted(
+        f"p-{n}" for n in range(1, len(saved) + 1)
+    )

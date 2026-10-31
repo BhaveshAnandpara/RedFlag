@@ -152,6 +152,7 @@ def record_for(
     return ResultRecord(
         spec_id=test["spec_id"],
         spec_hash=test["spec_hash"],
+        test_id=test.get("id"),
         outcome=outcome,
         what_happened=said + test["goal"],
         conversation=turns,
