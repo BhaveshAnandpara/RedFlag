@@ -265,7 +265,7 @@ def test_every_test_in_the_plan_arrives_as_a_card_in_the_order_it_was_written() 
     with run_client(roles=Writers(GOALS)) as (client, _, _):
         plan_id = start(client).json()["plan_id"]
         cards: list[dict[str, Any]] = []
-        lines: list[str] = []
+        lines: list[dict[str, Any]] = []
         after = 0
         for _ in range(3000):
             job = client.get(f"/quick-scans/plan/{plan_id}?after={after}").json()
