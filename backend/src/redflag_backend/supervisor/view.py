@@ -3,7 +3,7 @@
 from typing import Any
 
 from redflag_backend.supervisor.plan import Plan
-from redflag_backend.supervisor.run_tests import messages_by_repeats
+from redflag_backend.supervisor.run_tests import messages_by_runs
 
 MOVES_PER_GOAL = 40
 
@@ -13,8 +13,8 @@ def plan_view(plan: Plan) -> dict[str, Any]:
     return {
         "summary": {
             **plan.summary.model_dump(),
-            # The most messages the run could send to the bot, for each repeats setting 0 to 5.
-            "messages_by_repeats": messages_by_repeats(plan),
+            # The most messages the run could send to the bot, for 1 to 5 runs per attack.
+            "messages_by_runs": messages_by_runs(plan),
         },
         "biggest_fear": plan.biggest_fear,
         "blocked": plan.blocked,

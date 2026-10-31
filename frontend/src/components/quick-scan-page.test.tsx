@@ -985,7 +985,7 @@ describe("running the test plan", () => {
       repeats_removed: 3,
       tests: 11,
       data_changing: 0,
-      messages_by_repeats: [10, 20, 30, 1200, 50, 60],
+      messages_by_runs: [10, 20, 30, 1200, 50],
     },
     blocked: null as string | null,
     rules_covered: [] as string[],
@@ -1019,7 +1019,7 @@ describe("running the test plan", () => {
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 
-  it("offers to run the plan once it is ready, with a repeats slider from 0 to 5 that starts at 2", async () => {
+  it("offers to run the plan once it is ready, with a runs slider from 1 to 5 that starts at 3", async () => {
     const backend = new FakeBackend();
     withPlan(backend);
     const user = await staged(backend);
@@ -1027,40 +1027,45 @@ describe("running the test plan", () => {
     expect(screen.getByRole("button", { name: "Run my plan · 11 tests" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Run my scan" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Run uses the standard tests/)).not.toBeInTheDocument();
-    const slider = screen.getByRole("slider", { name: "Repeat each attack" });
-    expect(slider).toHaveAttribute("min", "0");
+    const slider = screen.getByRole("slider", { name: "Run each attack" });
+    expect(slider).toHaveAttribute("min", "1");
     expect(slider).toHaveAttribute("max", "5");
-    expect(slider).toHaveValue("2");
-    expect(screen.getByText("up to 2 extra times")).toBeInTheDocument();
+    expect(slider).toHaveValue("3");
+    expect(screen.getByText("up to 3 times")).toBeInTheDocument();
     expect(screen.getByText(/up to 30 messages to your bot/)).toBeInTheDocument();
+    expect(screen.queryByText(/extra/)).not.toBeInTheDocument();
   });
 
-  it("shows what each setting costs in messages, and 0 means every test runs once", async () => {
+  it("shows what each setting costs in messages, and 1 means every test runs once", async () => {
     const backend = new FakeBackend();
     withPlan(backend);
     const user = await staged(backend);
     await make(user);
-    const slider = screen.getByRole("slider", { name: "Repeat each attack" });
-    fireEvent.change(slider, { target: { value: "0" } });
-    expect(screen.getByText("none: every test runs once")).toBeInTheDocument();
-    expect(screen.getByText(/up to 10 messages to your bot/)).toBeInTheDocument();
+    const slider = screen.getByRole("slider", { name: "Run each attack" });
     fireEvent.change(slider, { target: { value: "1" } });
-    expect(screen.getByText("up to 1 extra time")).toBeInTheDocument();
-    fireEvent.change(slider, { target: { value: "3" } });
+    expect(screen.getByText("once")).toBeInTheDocument();
+    expect(screen.getByText(/up to 10 messages to your bot/)).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "2" } });
+    expect(screen.getByText("up to 2 times")).toBeInTheDocument();
+    expect(screen.getByText(/up to 20 messages to your bot/)).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "4" } });
     expect(screen.getByText(/up to 1,200 messages to your bot/)).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "5" } });
+    expect(screen.getByText(/up to 50 messages to your bot/)).toBeInTheDocument();
   });
 
-  it("sends the plan and the repeats, and the standard tests never", async () => {
+  it("sends the plan and how many times to run each attack, and the standard tests never", async () => {
     const backend = new FakeBackend();
     withPlan(backend);
     const user = await staged(backend);
     await make(user);
-    fireEvent.change(screen.getByRole("slider", { name: "Repeat each attack" }), { target: { value: "0" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Run each attack" }), { target: { value: "1" } });
     await user.click(screen.getByRole("button", { name: "Run my plan · 11 tests" }));
     await screen.findByText("Scan #31");
     const [body] = backend.bodies("/quick-scans") as Record<string, unknown>[];
-    expect(body).toMatchObject({ plan_id: "p1", repeats: 0, environment: "staging" });
+    expect(body).toMatchObject({ plan_id: "p1", runs: 1, environment: "staging" });
     expect(body).not.toHaveProperty("test_ids");
+    expect(body).not.toHaveProperty("repeats");
   });
 
   it("holds Run until the plan is ready, so a half-made plan cannot be run", async () => {
@@ -1088,7 +1093,7 @@ describe("running the test plan", () => {
     withPlan(backend);
     const user = await staged(backend);
     await make(user);
-    expect(screen.getByRole("slider", { name: "Repeat each attack" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Run each attack" })).toBeInTheDocument();
     await user.click(screen.getAllByRole("switch")[0]);
     await waitFor(() => expect(screen.getByRole("button", { name: "Run my scan" })).toBeEnabled());
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();

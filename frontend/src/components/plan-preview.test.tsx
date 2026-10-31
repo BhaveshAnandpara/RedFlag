@@ -336,7 +336,7 @@ describe("the live test plan", () => {
   });
 
   it("reports the plan that is ready to run, and takes it back when it goes away", async () => {
-    const plan = { ...PLAN, summary: { ...PLAN.summary, messages_by_repeats: [4, 8, 12, 16, 20, 24] } };
+    const plan = { ...PLAN, summary: { ...PLAN.summary, messages_by_runs: [4, 8, 12, 16, 20] } };
     const seen: (unknown | null)[] = [];
     const onPlan = (p: unknown | null) => seen.push(p);
     const { api } = planApi(EVENTS, {}, plan);
@@ -348,7 +348,7 @@ describe("the live test plan", () => {
       id: "p1",
       tests: 2,
       blocked: false,
-      messages: [4, 8, 12, 16, 20, 24],
+      messages: [4, 8, 12, 16, 20],
     });
     // what the plan was made from changes: it is no longer a plan to run
     view.rerender(

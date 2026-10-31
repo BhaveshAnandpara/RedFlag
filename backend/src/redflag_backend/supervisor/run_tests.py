@@ -17,7 +17,7 @@ from redflag_backend.specs.store import SpecStore, StoredSpec
 from redflag_backend.supervisor.goals import Goal
 from redflag_backend.supervisor.plan import Plan
 
-MAX_REPEATS = 5
+MAX_RUNS = 5
 TITLE_CHARS = 140
 
 
@@ -26,12 +26,13 @@ def planned(plan: Plan) -> list[tuple[Goal, TestSpec]]:
     return [(p.goal, spec) for p in plan.goals for spec in p.specs]
 
 
-def runs_for(spec: TestSpec, repeats: int) -> int:
-    """How many times a test runs. 0 repeats means once. A test never runs more often than its
-    writer asked for, and a normal request is checked once: repeating it finds nothing."""
+def runs_for(spec: TestSpec, runs: int) -> int:
+    """How many times a test runs, when each attack may run up to `runs` times (1 to 5). A test
+    never runs more often than its writer asked for, and a normal request is checked once:
+    repeating it finds nothing."""
     if spec.kind == "normal":
         return 1
-    return min(spec.repeats, max(0, min(repeats, MAX_REPEATS)) + 1)
+    return min(spec.repeats, max(1, min(runs, MAX_RUNS)))
 
 
 def turns_for(spec: TestSpec) -> int:
@@ -39,12 +40,13 @@ def turns_for(spec: TestSpec) -> int:
     return 1 if spec.kind == "normal" else spec.max_turns
 
 
-def messages_by_repeats(plan: Plan) -> list[int]:
-    """The most messages the run could send to the bot, for each repeats setting from 0 to 5.
-    A conversation that ends early sends fewer, so this is an upper bound."""
+def messages_by_runs(plan: Plan) -> list[int]:
+    """The most messages the run could send to the bot, for each setting from 1 to 5 runs per
+    attack (so the first number is for 1). A conversation that ends early sends fewer, so this
+    is an upper bound."""
     return [
-        sum(runs_for(spec, r) * turns_for(spec) for _, spec in planned(plan))
-        for r in range(MAX_REPEATS + 1)
+        sum(runs_for(spec, n) * turns_for(spec) for _, spec in planned(plan))
+        for n in range(1, MAX_RUNS + 1)
     ]
 
 
@@ -64,7 +66,7 @@ def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def build_tests(plan: Plan, repeats: int, stored: list[StoredSpec]) -> list[dict[str, Any]]:
+def build_tests(plan: Plan, runs: int, stored: list[StoredSpec]) -> list[dict[str, Any]]:
     """The plan's tests as the runner takes them. `stored` holds the saved copy of each spec, in
     the same order as `planned(plan)`."""
     tests: list[dict[str, Any]] = []
@@ -92,7 +94,7 @@ def build_tests(plan: Plan, repeats: int, stored: list[StoredSpec]) -> list[dict
                 "fix": spec.fix_hint,
                 "multi_turn": turns > 1,
                 "max_turns": turns,
-                "runs": runs_for(spec, repeats),
+                "runs": runs_for(spec, runs),
                 "persona": spec.persona,
                 "planned_goal": goal.question,
                 "spec_id": saved.spec_id,

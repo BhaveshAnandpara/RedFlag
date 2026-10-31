@@ -131,10 +131,10 @@ export function QuickScanPage({
   const [stage, setStage] = useState<1 | 2 | 3>(1);
   // True while a test plan is being written: the scan cannot be started until it is ready.
   const [planning, setPlanning] = useState(false);
-  // The test plan that is ready to run, how many extra times to repeat each attack, and a counter
-  // that throws the plan away when the server says it no longer has it.
+  // The test plan that is ready to run, how many times at most to run each attack (1 to 5), and a
+  // counter that throws the plan away when the server says it no longer has it.
   const [readyPlan, setReadyPlan] = useState<ReadyPlan | null>(null);
-  const [repeats, setRepeats] = useState(2);
+  const [runs, setRuns] = useState(3);
   const [planReset, setPlanReset] = useState(0);
   const [way, setWay] = useState<Way>(usableWay(initialWay));
   // Staging is the safer starting point: it asks for the "dev or test copy" tick before going on.
@@ -457,7 +457,7 @@ export function QuickScanPage({
         must_never: rules.filter((r) => r.on).map((r) => r.t),
         environment: env,
         ...(live && !usePlan ? { test_ids: ticked.map((p) => p.id) } : {}),
-        ...(usePlan && readyPlan ? { plan_id: readyPlan.id, repeats } : {}),
+        ...(usePlan && readyPlan ? { plan_id: readyPlan.id, runs } : {}),
         // Staging's tick is the one confirmation that this is a test copy.
         sandbox_confirmed: kind === "agent" && !live && stagingTick,
       },
@@ -1178,31 +1178,27 @@ export function QuickScanPage({
               {usePlan && readyPlan && (
                 <div className="repeats">
                   <div className="lab">
-                    <label htmlFor="repeats">Repeat each attack</label>
-                    <small>
-                      {repeats === 0
-                        ? "none: every test runs once"
-                        : `up to ${repeats} extra ${repeats === 1 ? "time" : "times"}`}
-                    </small>
+                    <label htmlFor="runs">Run each attack</label>
+                    <small>{runs === 1 ? "once" : `up to ${runs} times`}</small>
                   </div>
                   <input
-                    id="repeats"
+                    id="runs"
                     type="range"
-                    min={0}
+                    min={1}
                     max={5}
                     step={1}
-                    value={repeats}
-                    onChange={(e) => setRepeats(Number(e.target.value))}
-                    aria-valuetext={repeats === 0 ? "No repeats" : `${repeats} repeats`}
+                    value={runs}
+                    onChange={(e) => setRuns(Number(e.target.value))}
+                    aria-valuetext={runs === 1 ? "Once" : `Up to ${runs} times`}
                   />
                   <div className="ticks" aria-hidden="true">
-                    {[0, 1, 2, 3, 4, 5].map((n) => (
+                    {[1, 2, 3, 4, 5].map((n) => (
                       <span key={n}>{n}</span>
                     ))}
                   </div>
                   <p className="hint">
-                    Some attacks only work some of the time, so repeating them finds more. It also takes longer: up
-                    to {readyPlan.messages[repeats]?.toLocaleString()} messages to your bot.
+                    Some attacks only work some of the time, so running them again finds more. It also takes longer:
+                    up to {readyPlan.messages[runs - 1]?.toLocaleString()} messages to your bot.
                   </p>
                 </div>
               )}

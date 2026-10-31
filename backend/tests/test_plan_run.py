@@ -19,9 +19,9 @@ from redflag_backend.specs.store import SpecStore
 from redflag_backend.supervisor.goals import Goal
 from redflag_backend.supervisor.plan import Plan, PlannedGoal, Summary
 from redflag_backend.supervisor.run_tests import (
-    MAX_REPEATS,
+    MAX_RUNS,
     message_for,
-    messages_by_repeats,
+    messages_by_runs,
     record_for,
     runs_for,
     turns_for,
@@ -53,8 +53,8 @@ def made_plan(client: TestClient, **changes: Any) -> str:
     return plan_id
 
 
-def run_plan(client: TestClient, plan_id: str | None, repeats: int = 0, **changes: Any) -> Any:
-    return quick(client, plan_id=plan_id, repeats=repeats, **changes)
+def run_plan(client: TestClient, plan_id: str | None, runs: int = 1, **changes: Any) -> Any:
+    return quick(client, plan_id=plan_id, runs=runs, **changes)
 
 
 def proofs(scan_id: int) -> list[StoredResult]:
@@ -106,7 +106,7 @@ def test_hidden_text_goes_to_the_bot_inside_a_document_it_is_asked_to_handle() -
     assert all("--- end of document ---" in m for m in poisoned)
 
 
-# --- repeats ----------------------------------------------------------------------------------
+# --- runs per attack ----------------------------------------------------------------------------
 
 
 def counts(scan: dict[str, Any]) -> tuple[int, int]:
@@ -114,50 +114,51 @@ def counts(scan: dict[str, Any]) -> tuple[int, int]:
     return attacks, len(scan["results"]) - attacks
 
 
-def test_with_repeats_at_zero_every_test_runs_once_and_more_repeats_run_attacks_again() -> None:
+def test_at_one_run_every_test_runs_once_and_more_runs_run_attacks_again() -> None:
     sent: dict[int, int] = {}
     shown: dict[int, list[str]] = {}
-    for repeats in (0, 2):
+    for setting in (1, 3):
         endpoint = refusing()
         with run_client(GaveInJudge(), endpoint, roles=small()) as (client, _, _):
             plan_id = made_plan(client)
-            scan = ran(client, run_plan(client, plan_id, repeats=repeats))
+            scan = ran(client, run_plan(client, plan_id, runs=setting))
         attacks, normals = counts(scan)
         assert attacks > 0 and normals > 0
-        # a hello, then each attack's runs times its two turns, then one message per normal test
-        runs = 1 if repeats == 0 else 2
+        # a hello, then each attack's runs times its two turns, then one message per normal test.
+        # The writers here ask for at most two runs of an attack, so a setting of 3 runs it twice.
+        runs = 1 if setting == 1 else 2
         assert len(endpoint.requests) == 1 + attacks * runs * 2 + normals
-        sent[repeats] = len(endpoint.requests)
-        shown[repeats] = [r["evidence"] for r in scan["results"] if r["kind"] == "negative"]
-    assert sent[2] > sent[0]
-    assert not any(e.startswith("Held in all") for e in shown[0])
-    assert all(e.startswith("Held in all 2 runs.") for e in shown[2])
+        sent[setting] = len(endpoint.requests)
+        shown[setting] = [r["evidence"] for r in scan["results"] if r["kind"] == "negative"]
+    assert sent[3] > sent[1]
+    assert not any(e.startswith("Held in all") for e in shown[1])
+    assert all(e.startswith("Held in all 2 runs.") for e in shown[3])
 
 
-def test_a_normal_request_is_checked_once_whatever_the_repeats() -> None:
+def test_a_normal_request_is_checked_once_whatever_the_runs() -> None:
     endpoint = refusing()
     with run_client(GaveInJudge(), endpoint, roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        scan = ran(client, run_plan(client, plan_id, repeats=5))
+        scan = ran(client, run_plan(client, plan_id, runs=5))
     normals = [r for r in scan["results"] if r["kind"] == "positive"]
     assert normals and all("runs" not in r["evidence"] for r in normals)
 
 
-def test_repeats_must_be_between_zero_and_five() -> None:
+def test_runs_must_be_between_one_and_five() -> None:
     with run_client(GaveInJudge(), refusing(), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        for bad in (-1, 6):
-            assert run_plan(client, plan_id, repeats=bad).status_code == 422
+        for bad in (-1, 0, 6):
+            assert run_plan(client, plan_id, runs=bad).status_code == 422
         assert client.get("/setups", headers=OWNER).json()["setups"] == []
 
 
-def test_the_most_messages_a_plan_could_send_is_listed_for_every_repeats_setting() -> None:
+def test_the_most_messages_a_plan_could_send_is_listed_for_one_to_five_runs() -> None:
     with run_client(GaveInJudge(), refusing(), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
         plan = client.get(f"/quick-scans/plan/{plan_id}?after=9999").json()["plan"]
-    by_repeats = plan["summary"]["messages_by_repeats"]
-    assert len(by_repeats) == MAX_REPEATS + 1 == 6
-    assert by_repeats == sorted(by_repeats) and by_repeats[0] < by_repeats[-1]
+    by_runs = plan["summary"]["messages_by_runs"]
+    assert len(by_runs) == MAX_RUNS == 5 and "messages_by_repeats" not in plan["summary"]
+    assert by_runs == sorted(by_runs) and by_runs[0] < by_runs[-1]
 
 
 # --- what a run finds -------------------------------------------------------------------------
@@ -166,7 +167,7 @@ def test_the_most_messages_a_plan_could_send_is_listed_for_every_repeats_setting
 def test_one_break_is_proof_and_the_result_says_how_often_it_broke() -> None:
     with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        scan = ran(client, run_plan(client, plan_id, repeats=2))
+        scan = ran(client, run_plan(client, plan_id, runs=3))
     attacks = [r for r in scan["results"] if r["kind"] == "negative"]
     assert attacks and all(r["status"] == "fail" for r in attacks)
     assert all(r["evidence"].startswith("Broke in 2 of 2 runs.") for r in attacks)
@@ -182,7 +183,7 @@ def test_a_bot_that_does_not_answer_is_never_held_or_broke() -> None:
 
     with run_client(GaveInJudge(), StandIn(handler), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        started = run_plan(client, plan_id, repeats=1)
+        started = run_plan(client, plan_id, runs=2)
         scan = ran(client, started)
         saved = proofs(started.json()["scan_id"])
     assert {r["status"] for r in scan["results"]} == {"error"}
@@ -197,7 +198,7 @@ def test_every_test_is_saved_as_a_locked_spec_with_a_result_that_points_at_it() 
     specs = SpecStore(engine)
     with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        started = run_plan(client, plan_id, repeats=2)
+        started = run_plan(client, plan_id, runs=3)
         scan = ran(client, started)
         saved = proofs(started.json()["scan_id"])
     assert len(saved) == len(scan["results"])
@@ -223,7 +224,7 @@ def test_the_key_is_in_no_saved_spec_or_proof() -> None:
     engine = create_engine(TEST_DB_URL)
     with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        started = run_plan(client, plan_id, repeats=1)
+        started = run_plan(client, plan_id, runs=2)
         ran(client, started)
         saved = proofs(started.json()["scan_id"])
     assert saved and not any(KEY in p.result.model_dump_json() for p in saved)
@@ -313,11 +314,11 @@ def test_a_plan_that_is_still_being_made_cannot_be_run_yet() -> None:
 # --- the pieces -------------------------------------------------------------------------------
 
 
-def test_a_test_runs_as_often_as_its_writer_asked_and_no_more_than_the_repeats_allow() -> None:
+def test_a_test_runs_as_often_as_its_writer_asked_and_no_more_than_the_setting_allows() -> None:
     attack = make(repeats=5, max_turns=4)
-    assert [runs_for(attack, r) for r in range(6)] == [1, 2, 3, 4, 5, 5]
+    assert [runs_for(attack, n) for n in range(1, 6)] == [1, 2, 3, 4, 5]
     assert runs_for(make(repeats=2), 5) == 2 and runs_for(make(repeats=1), 5) == 1
-    assert runs_for(attack, 99) == 5 and runs_for(attack, -3) == 1
+    assert runs_for(attack, 99) == 5 and runs_for(attack, 0) == 1 and runs_for(attack, -3) == 1
     normal = make(kind="normal", repeats=3, max_turns=3)
     assert runs_for(normal, 5) == 1 and turns_for(normal) == 1 and turns_for(attack) == 4
 
@@ -376,7 +377,7 @@ def test_a_long_test_keeps_the_scan_alive_so_it_is_not_called_interrupted() -> N
     assert again is not None and again["scan"]["last_progress_at"] == 500.0
 
 
-def test_the_plan_summary_lists_messages_that_grow_with_repeats() -> None:
+def test_the_plan_summary_lists_messages_that_grow_with_the_runs() -> None:
     goal = Goal(id="g-1", question="Q?", source="added", because="x", risk="LLM06", severity="high")
     specs = [make(repeats=3, max_turns=2), make(kind="normal", repeats=3, max_turns=3)]
     plan = Plan(
@@ -384,15 +385,15 @@ def test_the_plan_summary_lists_messages_that_grow_with_repeats() -> None:
         biggest_fear=None,
         summary=Summary(ideas=2, repeats_removed=0, tests=2, data_changing=0),
     )
-    # an attack: runs x 2 turns; a normal request: always one message
-    assert messages_by_repeats(plan) == [3, 5, 7, 7, 7, 7]
+    # an attack: runs x 2 turns, at most the 3 its writer asked for; a normal request: one message
+    assert messages_by_runs(plan) == [3, 5, 7, 7, 7]
 
 
-@pytest.mark.parametrize("repeats", [0, 3])
-def test_the_standard_pack_ignores_the_repeats_slider(repeats: int) -> None:
+@pytest.mark.parametrize("runs", [1, 3])
+def test_the_standard_pack_ignores_the_runs_slider(runs: int) -> None:
     endpoint = refusing()
     with run_client(GaveInJudge(), endpoint, roles=small()) as (client, _, _):
-        info = quick(client, repeats=repeats).json()
+        info = quick(client, runs=runs).json()
         wait_for_scan(client, info["scan_id"], timeout=90)
     assert info["test_count"] == 31 and len(all_rules("chatbot")) > 0
 
@@ -403,7 +404,7 @@ def test_the_standard_pack_ignores_the_repeats_slider(repeats: int) -> None:
 def test_the_open_report_carries_the_proof_of_every_test_beside_its_result() -> None:
     with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        info = run_plan(client, plan_id, repeats=2).json()
+        info = run_plan(client, plan_id, runs=3).json()
         ran_scan = wait_for_scan(client, info["scan_id"], timeout=90)
         report = client.get(f"/open-scans/{info['scan_id']}", params={"key": info["view_key"]})
     assert report.status_code == 200
@@ -425,7 +426,7 @@ def test_the_open_report_carries_the_proof_of_every_test_beside_its_result() -> 
 def test_the_owners_read_of_a_scan_carries_the_proof_too() -> None:
     with run_client(GaveInJudge(), bot_gives_in_on(2), roles=small()) as (client, _, _):
         plan_id = made_plan(client)
-        scan = ran(client, run_plan(client, plan_id, repeats=0))
+        scan = ran(client, run_plan(client, plan_id, runs=1))
     assert all(r["proof"] and r["proof"]["repeat_count"] == 1 for r in scan["results"])
 
 

@@ -40,7 +40,7 @@ from redflag_backend.specs.store import SpecStore
 from redflag_backend.supervisor.plan import Plan, build_plan
 from redflag_backend.supervisor.progress import Progress
 from redflag_backend.supervisor.run_tests import (
-    MAX_REPEATS,
+    MAX_RUNS,
     build_tests,
     proof_saver,
     save_specs,
@@ -102,10 +102,10 @@ class QuickBody(BaseModel):
     test_ids: list[str] | None = None
     # An agent can act, so in staging the owner confirms it is a test or sandbox environment.
     sandbox_confirmed: bool = False
-    # A test plan made with Create Test Plan. Run then runs exactly its tests, each repeated up to
-    # `repeats` extra times (0 runs every test once), instead of the standard tests.
+    # A test plan made with Create Test Plan. Run then runs exactly its tests, each attack run up
+    # to `runs` times (1 runs every test once), instead of the standard tests.
     plan_id: str | None = None
-    repeats: int = Field(default=2, ge=0, le=MAX_REPEATS)
+    runs: int = Field(default=3, ge=1, le=MAX_RUNS)
 
 
 def _split_rules(bot_type: str, must_never: list[str]) -> tuple[list[str], list[str]]:
@@ -321,7 +321,7 @@ def build_quick_router(
         options: RunOptions | None = None
         if chosen_plan is not None:
             stored = await asyncio.to_thread(save_specs, specs, chosen_plan)
-            tests = build_tests(chosen_plan, body.repeats, stored)
+            tests = build_tests(chosen_plan, body.runs, stored)
             needed = sum(t["runs"] * t["max_turns"] for t in tests)
             options = RunOptions(
                 max_requests=min(needed, settings.run_plan_max_endpoint_requests),

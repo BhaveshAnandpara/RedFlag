@@ -25,8 +25,8 @@ type PlanView = {
     repeats_removed: number;
     tests: number;
     data_changing: number;
-    /** The most messages a run could send to the bot, for each repeats setting from 0 to 5. */
-    messages_by_repeats: number[];
+    /** The most messages a run could send to the bot, for 1 to 5 runs per attack (first is for 1). */
+    messages_by_runs: number[];
   };
   blocked: string | null;
   rules_covered: string[];
@@ -142,7 +142,7 @@ export function PlanPreview({
         id: planId,
         tests: plan.summary.tests,
         blocked: Boolean(plan.blocked),
-        messages: plan.summary.messages_by_repeats,
+        messages: plan.summary.messages_by_runs,
       });
     }
     return () => onPlan?.(null);
