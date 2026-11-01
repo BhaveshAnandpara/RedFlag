@@ -5,6 +5,7 @@ No database and no network for the planner tests: a stand-in model plays the pla
 persona, the rule writer and the intention checker. The run tests go over HTTP.
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -25,7 +26,7 @@ from tests.test_multi_turn import GaveInJudge, bot_gives_in_on
 from tests.test_plan_run import made_plan, ran, run_plan
 from tests.test_setup_runs import run_client
 from tests.test_spec_model import make
-from tests.test_supervisor import GOALS, Writers, plan_for
+from tests.test_supervisor import BRIEF, GOALS, Writers, plan_for
 
 ONE_GOAL = [GOALS[1]]  # "Can someone read another customer's order?" (LLM02)
 
@@ -320,6 +321,18 @@ def test_the_self_test_every_deliberately_bad_rule_is_caught() -> None:
     assert check_spec(good) == []
     missed = [name for name, spec in bad.items() if not check_spec(spec)]
     assert missed == []
+
+
+def test_a_rule_check_out_of_time_still_gives_a_plan_with_those_tests_unchecked() -> None:
+    from redflag_backend.supervisor.plan import build_plan
+    from tests.test_supervisor import llm_for
+
+    model = Writers(ONE_GOAL, limit=4)
+    plan = asyncio.run(build_plan(llm_for(model), BRIEF, check_seconds=-1))
+    assert attacks(plan) and all(s.oracle is None for s in attacks(plan))
+    assert plan.check_problem == "out_of_time"
+    assert plan.checks.unchecked == plan.checks.checked == len(attacks(plan))
+    assert "rule-author" not in model.calls
 
 
 def test_a_writer_that_sends_too_many_conditions_cannot_crash_the_plan() -> None:

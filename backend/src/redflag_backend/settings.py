@@ -124,7 +124,10 @@ class Settings(BaseSettings):
     quick_plans_per_window: int = 3
     quick_plan_window_seconds: float = 600.0
     # A plan waits out the models' per-minute quota instead of failing, so it can take a while.
-    quick_plan_timeout_seconds: float = 1200.0
+    quick_plan_timeout_seconds: float = 3600.0
+    # After this long, no new goal is rule-checked: the rest keep no rule and the judge decides
+    # them, and the plan says so. Every check still runs when the models answer in time.
+    quick_plan_check_seconds: float = 2400.0
     quick_plan_quota_wait_seconds: float = 60.0
     quick_plan_max_waits: int = 6
     # The most tests one setup version may hold (generated tests plus attack variations).

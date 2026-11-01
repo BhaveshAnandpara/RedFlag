@@ -9,6 +9,7 @@ tests exist the plan says so. Priority only sets the order: nothing is cut for b
 import asyncio
 import math
 import re
+import time
 
 from pydantic import BaseModel, Field
 
@@ -224,7 +225,9 @@ async def build_plan(
     brief: Brief,
     setup_id: int = NO_SETUP,
     progress: Progress | None = None,
+    check_seconds: float | None = None,
 ) -> Plan:
+    began = time.monotonic()
     if progress is not None:
         progress.working_on("Reading your rules and what your bot said about itself")
         progress.say("Asking the planner what your bot should be tested for…")
@@ -274,7 +277,14 @@ async def build_plan(
             specs = specs[:background_left]
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
-    rejections, checks, check_problem = await _check_rules(llm, brief, planned, setup_id, progress)
+    rejections, checks, check_problem = await _check_rules(
+        llm,
+        brief,
+        planned,
+        setup_id,
+        progress,
+        None if check_seconds is None else began + check_seconds,
+    )
     if progress is not None:
         progress.working_on("Putting the plan together")
         removed = len(book.removed)
@@ -303,6 +313,7 @@ async def _check_rules(
     planned: list[PlannedGoal],
     setup_id: int,
     progress: Progress | None,
+    deadline: float | None = None,
 ) -> tuple[list[Rejection], Stats, str | None]:
     """Give every attack test a rule and an intention, and send back the ones that do not hold up.
     A goal that loses most of its tests says so, so the plan never claims coverage it lost."""
@@ -315,6 +326,13 @@ async def _check_rules(
         progress.say("Asking the rule writer how to tell, afterwards, whether each attack worked…")
     for number, item in enumerate(planned, start=1):
         if not item.specs:
+            continue
+        if deadline is not None and time.monotonic() > deadline:
+            # Out of time: the rest keep no rule and the judge decides them. Say so.
+            left = sum(1 for s in item.specs if s.kind == "attack")
+            totals.checked += left
+            totals.unchecked += left
+            problem = problem or "out_of_time"
             continue
         if progress is not None:
             progress.say(f"Checking the rules for goal {number} of {len(planned)}…")
@@ -339,7 +357,11 @@ async def _check_rules(
             )
     if progress is not None:
         if problem:
-            progress.say("The rule writer could not answer for some tests. The judge decides them.")
+            progress.say(
+                "The rule check ran out of time for some tests. The judge decides them."
+                if problem == "out_of_time"
+                else "The rule writer could not answer for some tests. The judge decides them."
+            )
         elif totals.fixed or totals.dropped:
             progress.say(
                 f"{totals.fixed + totals.dropped} tests needed fixing: {totals.fixed} fixed "

@@ -328,7 +328,7 @@ describe("the live test plan", () => {
       }).api,
     );
     await user.click(create());
-    expect(await screen.findByText(/rule writer could not answer for 2 tests/)).toBeInTheDocument();
+    expect(await screen.findByText(/rule check could not finish for 2 tests/)).toBeInTheDocument();
   });
 
   it("tells the page when a plan starts and ends, and lets go if it fails or is dropped", async () => {

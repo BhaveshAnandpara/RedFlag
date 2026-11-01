@@ -444,7 +444,7 @@ function Summary({
       )}
       {plan.check_problem && (
         <div className="notice" role="status">
-          The rule writer could not answer for {plan.checks.unchecked} {plan.checks.unchecked === 1 ? "test" : "tests"}, so the AI judge alone will decide {plan.checks.unchecked === 1 ? "it" : "them"}.
+          The rule check could not finish for {plan.checks.unchecked} {plan.checks.unchecked === 1 ? "test" : "tests"}, so the AI judge alone will decide {plan.checks.unchecked === 1 ? "it" : "them"}.
         </div>
       )}
       {fixing > 0 && (
