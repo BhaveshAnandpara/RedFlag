@@ -10,6 +10,7 @@ skipped and nothing is blocked.
 
 import asyncio
 import json
+import re
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -22,7 +23,7 @@ from redflag_backend.setups.prompts import fence
 from redflag_backend.specs.oracle import Turn
 from redflag_backend.specs.spec import TestSpec
 from redflag_backend.validator.author import BATCH, RuleDraft, with_rule, write_rules
-from redflag_backend.validator.checks import CHECK_MEANING, check_spec
+from redflag_backend.validator.checks import CHECK_MEANING, CHECK_RULE, check_spec
 
 MAX_REWRITES = 2
 CHECK_BATCH = 8
@@ -225,8 +226,14 @@ async def check_goal(
             if draft is None:
                 failed_now[i] = ("Has a rule", "The rule writer gave nothing for this test.")
                 continue
-            spec = with_rule(specs[i], draft)
-            found = check_spec(spec)
+            try:
+                spec = with_rule(specs[i], draft)
+                found = check_spec(spec)
+            except (ValueError, re.error) as bad:
+                # Whatever the writer sent, a rule that cannot be built is a rejected rule,
+                # never a plan that fails.
+                found = [(CHECK_RULE, f"The rule could not be built: {type(bad).__name__}.")]
+                spec = specs[i]
             if found:
                 failed_now[i] = found[0]
                 problems[i] = [why for _, why in found]

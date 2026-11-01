@@ -7,6 +7,7 @@ run, and is saved nowhere.
 
 import asyncio
 import itertools
+import logging
 import secrets
 from collections import deque
 from collections.abc import Callable
@@ -48,6 +49,8 @@ from redflag_backend.supervisor.run_tests import (
 from redflag_backend.supervisor.view import plan_view
 from redflag_backend.targets.http_target import EndpointConfig
 from redflag_backend.validator.restore import restore
+
+log = logging.getLogger(__name__)
 
 CRITICAL_RULES = {
     CHATBOT_RULES["system_prompt"],
@@ -242,6 +245,7 @@ def build_quick_router(
             except TimeoutError:
                 plans[plan_id] = {"status": "error", "kind": "plan_timeout", "progress": progress}
             except Exception:  # a background job must end in a state the page can show
+                log.exception("planning failed")
                 plans[plan_id] = {"status": "error", "kind": "plan_failed", "progress": progress}
 
         task = asyncio.create_task(work())

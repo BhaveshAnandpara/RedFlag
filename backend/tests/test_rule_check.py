@@ -320,3 +320,11 @@ def test_the_self_test_every_deliberately_bad_rule_is_caught() -> None:
     assert check_spec(good) == []
     missed = [name for name, spec in bad.items() if not check_spec(spec)]
     assert missed == []
+
+
+def test_a_writer_that_sends_too_many_conditions_cannot_crash_the_plan() -> None:
+    from redflag_backend.validator.author import MAX_CONDITIONS, RuleDraft, oracle_from
+
+    draft = RuleDraft(n=0, intention="x", broke_contains=["abc"] * 6, broke_matches=["a.c"] * 6)
+    oracle = oracle_from(draft)
+    assert oracle is not None and len(getattr(oracle.broke_if, "of", [])) == MAX_CONDITIONS
