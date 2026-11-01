@@ -73,7 +73,8 @@ export function makeScan(
   options: {
     id?: number;
     botId?: string;
-    status?: "running" | "completed" | "interrupted";
+    status?: "running" | "paused" | "completed" | "interrupted";
+    note?: string | null;
     models?: string[];
     suiteVersion?: number;
     startedAt?: number;
@@ -91,7 +92,7 @@ export function makeScan(
       id: options.id ?? 7,
       bot_id: botId,
       status: options.status ?? "completed",
-      note: null,
+      note: options.note ?? null,
       started_at: options.startedAt ?? 1_760_000_000,
       finished_at: 1_760_000_050,
       last_progress_at: 1_760_000_050,

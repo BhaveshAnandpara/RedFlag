@@ -8,9 +8,12 @@ can be read this way.
 import asyncio
 import hmac
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from redflag_backend.scan.catalog import Catalog
 from redflag_backend.scan.store import ScanStore
@@ -19,10 +22,30 @@ from redflag_backend.settings import Settings
 from redflag_backend.specs.results import ResultStore
 
 
+class AnswerBody(BaseModel):
+    action: Literal["retry", "stop"]
+
+
 def build_open_scan_router(
-    settings: Settings, store: ScanStore, catalog: Catalog, proofs: ResultStore
+    settings: Settings,
+    store: ScanStore,
+    catalog: Catalog,
+    proofs: ResultStore,
+    answer_run: Callable[[int, str], bool],
 ) -> APIRouter:
     router = APIRouter()
+
+    @router.post("/open-scans/{scan_id}/answer", response_model=None)
+    async def answer(scan_id: int, key: str, body: AnswerBody) -> dict[str, bool] | JSONResponse:
+        """Retry or stop a run that paused because the bot stopped answering. Only the person who
+        started the scan has the key."""
+        found = await asyncio.to_thread(store.get_scan, scan_id)
+        expected = found["scan"]["settings"].get("view_key") if found else None
+        if not found or not expected or not hmac.compare_digest(str(expected), key):
+            raise HTTPException(status_code=404, detail="no such scan")
+        if not answer_run(scan_id, body.action):
+            return JSONResponse(status_code=409, content={"error": {"kind": "not_waiting"}})
+        return {"ok": True}
 
     @router.get("/open-scans/{scan_id}")
     async def read(scan_id: int, key: str) -> dict[str, Any]:

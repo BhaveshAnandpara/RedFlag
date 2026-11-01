@@ -109,8 +109,8 @@ class Settings(BaseSettings):
     attacker_budget_max_tokens: int = 200_000
     attacker_budget_max_seconds: float = 1800.0
     # When the models' per-minute quota is used up, the attacker waits this long and asks again.
-    attacker_rate_wait_seconds: float = 20.0
-    attacker_rate_retries: int = 4
+    attacker_rate_wait_seconds: float = 30.0
+    attacker_rate_retries: int = 6
     # The quick scan's hello check: how many one owner may make in a window, so it cannot be
     # used to hammer someone's server.
     quick_checks_per_window: int = 20
@@ -133,6 +133,14 @@ class Settings(BaseSettings):
     run_max_endpoint_requests: int = 150
     # A run of a plan the user approved may send more, up to this many requests to their endpoint.
     run_plan_max_endpoint_requests: int = 4000
+    # How long to wait for one reply from the user's bot (a reasoning model can be slow), and how
+    # long to wait before asking once more for a reply that never came.
+    run_reply_timeout_seconds: float = 60.0
+    run_retry_pause_seconds: float = 3.0
+    # This many tests in a row with no answer from the bot pause the run, and a run left paused
+    # this long is stopped, so a forgotten tab cannot block every other scan.
+    run_pause_after_failures: int = 3
+    run_pause_timeout_seconds: float = 900.0
     # Redflag's own public host name (for example redflag-xyz.onrender.com). A bot endpoint that
     # points at it is refused, so Redflag cannot be aimed at itself.
     public_backend_host: str | None = None
@@ -143,7 +151,7 @@ class Settings(BaseSettings):
     # up on that test and records an error that says why.
     scan_rate_limit_wait_seconds: float = 20.0
     scan_rate_limit_max_wait_seconds: float = 70.0
-    scan_rate_limit_retries: int = 3
+    scan_rate_limit_retries: int = 6
     # Unlocks the model-router endpoints. When unset, those endpoints stay locked for everyone.
     owner_token: str | None = Field(default=None, repr=False)
     # Neon can take several seconds to wake from idle; allow for that before saying "degraded".

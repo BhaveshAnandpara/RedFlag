@@ -68,6 +68,16 @@ describe("opening a report from its link", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not reach the backend. It may still be waking up.");
   });
 
+  it("keeps following a scan that is paused, waiting for the person, until it ends", async () => {
+    const paused = makeScan([], { id: 31, status: "paused", botId: "target-8", setup: { version: 1, rules: [] }, note: "Your bot stopped answering." });
+    const replies = [paused, paused, finished()];
+    const fetchMock = vi.fn(async () => json(200, replies.length > 1 ? replies.shift() : replies[0]));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReportLoader apiUrl="https://api.example.test" pollMs={5} />);
+    expect(await screen.findByRole("heading", { name: "Your bot · quick scan #31" })).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3));
+  });
+
   it("follows a scan that is still running until it finishes", async () => {
     const running = makeScan([], { id: 31, status: "running", botId: "target-8", setup: { version: 1, rules: [] } });
     const answers = [running, running, finished()];

@@ -117,6 +117,11 @@
 .d-quick .before b { font-weight: 500; }
 .d-quick .before ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 .d-quick .server { font-family: var(--mono); font-size: 15px; color: var(--ink); }
+.d-quick .pausebox { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(242,179,61,0.4); background: rgba(242,179,61,0.08); font-size: 14px; line-height: 1.5; }
+.d-quick .pausebox b { font-weight: 500; color: var(--amber); }
+.d-quick .pausebox p { margin: 0; color: var(--muted); }
+.d-quick .pausebox .actions { display: flex; align-items: center; gap: 10px; }
+.d-quick .state.paused { color: var(--amber); }
 .d-quick .notice { padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(242,179,61,0.35); background: rgba(242,179,61,0.08); color: var(--amber); font-size: 14px; line-height: 1.5; }
 .d-quick .repeats { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: #0d0d0d; }
 .d-quick .repeats label { font-size: 14px; font-weight: 500; }

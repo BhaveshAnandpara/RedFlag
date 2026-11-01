@@ -145,9 +145,10 @@ def record_for(
     else:
         outcome = "couldnt_test"
     decided = outcome in DECIDED
+    normal = test.get("kind") == "positive"
     said = {
-        "held": "Your bot held: ",
-        "broke": "Your bot broke: ",
+        "held": "Your bot handled a normal request: " if normal else "Your bot held: ",
+        "broke": "Your bot failed a normal request: " if normal else "Your bot broke: ",
         "needs_review": "This needs a person to look at: ",
         "couldnt_test": "This could not be tested: ",
     }[outcome]

@@ -9,15 +9,32 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 
+from redflag_backend.settings import Settings
 from tests.helpers import TEST_DB_URL
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
+PROVIDER_KEYS = (
+    "GROQ_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "BOT_GROQ_API_KEY",
+    "BOT_GEMINI_API_KEY",
+    "BOT_OPENROUTER_API_KEY",
+)
+
+
 @pytest.fixture(autouse=True)
 def production_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every test runs as production, whatever is in the developer's own .env. A developer who
-    sets ENV=dev there (to call a bot on localhost) must not change what the tests check."""
+    """Every test runs as production, with no keys, whatever is in the developer's own .env.
+
+    A developer who sets ENV=dev there (to call a bot on localhost) or pastes real model keys
+    there must not change what the tests check, so the file is not read at all, and a key set in
+    the shell does not count either. A test that needs a setting passes it itself."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in PROVIDER_KEYS:
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ENV", "prod")
     monkeypatch.delenv("RENDER", raising=False)
 

@@ -5,6 +5,7 @@ personas, the planner and the attacker) and the user's bot.
 """
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -181,11 +182,25 @@ def test_a_bot_that_does_not_answer_is_never_held_or_broke() -> None:
             return openai_reply("hello from the bot")
         return httpx.Response(500, text="boom")
 
-    with run_client(GaveInJudge(), StandIn(handler), roles=small()) as (client, _, _):
+    with run_client(
+        GaveInJudge(), StandIn(handler), roles=small(), run_retry_pause_seconds=0.0
+    ) as (client, _, _):
         plan_id = made_plan(client)
         started = run_plan(client, plan_id, runs=2)
-        scan = ran(client, started)
-        saved = proofs(started.json()["scan_id"])
+        info = started.json()
+        # three tests in a row with no answer: the run pauses and waits for a person
+        assert wait_for_scan(client, info["scan_id"], timeout=60)["scan"]["status"] == "paused"
+        stop = client.post(
+            f"/open-scans/{info['scan_id']}/answer",
+            params={"key": info["view_key"]},
+            json={"action": "stop"},
+        )
+        assert stop.status_code == 200
+        scan = wait_for_scan(client, info["scan_id"], timeout=60)
+        while scan["scan"]["status"] == "paused":
+            time.sleep(0.05)
+            scan = wait_for_scan(client, info["scan_id"], timeout=60)
+        saved = proofs(info["scan_id"])
     assert {r["status"] for r in scan["results"]} == {"error"}
     assert {p.result.outcome for p in saved} == {"couldnt_test"}
 
@@ -281,7 +296,7 @@ def test_a_live_chatbot_can_run_a_plan_without_the_poisoning_tests() -> None:
 
 
 def test_a_plan_with_a_rule_that_got_no_tests_still_runs_the_tests_it_has() -> None:
-    writers = Writers(GOALS, bad_risk=("social_engineer", "content_poisoner"))
+    writers = Writers(GOALS, bad_tool=("social_engineer", "content_poisoner"))
     with run_client(GaveInJudge(), refusing(), roles=writers) as (client, _, _):
         plan_id = made_plan(client, rules=[REFUND])
         plan = client.get(f"/quick-scans/plan/{plan_id}?after=9999").json()["plan"]

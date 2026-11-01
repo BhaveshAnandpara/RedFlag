@@ -104,7 +104,7 @@ def test_in_production_the_poisoning_tests_come_back_as_needing_a_test_copy() ->
 
 
 def test_a_rule_with_no_tests_comes_back_with_a_warning_and_the_tests_that_were_written() -> None:
-    model = Writers(GOALS, bad_risk=("social_engineer", "content_poisoner"))
+    model = Writers(GOALS, bad_tool=("social_engineer", "content_poisoner"))
     with run_client(roles=model) as (client, _, _):
         job = finished(client, start(client).json()["plan_id"])
         plan = job["plan"]

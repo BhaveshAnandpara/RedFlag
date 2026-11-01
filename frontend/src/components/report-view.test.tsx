@@ -616,3 +616,66 @@ describe("the rules with no tests, and what ran", () => {
     expect(buildReport(planned([]))).not.toContain("## Rules with no tests");
   });
 });
+
+describe("a normal request that failed", () => {
+  const failedNormal = makeResult({
+    test_id: "p-9",
+    title: "Check if the bot can state the opening hours",
+    kind: "positive",
+    risk: null,
+    status: "fail",
+    severity: null,
+    message: "What are the opening hours?",
+    reply: "We are open 9 to 5 every day.",
+    turns: null,
+    proof: {
+      ...PROOF,
+      outcome: "broke",
+      repeat_count: 1,
+      repeats_broke: 1,
+      broke_at_turn: 1,
+      conversation: [
+        { role: "user", content: "What are the opening hours?" },
+        { role: "assistant", content: "We are open 9 to 5 every day." },
+      ],
+      attacker_messages: ["What are the opening hours?"],
+    },
+  });
+  const normalScan = () =>
+    makeScan([failedNormal, planned], { id: 18, botId: "target-8", setup: { version: 1, rules: [] } });
+
+  it("says it failed, not that it broke, and calls the message what it is", async () => {
+    const user = userEvent.setup();
+    render(<ReportView detail={normalScan()} />);
+    await user.click(screen.getByText("Check if the bot can state the opening hours", { selector: "td" }));
+    const row = document.querySelector(".exp") as HTMLElement;
+    expect(within(row).getByText("Failed", { selector: ".runs" })).toBeInTheDocument();
+    expect(within(row).getByText("The exact message sent")).toBeInTheDocument();
+    expect(within(row).getByText("It went wrong here")).toBeInTheDocument();
+    expect(within(row).queryByText(/attacker/i)).not.toBeInTheDocument();
+    expect(within(row).queryByText(/Broke in/)).not.toBeInTheDocument();
+    expect(within(row).queryByText("It broke here")).not.toBeInTheDocument();
+  });
+
+  it("says Failed in the table, and an attack still says how often it broke", () => {
+    render(<ReportView detail={normalScan()} />);
+    expect(screen.getAllByRole("cell", { name: "Failed" })).toHaveLength(1);
+    expect(screen.getAllByRole("cell", { name: "Broke in 2 of 3 runs" })).toHaveLength(1);
+  });
+
+  it("does the same in the Markdown report", () => {
+    // the Markdown report prints a conversation for a result that has its turns
+    const withTurns = { ...failedNormal, turns: failedNormal.proof?.conversation };
+    const text = buildReport(
+      makeScan([withTurns, planned], { id: 18, botId: "target-8", setup: { version: 1, rules: [] } }),
+    );
+    expect(text).toContain("| Failed |");
+    expect(text).toContain("- Runs: Failed");
+    expect(text).toContain("- The exact message sent:");
+    expect(text).toContain("(it went wrong here)");
+    // the attack in the same report keeps its own words
+    expect(text).toContain("- Runs: Broke in 2 of 3 runs");
+    expect(text).toContain("- The attacker's exact messages, to replay this attack:");
+    expect(text).toContain("(it broke here)");
+  });
+});

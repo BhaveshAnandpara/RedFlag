@@ -163,7 +163,8 @@ export type ScanDetail = {
   scan: {
     id: number;
     bot_id: string;
-    status: "running" | "completed" | "interrupted";
+    // "paused": the bot stopped answering and the run is waiting for a person to retry or stop.
+    status: "running" | "paused" | "completed" | "interrupted";
     note: string | null;
     started_at: number;
     finished_at: number | null;
@@ -189,7 +190,7 @@ export type ScanDetail = {
 export type ScanListItem = {
   id: number;
   bot_id: string;
-  status: "running" | "completed" | "interrupted";
+  status: "running" | "paused" | "completed" | "interrupted";
   started_at: number;
   finished_at: number | null;
   counts: Counts;

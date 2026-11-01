@@ -36,9 +36,11 @@ export const HOW_SURE: Record<NonNullable<Proof["how_sure"]>, string> = {
 };
 
 /** How often a test broke, for a test that ran from a plan: "Broke in 2 of 3 runs". */
-export function runsText(proof: Proof): string {
+export function runsText(proof: Proof, normal = false): string {
   const n = proof.repeat_count;
   const runs = `${n} ${n === 1 ? "run" : "runs"}`;
+  // An ordinary request that goes wrong did not "break": it failed.
+  if (normal && proof.repeats_broke > 0) return "Failed";
   if (proof.repeats_broke > 0) return `Broke in ${proof.repeats_broke} of ${runs}`;
   return n === 1 ? "Ran once" : `Held in all ${runs}`;
 }
@@ -151,7 +153,9 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
     `|---|---|---|---|---|---|${withProof ? "---|" : ""}`,
   );
   for (const r of results) {
-    const runs = withProof ? ` ${r.proof ? cell(runsText(r.proof)) : "none"} |` : "";
+    const runs = withProof
+      ? ` ${r.proof ? cell(runsText(r.proof, r.kind === "positive")) : "none"} |`
+      : "";
     lines.push(
       `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${STATUS_WORD[r.status]} | ${JUDGE_WORD[judgeState(r)]} | ${r.model ?? "none"} |${runs}`,
     );
@@ -166,7 +170,7 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
     lines.push(`- Severity: ${severityText(r)}`);
     lines.push(`- Evidence: ${nested(r.evidence)}`);
     if (r.proof) {
-      lines.push(`- Runs: ${runsText(r.proof)}`);
+      lines.push(`- Runs: ${runsText(r.proof, r.kind === "positive")}`);
       lines.push(`- How sure: ${r.proof.how_sure ? HOW_SURE[r.proof.how_sure] : "not decided"}`);
       lines.push(`- Test: ${r.proof.spec_id} (version ${r.proof.spec_version}, hash ${r.proof.spec_hash})`);
     }
@@ -174,12 +178,17 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
       const count = Math.ceil(r.turns.length / 2);
       lines.push(`- Conversation (${count} ${count === 1 ? "turn" : "turns"}):`);
       r.turns.forEach((turn, i) => {
-        const here = r.proof?.broke_at_turn === i ? " **(it broke here)**" : "";
+        const wrong = r.kind === "positive" ? "it went wrong here" : "it broke here";
+        const here = r.proof?.broke_at_turn === i ? ` **(${wrong})**` : "";
         lines.push(`  - ${turn.role === "user" ? "Tester" : "Bot"}: ${turn.content.replace(/\n/g, " ")}${here}`);
       });
     }
     if (r.proof && r.proof.attacker_messages.length > 0) {
-      lines.push("- The attacker's exact messages, to replay this attack:");
+      lines.push(
+        r.kind === "positive"
+          ? "- The exact message sent:"
+          : "- The attacker's exact messages, to replay this attack:",
+      );
       r.proof.attacker_messages.forEach((message, i) => {
         lines.push(`  - ${i + 1}. ${message.replace(/\n/g, " ")}`);
       });

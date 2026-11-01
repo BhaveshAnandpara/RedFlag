@@ -200,7 +200,9 @@ function Finding({
         </span>
         <span className="chev">›</span>
         <span className="s-ev">
-          {result.proof && <b className="runs bad">{runsText(result.proof)}. </b>}
+          {result.proof && (
+            <b className="runs bad">{runsText(result.proof, result.kind === "positive")}. </b>
+          )}
           {evidence}
         </span>
         <span className="s-fix">
@@ -285,16 +287,18 @@ function BotDetail({ r }: { r: ScanResult }) {
   const turns = r.turns && r.turns.length > 0 ? r.turns : null;
   const proof = r.proof ?? null;
   const brokeAt = proof?.outcome === "broke" ? proof.broke_at_turn : null;
+  const normal = r.kind === "positive";
+  const wrong = normal ? "It went wrong here" : "It broke here";
   return (
     <div className="detail">
-      {proof && <ProofBox proof={proof} />}
+      {proof && <ProofBox proof={proof} normal={normal} />}
       {turns ? (
         <div className="dl">
           <span>Conversation</span>
           {turns.map((t, i) => (
             <div key={i} className={`quote ${t.role === "user" ? "att" : ""} ${brokeAt === i ? "broke" : ""}`}>
               {t.role === "user" ? "Tester" : "Your bot"}: {t.content}
-              {brokeAt === i && <b className="here">It broke here</b>}
+              {brokeAt === i && <b className="here">{wrong}</b>}
             </div>
           ))}
         </div>
@@ -308,7 +312,7 @@ function BotDetail({ r }: { r: ScanResult }) {
             <span>Your bot&apos;s reply</span>
             <div className={`quote ${brokeAt === 1 ? "broke" : ""}`}>
               {r.reply || "(no reply)"}
-              {brokeAt === 1 && <b className="here">It broke here</b>}
+              {brokeAt === 1 && <b className="here">{wrong}</b>}
             </div>
           </div>
         </>
@@ -335,12 +339,14 @@ function BotDetail({ r }: { r: ScanResult }) {
 
 /** The saved proof of a test that ran from a plan: how often it ran and broke, how sure the
  *  result is, the attacker's exact messages, and which saved test it belongs to. */
-function ProofBox({ proof }: { proof: Proof }) {
+function ProofBox({ proof, normal }: { proof: Proof; normal: boolean }) {
   return (
     <div className="proof">
       <div className="h">
         <b>Proof</b>
-        <span className={`runs ${proof.repeats_broke > 0 ? "bad" : ""}`}>{runsText(proof)}</span>
+        <span className={`runs ${proof.repeats_broke > 0 ? "bad" : ""}`}>
+          {runsText(proof, normal)}
+        </span>
       </div>
       <div className="row">
         <span>How sure</span>
@@ -348,7 +354,7 @@ function ProofBox({ proof }: { proof: Proof }) {
       </div>
       {proof.attacker_messages.length > 0 && (
         <div className="row">
-          <span>The attacker&apos;s exact messages, to replay this attack</span>
+          <span>{normal ? "The exact message sent" : "The attacker's exact messages, to replay this attack"}</span>
           <ol>
             {proof.attacker_messages.map((message, i) => (
               <li key={i}>{message}</li>
@@ -573,7 +579,11 @@ function BotReport({ detail }: { detail: ScanDetail }) {
                       <SevTag s={r.kind === "positive" ? null : r.severity} />
                     </td>
                     <td className="mono t-model">AI judge</td>
-                    {withProof && <td className="mono">{r.proof ? runsText(r.proof) : "none"}</td>}
+                    {withProof && (
+                      <td className="mono">
+                        {r.proof ? runsText(r.proof, r.kind === "positive") : "none"}
+                      </td>
+                    )}
                   </>
                 }
                 columns={withProof ? 6 : 5}

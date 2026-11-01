@@ -186,6 +186,7 @@ async def _ask(
             count=share,
             setup_id=setup_id,
             patience=patience,
+            risk=goal.risk,
         )
         if progress is not None:
             name = PERSONAS[persona_id].name

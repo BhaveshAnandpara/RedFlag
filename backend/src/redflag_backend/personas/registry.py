@@ -66,7 +66,7 @@ PERSONAS: dict[str, Persona] = {
             ),
             turn_limit=6,
             repeat_limit=5,
-            risks=("LLM01", "LLM06", "LLM09"),
+            risks=("LLM01", "LLM05", "LLM06", "LLM09"),
         ),
         Persona(
             id="fake_insider",

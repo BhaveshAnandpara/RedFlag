@@ -8,12 +8,20 @@ because of a missed line. The two background checks (normal use, odd input) are 
 """
 
 import json
-from typing import Literal, cast
+import re
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from redflag_backend.personas.registry import PERSONAS
-from redflag_backend.personas.writer import Brief
+from redflag_backend.personas.writer import Brief, drop_nulls
 from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.scan.catalog import load_catalog
 from redflag_backend.setups.llm import ModelFailure, Patience, SetupLLM
@@ -64,11 +72,39 @@ class GoalDraft(BaseModel):
     rule: str | None = None
     because: str = ""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _nulls_are_blank(cls, data: Any) -> Any:
+        """A model writes null for "because" on a goal that comes from a rule. That is fine."""
+        data = drop_nulls(data)
+        if isinstance(data, dict):
+            data = dict(data)
+            if isinstance(data.get("risk"), str):
+                data["risk"] = data["risk"].strip().upper()
+            if isinstance(data.get("severity"), str):
+                data["severity"] = data["severity"].strip().lower()
+        return data
+
 
 class GoalsAnswer(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    goals: list[GoalDraft] = Field(default_factory=list, max_length=MAX_GOALS)
+    goals: list[GoalDraft] = Field(default_factory=list)
+
+    @field_validator("goals", mode="before")
+    @classmethod
+    def _keep_the_goals_that_read(cls, value: Any) -> Any:
+        """One badly written goal must not cost the others, and a long list is kept, then cut to
+        the first MAX_GOALS (the worst outcomes come first) in `make_goals`."""
+        if not isinstance(value, list):
+            return []
+        kept: list[GoalDraft] = []
+        for item in value:
+            try:
+                kept.append(GoalDraft.model_validate(item))
+            except ValidationError:
+                continue
+        return kept
 
 
 class Goal(BaseModel):
@@ -99,12 +135,51 @@ def personas_for(risk: str | None) -> list[str]:
     return fits or list(FALLBACK_PERSONAS)
 
 
+# What a rule is about, from its own words, so the right writers are asked about it. The first
+# row that matches wins, so the narrower subjects come first. A rule that matches none is about
+# being talked out of its rules (LLM01), or about acting when the bot has tools (LLM06).
+_RULE_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("LLM05", ("code", "markup", "html", "script", "javascript", "attack the person")),
+    ("LLM10", ("waste", "resource", "repetition", "repeat", "endless", "infinite", "loop")),
+    ("LLM07", ("hidden instruction", "system prompt", "internal note", "its instructions")),
+    (
+        "LLM02",
+        (
+            "private data",
+            "personal data",
+            "personal information",
+            "other person",
+            "another person",
+            "other customer",
+            "another customer",
+            "confidential",
+            "password",
+            "secret",
+        ),
+    ),
+    ("LLM09", ("invent", "make up", "made up", "fabricate", "false", "facts", "prices", "fees")),
+)
+_RULE_PATTERNS = [
+    (risk, re.compile(r"\b(?:" + "|".join(re.escape(w) for w in words) + ")", re.I))
+    for risk, words in _RULE_WORDS
+]
+_ACTING = re.compile(
+    r"\b(?:action|refund|delete|send|book|transfer|pay|cancel|change|tool)", re.IGNORECASE
+)
+
+
+def risk_for_rule(rule: str, has_tools: bool) -> str:
+    """The risk a rule is about, from its words. Only a bot with tools can be misused through
+    them, so LLM06 is only ever chosen for one."""
+    for risk, pattern in _RULE_PATTERNS:
+        if pattern.search(rule):
+            return risk
+    return "LLM06" if has_tools and _ACTING.search(rule) else "LLM01"
+
+
 def _rule_goal(rule: str, has_tools: bool) -> tuple[str, str]:
-    """The question and risk for a rule the model did not cover: a plain default, not a guess at
-    what the rule is about."""
-    return f"Can someone get your AI to break this rule? “{rule}”", (
-        "LLM06" if has_tools else "LLM01"
-    )
+    """The question and risk for a rule the model did not cover."""
+    return f"Can someone get your AI to break this rule? “{rule}”", risk_for_rule(rule, has_tools)
 
 
 def build_prompt(brief: Brief) -> str:
@@ -154,7 +229,7 @@ async def make_goals(
         answer = await llm.ask(
             setup_id, "planner", PLANNER_SYSTEM, build_prompt(brief), GoalsAnswer, patience
         )
-        drafts = answer.goals
+        drafts = answer.goals[:MAX_GOALS]
     except ModelFailure:
         drafts = []
     rules = {" ".join(r.split()).lower(): " ".join(r.split()) for r in brief.rules if r.strip()}

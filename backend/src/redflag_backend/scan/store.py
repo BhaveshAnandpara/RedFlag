@@ -102,12 +102,47 @@ class ScanStore:
                 {"now": now, "id": scan_id},
             )
 
+    def pause_scan(self, scan_id: int, note: str, now: float) -> None:
+        """The run is waiting for a person to say retry or stop. It is not stale while it waits."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE scans SET status = 'paused', note = :note, last_progress_at = :now "
+                    "WHERE id = :id AND status = 'running'"
+                ),
+                {"note": note, "now": now, "id": scan_id},
+            )
+
+    def resume_scan(self, scan_id: int, now: float) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE scans SET status = 'running', note = NULL, last_progress_at = :now "
+                    "WHERE id = :id AND status = 'paused'"
+                ),
+                {"now": now, "id": scan_id},
+            )
+
+    def interrupt_paused(self, now: float) -> int:
+        """A run that was waiting when the backend stopped can no longer be waiting."""
+        with self._engine.begin() as conn:
+            result = conn.execute(
+                text(
+                    "UPDATE scans SET status = 'interrupted', finished_at = :now, "
+                    "note = 'The backend restarted while this run was waiting for you, so it "
+                    "was stopped. Everything tested before that is kept.' "
+                    "WHERE status = 'paused'"
+                ),
+                {"now": now},
+            )
+        return int(result.rowcount)
+
     def finish_scan(self, scan_id: int, status: str, now: float, note: str | None = None) -> None:
         with self._engine.begin() as conn:
             conn.execute(
                 text(
                     "UPDATE scans SET status = :status, finished_at = :now, note = :note "
-                    "WHERE id = :id AND status = 'running'"
+                    "WHERE id = :id AND status IN ('running', 'paused')"
                 ),
                 {"status": status, "now": now, "note": note, "id": scan_id},
             )

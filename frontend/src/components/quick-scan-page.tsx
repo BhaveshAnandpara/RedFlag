@@ -193,6 +193,9 @@ export function QuickScanPage({
   const [scanId, setScanId] = useState<number | null>(null);
   const [testCount, setTestCount] = useState(0);
   const [scanProblem, setScanProblem] = useState<string | null>(null);
+  // The answer to a paused run (Retry or Stop) is on its way.
+  const [answering, setAnswering] = useState(false);
+  const [pauseProblem, setPauseProblem] = useState<string | null>(null);
   const viewKey = useRef("");
   const [viewKeyShown, setViewKeyShown] = useState("");
   const stopped = useRef(false);
@@ -485,7 +488,10 @@ export function QuickScanPage({
       while (!stopped.current) {
         const body = await readOpenScan(api, id, viewKey.current);
         setScan(body);
-        if (body.scan.status !== "running") return;
+        // Once the run is no longer waiting, the answer has been heard.
+        if (body.scan.status !== "paused") setAnswering(false);
+        // A paused run is waiting for the person, so keep watching it: it goes on after Retry.
+        if (body.scan.status !== "running" && body.scan.status !== "paused") return;
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
     } catch {
@@ -494,13 +500,29 @@ export function QuickScanPage({
   }
 
   const results = scan?.results ?? [];
-  const finished = scan !== null && scan.scan.status !== "running";
+  const paused = scan?.scan.status === "paused";
+  const finished = scan !== null && scan.scan.status !== "running" && !paused;
   const fails = results.filter((r) => r.status === "fail").length;
 
   useEffect(() => {
     const thread = threadRef.current;
     if (thread) thread.scrollTop = thread.scrollHeight;
   }, [results.length]);
+
+  async function answerPause(action: "retry" | "stop") {
+    if (scanId === null) return;
+    setAnswering(true);
+    setPauseProblem(null);
+    const sent = await api.call(
+      "POST",
+      `/open-scans/${scanId}/answer?key=${encodeURIComponent(viewKey.current)}`,
+      { action },
+    );
+    if (!sent.ok) {
+      setAnswering(false);
+      setPauseProblem(problemFor(sent.status, sent.data));
+    }
+  }
 
   // a soft red pulse through the window each time a test fails
   useEffect(() => {
@@ -516,7 +538,7 @@ export function QuickScanPage({
   const total = testCount || scan?.scan.settings.test_count || 0;
 
   const state = (n: number): StepState => (n < stage ? "done" : n === stage ? "active" : "locked");
-  const running = stage === 3 && !finished && !scanProblem;
+  const running = stage === 3 && !finished && !paused && !scanProblem;
 
   function chooseWay(next: Way) {
     setWay(next);
@@ -1256,9 +1278,9 @@ export function QuickScanPage({
             <div className="scanhead">
               <b style={{ fontWeight: 500 }}>Scan #{scanId}</b>
               <span style={{ color: "var(--muted)" }}>{hostOf(address)}</span>
-              <span className={`state ${finished ? "done" : ""}`}>
+              <span className={`state ${finished ? "done" : ""} ${paused ? "paused" : ""}`}>
                 <i />
-                <span>{finished ? "finished" : "running"}</span>
+                <span>{finished ? "finished" : paused ? "paused" : "running"}</span>
               </span>
             </div>
             <div className="bar">
@@ -1299,6 +1321,32 @@ export function QuickScanPage({
           {scanProblem && (
             <div className="alert" role="alert">
               {scanProblem}
+            </div>
+          )}
+          {paused && scan && (
+            <div className="pausebox" role="status">
+              <b>The run is paused</b>
+              <p>{scan.scan.note}</p>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn solid small"
+                  disabled={answering}
+                  onClick={() => answerPause("retry")}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={answering}
+                  onClick={() => answerPause("stop")}
+                >
+                  Stop
+                </button>
+                {answering && <span className="spin" />}
+              </div>
+              {pauseProblem && <span className="err">{pauseProblem}</span>}
             </div>
           )}
           {finished && scan && scanId !== null && (

@@ -32,7 +32,9 @@ export function ReportLoader({ apiUrl, pollMs = 3000 }: { apiUrl: string; pollMs
         const detail = await readOpenScan(api, id, key);
         if (!alive) return;
         setState({ kind: "ready", detail });
-        if (detail.scan.status === "running") timer = setTimeout(load, pollMs);
+        if (detail.scan.status === "running" || detail.scan.status === "paused") {
+          timer = setTimeout(load, pollMs);
+        }
       } catch (error) {
         if (!alive) return;
         // a 404 is a wrong or missing key; anything else is the backend being away

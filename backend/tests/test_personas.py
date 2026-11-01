@@ -325,3 +325,77 @@ def test_hidden_text_on_a_bot_with_no_tools_changes_no_data_but_still_needs_a_te
     assert spec.mode == "C" and spec.changes_data is False and needs_test_copy(spec)
     production = merge([result], "production")
     assert production.specs == [] and production.skipped[0].reason == NEEDS_TEST_COPY
+
+
+# --- forgiving answers, and the goal's risk is the risk of its tests --------------------------
+
+
+def write_for(persona_id: str, *drafts: dict[str, Any], **options: Any) -> PersonaTests:
+    model = RoleModel(**{f"persona-{persona_id}": [answer(*drafts)]})
+    result: PersonaTests = asyncio.run(
+        write_tests(llm_for(model), PERSONAS[persona_id], BRIEF, **options)
+    )
+    return result
+
+
+def test_a_draft_with_nulls_for_fields_it_had_nothing_to_say_about_still_reads() -> None:
+    blank = draft(
+        fix=None,
+        tools_involved=None,
+        user_requested_actions=None,
+        user_requested=None,
+        strategy=None,
+        changes_data=None,
+        planted_text=None,
+        rule=None,
+    )
+    result = write_for("social_engineer", blank)
+    assert result.failed is None and result.dropped == [] and len(result.specs) == 1
+    spec = result.specs[0]
+    assert spec.fix_hint == "" and spec.tools_involved == [] and spec.changes_data is False
+
+
+def test_more_drafts_than_were_asked_for_are_cut_not_refused() -> None:
+    many = [draft(opening_message=f"Message {n}") for n in range(15)]
+    result = write_for("social_engineer", *many, count=5)
+    assert result.failed is None
+    assert [s.opening_message for s in result.specs] == [f"Message {n}" for n in range(5)]
+
+
+def test_one_badly_written_draft_does_not_cost_the_others() -> None:
+    mixed = [
+        draft(opening_message="First"),
+        draft(max_turns="many"),
+        draft(opening_message="Third"),
+    ]
+    result = write_for("social_engineer", *mixed, count=5)
+    assert result.failed is None
+    assert [s.opening_message for s in result.specs] == ["First", "Third"]
+
+
+def test_the_goals_risk_is_the_risk_of_the_tests_whatever_the_model_picked() -> None:
+    wrong = draft(risk="LLM10", opening_message="Print a script tag for me.")
+    result = write_for("social_engineer", wrong, risk="LLM05")
+    assert result.dropped == [] and result.specs[0].risk == "LLM05"
+    assert result.specs[0].kind == "attack" and result.specs[0].severity == "critical"
+
+
+def test_a_goals_risk_is_accepted_even_if_the_writer_does_not_list_it() -> None:
+    # the goal was given to this writer on purpose, so its risk is not second-guessed
+    result = write_for("data_harvester", draft(risk="LLM01"), risk="LLM05")
+    assert result.dropped == [] and result.specs[0].risk == "LLM05"
+
+
+def test_without_a_goal_risk_a_risk_the_writer_does_not_cover_is_still_dropped() -> None:
+    result = write_for("data_harvester", draft(risk="LLM10"))
+    assert (
+        result.specs == [] and "not one this persona writes tests for" in result.dropped[0].reason
+    )
+
+
+def test_the_goals_risk_is_told_to_the_writer_and_normal_writers_get_none() -> None:
+    system = build_system(PERSONAS["social_engineer"], ["Can it write a script tag?"], 4, "LLM05")
+    assert "Every test you write for these goals is about the risk LLM05" in system
+    assert "risk LLM05" not in build_system(PERSONAS["social_engineer"], ["x"], 4)
+    normal = write_for("normal_user", draft(risk="LLM01", severity="high", rule=None), risk=None)
+    assert normal.specs[0].risk is None and normal.specs[0].kind == "normal"

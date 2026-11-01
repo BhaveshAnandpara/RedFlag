@@ -73,6 +73,7 @@ def create_app(
         # A scan that was running when the backend stopped can no longer be running.
         try:
             scan_store.interrupt_stale(now(), settings.scan_stale_seconds)
+            scan_store.interrupt_paused(now())
         except SQLAlchemyError:
             pass  # the database may still be waking up; reading a scan applies the same rule
         yield
@@ -134,8 +135,6 @@ def create_app(
         )
     )
 
-    app.include_router(build_open_scan_router(settings, scan_store, catalog, result_store))
-
     # Setups: what the owner tells Redflag about their own bot. Never calls an address inside.
     setup_llm = SetupLLM(
         Router(active_providers, clock=now),
@@ -192,6 +191,10 @@ def create_app(
                 rate_retries=settings.attacker_rate_retries,
             ),
             max_turns=settings.multi_turn_max_turns,
+            reply_wait=settings.run_reply_timeout_seconds,
+            retry_pause=settings.run_retry_pause_seconds,
+            pause_after=settings.run_pause_after_failures,
+            pause_timeout=settings.run_pause_timeout_seconds,
         ),
         gate=gate,
         clock=now,
@@ -230,6 +233,9 @@ def create_app(
                 per_tool=settings.mcp_calls_per_tool,
             ),
         )
+    )
+    app.include_router(
+        build_open_scan_router(settings, scan_store, catalog, result_store, run_deps.runner.answer)
     )
     ci_tokens = CiTokenStore(engine, clock=now)
     app.include_router(build_ci_router(ci_tokens, setup_store, run_deps))

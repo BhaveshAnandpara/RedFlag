@@ -64,6 +64,10 @@ class _Exchange:
     error: str = ""
 
 
+# What a reply that never came is called, so the runner can tell it from other failures.
+TIMED_OUT = "The server timed out."
+
+
 class _Refused(Exception):
     """An address that may not be called. The message is shown to the user."""
 
@@ -106,6 +110,10 @@ class HttpTarget:
         self._blocked = {host.lower() for host in blocked_hosts}
         self._timeout = timeout
         self._max_bytes = max_reply_bytes
+
+    def wait_up_to(self, seconds: float) -> None:
+        """How long to wait for one reply. A reasoning model can take a while to answer."""
+        self._timeout = seconds
 
     async def send(self, prompt: str) -> TargetResult:
         exchange = await self._exchange(prompt)
@@ -241,7 +249,7 @@ class HttpTarget:
                 finally:
                     await response.aclose()
         except httpx.TimeoutException:
-            return _Exchange(None, "", "The server timed out.")
+            return _Exchange(None, "", TIMED_OUT)
         except httpx.ConnectError:
             return _Exchange(None, "", "Could not connect to the server.")
         except httpx.RemoteProtocolError:

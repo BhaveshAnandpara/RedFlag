@@ -1204,3 +1204,98 @@ describe("running the test plan", () => {
     expect(screen.getByText(/cannot run a made plan/)).toBeInTheDocument();
   });
 });
+
+describe("when the bot stops answering", () => {
+  const NOTE =
+    "Your bot stopped answering: the last 3 tests in a row got no usable reply. Fix it (for example restart your tunnel), then press Retry. Stop keeps what was tested so far.";
+  const made = (status: "running" | "paused" | "completed" | "interrupted", note: string | null = null) =>
+    makeScan([], { id: 31, status, botId: "target-8", setup: { version: 1, rules: [] }, note });
+
+  async function started(backend: FakeBackend) {
+    const user = await confirmedAnswer(backend);
+    await user.click(screen.getByRole("radio", { name: /Answers questions/ }));
+    await user.type(screen.getByLabelText(/What is it for/), "A support bot for a bank.");
+    await user.click(screen.getByRole("button", { name: "Run my scan" }));
+    await screen.findByText("Scan #31");
+    return user;
+  }
+
+  it("shows the run as paused with what to do, and keeps watching it instead of calling it finished", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [made("paused", NOTE)];
+    await started(backend);
+    expect(await screen.findByText("The run is paused")).toBeInTheDocument();
+    expect(screen.getByText(/the last 3 tests in a row got no usable reply/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    expect(screen.getByText("paused", { selector: ".state span" })).toBeInTheDocument();
+    expect(screen.queryByText("finished")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open the report" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Next test running")).not.toBeInTheDocument();
+    // it is still being read: more than one poll arrived
+    await waitFor(() =>
+      expect(backend.calls.filter((c) => c.path === "/open-scans/31").length).toBeGreaterThan(2),
+    );
+  });
+
+  it("sends Retry with the scan's own key, waits for the run to move on, and then goes back to running", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [made("paused", NOTE)];
+    backend.overrides["POST /open-scans/31/answer"] = () => {
+      backend.scans = [made("running"), made("completed")];
+      return json(200, { ok: true });
+    };
+    const user = await started(backend);
+    await user.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(backend.bodies("/open-scans/31/answer")).toEqual([{ action: "retry" }]);
+    const sent = backend.calls.find((c) => c.path === "/open-scans/31/answer");
+    expect(sent?.key).toBe(VIEW_KEY);
+    await waitFor(() => expect(screen.queryByText("The run is paused")).not.toBeInTheDocument());
+    expect(await screen.findByRole("link", { name: "Open the report" })).toBeInTheDocument();
+  });
+
+  it("holds both buttons while the answer is on its way, so it cannot be sent twice", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [made("paused", NOTE)];
+    backend.overrides["POST /open-scans/31/answer"] = () => json(200, { ok: true });
+    const user = await started(backend);
+    await user.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeDisabled();
+    expect(backend.bodies("/open-scans/31/answer")).toHaveLength(1);
+  });
+
+  it("sends Stop, and then shows how the run ended with a link to the report", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [made("paused", NOTE)];
+    const ended = "The run was stopped after your bot stopped answering (you stopped the run). 4 tests were not run.";
+    backend.overrides["POST /open-scans/31/answer"] = () => {
+      backend.scans = [made("interrupted", ended)];
+      return json(200, { ok: true });
+    };
+    const user = await started(backend);
+    await user.click(await screen.findByRole("button", { name: "Stop" }));
+    expect(backend.bodies("/open-scans/31/answer")).toEqual([{ action: "stop" }]);
+    expect(await screen.findByText(/4 tests were not run/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open the report" })).toBeInTheDocument();
+    expect(screen.queryByText("The run is paused")).not.toBeInTheDocument();
+  });
+
+  it("says so, and lets the person try again, when the run is not waiting any more", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [made("paused", NOTE)];
+    backend.overrides["POST /open-scans/31/answer"] = () => json(409, { error: { kind: "not_waiting" } });
+    const user = await started(backend);
+    await user.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("The run is not waiting for you any more.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+  });
+
+  it("shows no pause panel while the run is going normally", async () => {
+    const backend = new FakeBackend();
+    backend.scans = [made("running")];
+    await started(backend);
+    expect(screen.queryByText("The run is paused")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+});

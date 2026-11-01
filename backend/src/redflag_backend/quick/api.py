@@ -320,7 +320,8 @@ def build_quick_router(
         if seen.status != "ok":
             return _error(422, "connection_failed", seen.error or "The bot did not answer.")
 
-        options: RunOptions | None = None
+        # The person is watching, so a run whose bot stops answering may pause for them.
+        options: RunOptions | None = RunOptions(can_pause=True)
         plan_info: dict[str, Any] | None = None
         if chosen_plan is not None:
             stored = await asyncio.to_thread(save_specs, specs, chosen_plan)
@@ -329,6 +330,7 @@ def build_quick_router(
             options = RunOptions(
                 max_requests=min(needed, settings.run_plan_max_endpoint_requests),
                 on_test_done=proof_saver(results, body.key),
+                can_pause=True,
             )
             # Saved with the scan, so its report can say what ran and which rules had no tests.
             plan_info = {

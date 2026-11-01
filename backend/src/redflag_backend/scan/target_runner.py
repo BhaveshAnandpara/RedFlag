@@ -11,15 +11,16 @@ bot echoes it.
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from redflag_backend.attacks.attacker import Attacker
 from redflag_backend.judge.judge import Judge, JudgeRequest, JudgeVerdict, ToolDescription
 from redflag_backend.llm.budget import BudgetCaps, SessionBudget
 from redflag_backend.scan.store import ScanStore
-from redflag_backend.targets.http_target import HttpTarget, TargetResult
+from redflag_backend.targets.http_target import TIMED_OUT, HttpTarget, TargetResult
 
 NO_RULE_NOTE = "No plain rule applies to a real bot, so the AI judge decided alone."
 ENDPOINT_PROVIDER = "http"
@@ -40,6 +41,9 @@ class RunOptions:
 
     max_requests: int | None = None
     on_test_done: TestDone | None = None
+    # Only a run someone is watching (from the open page) may pause and wait for them. A run
+    # started from the owner's page or CI has no one to answer, so it just records what happened.
+    can_pause: bool = False
 
 
 def endpoint_label(host: str) -> str:
@@ -48,6 +52,32 @@ def endpoint_label(host: str) -> str:
 
 def _plural(count: int, one: str, many: str) -> str:
     return f"{count} {one if count == 1 else many}"
+
+
+@dataclass
+class RunControl:
+    """What the person watching a paused run answered: retry or stop."""
+
+    event: asyncio.Event = field(default_factory=asyncio.Event)
+    decision: str | None = None
+
+
+@dataclass
+class _Held:
+    """A test the bot gave no answer to. It is kept aside until it is clear whether the bot is
+    only having a blip (then it is saved as it is) or is gone (then a person decides)."""
+
+    position: int
+    test: dict[str, Any]
+    runs: list[dict[str, Any]]
+    result: dict[str, Any]
+    used: int  # requests it used from the run's cap
+
+
+def _no_answer(runs: list[dict[str, Any]]) -> bool:
+    """True when every run of a test got no usable answer from the bot (a timeout, a refused
+    connection, a server error). A test never run because of the request cap is not that."""
+    return all(r["status"] == "error" and not r["evidence"].startswith("Not run:") for r in runs)
 
 
 @dataclass
@@ -74,6 +104,23 @@ class TargetScanRunner:
     max_requests: int
     attacker: Attacker
     max_turns: int = 4
+    # How long to wait for one reply, and how long before asking once more for one that never came.
+    reply_wait: float = 60.0
+    retry_pause: float = 3.0
+    # This many tests in a row with no answer pause the run until a person says retry or stop.
+    pause_after: int = 3
+    pause_timeout: float = 900.0
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
+    controls: dict[int, RunControl] = field(default_factory=dict)
+
+    def answer(self, scan_id: int, decision: str) -> bool:
+        """The person's answer to a paused run. False when that run is not waiting for one."""
+        control = self.controls.get(scan_id)
+        if control is None or decision not in ("retry", "stop"):
+            return False
+        control.decision = decision
+        control.event.set()
+        return True
 
     async def run(
         self,
@@ -86,6 +133,7 @@ class TargetScanRunner:
         options: RunOptions | None = None,
     ) -> None:
         options = options or RunOptions()
+        target.wait_up_to(self.reply_wait)
         cap = options.max_requests or self.max_requests
         judge_caps = self.judge_caps
         if options.max_requests:
@@ -108,23 +156,108 @@ class TargetScanRunner:
             max_requests=cap,
             scan_id=scan_id,
         )
+        queue: deque[tuple[int, dict[str, Any]]] = deque(enumerate(tests))
+        held: list[_Held] = []
         try:
-            for position, test in enumerate(tests):
-                started = self.clock()
-                runs = await self._test(position, test, started, run)
+            while queue:
+                position, test = queue.popleft()
+                before = run.sent
+                runs = await self._test(position, test, self.clock(), run)
                 result = self._combine(test, runs) if len(runs) > 1 else runs[0]
-                await asyncio.to_thread(self.store.add_result, scan_id, result, self.clock())
-                if options.on_test_done is not None:
-                    try:
-                        await options.on_test_done(scan_id, test, runs, result)
-                    except Exception:  # the proof is kept on a best effort: never stop the run
-                        log.warning("could not save the proof for test %s", test.get("id"))
+                if options.can_pause and _no_answer(runs):
+                    held.append(_Held(position, test, runs, result, run.sent - before))
+                    if len(held) < self.pause_after:
+                        continue
+                    answer = await self._ask_person(scan_id, len(held))
+                    if answer == "retry":
+                        # ask again, from the first test that got no answer. What was sent to a
+                        # bot that was not answering does not use up the plan's request cap.
+                        run.sent = max(0, run.sent - sum(item.used for item in held))
+                        for item in reversed(held):
+                            queue.appendleft((item.position, item.test))
+                        held = []
+                        continue
+                    await self._save_held(scan_id, held, options)
+                    await self._stop(scan_id, queue, answer)
+                    return
+                await self._save_held(scan_id, held, options)
+                held = []
+                await self._save(scan_id, test, runs, result, options)
+            await self._save_held(scan_id, held, options)
             await asyncio.to_thread(self.store.finish_scan, scan_id, "completed", self.clock())
         except Exception as error:  # a bug must not leave the scan looking "running" forever
             note = f"The run stopped because of an unexpected problem ({type(error).__name__})."
             await asyncio.to_thread(
                 self.store.finish_scan, scan_id, "interrupted", self.clock(), note
             )
+
+    # --- saving, pausing and stopping -----------------------------------------------------------
+
+    async def _save(
+        self,
+        scan_id: int,
+        test: dict[str, Any],
+        runs: list[dict[str, Any]],
+        result: dict[str, Any],
+        options: RunOptions,
+    ) -> None:
+        await asyncio.to_thread(self.store.add_result, scan_id, result, self.clock())
+        if options.on_test_done is not None:
+            try:
+                await options.on_test_done(scan_id, test, runs, result)
+            except Exception:  # the proof is kept on a best effort: never stop the run
+                log.warning("could not save the proof for test %s", test.get("id"))
+
+    async def _save_held(self, scan_id: int, held: list[_Held], options: RunOptions) -> None:
+        for item in held:
+            await self._save(scan_id, item.test, item.runs, item.result, options)
+
+    async def _ask_person(self, scan_id: int, count: int) -> str:
+        """Pause the run and wait for a person to say retry or stop. Returns "retry", "stop", or
+        "timeout" when nobody answered in time. Nothing is sent to the bot while it waits."""
+        control = RunControl()
+        self.controls[scan_id] = control
+        note = (
+            f"Your bot stopped answering: the last {count} tests in a row got no usable reply. "
+            "Fix it (for example restart your tunnel), then press Retry. Stop keeps what was "
+            "tested so far."
+        )
+        await asyncio.to_thread(self.store.pause_scan, scan_id, note, self.clock())
+        try:
+            await asyncio.wait_for(control.event.wait(), self.pause_timeout)
+            decision = control.decision or "stop"
+        except TimeoutError:
+            decision = "timeout"
+        finally:
+            self.controls.pop(scan_id, None)
+        if decision == "retry":
+            await asyncio.to_thread(self.store.resume_scan, scan_id, self.clock())
+        return decision
+
+    async def _stop(self, scan_id: int, queue: deque[tuple[int, dict[str, Any]]], why: str) -> None:
+        """End the run early. What was tested is kept, and every test that was not run says so,
+        so the counts still add up to the plan."""
+        left = len(queue)
+        reason = (
+            "nobody answered for a while, so the run was stopped"
+            if why == "timeout"
+            else "you stopped the run"
+        )
+        while queue:
+            position, test = queue.popleft()
+            skipped = self._result(
+                position,
+                test,
+                self.clock(),
+                "error",
+                f"Not run: {reason} after your bot stopped answering.",
+            )
+            await asyncio.to_thread(self.store.add_result, scan_id, skipped, self.clock())
+        note = (
+            f"The run was stopped after your bot stopped answering ({reason}). "
+            f"{_plural(left, 'test was', 'tests were')} not run. Everything tested before is kept."
+        )
+        await asyncio.to_thread(self.store.finish_scan, scan_id, "interrupted", self.clock(), note)
 
     # --- one test, run as many times as it asks ----------------------------------------------
 
@@ -172,10 +305,21 @@ class TargetScanRunner:
 
     # --- one message ------------------------------------------------------------------------
 
+    async def _call(self, run: _Run, send: Callable[[], Awaitable[TargetResult]]) -> TargetResult:
+        """One request to the bot. A reply that never came is asked for once more, as a separate
+        request after a short pause: a bot that is only slow often answers the second time. Any
+        other failure is not asked again. The second ask does not use up the run's request cap,
+        which is sized to the plan: a retry must not cost a test its place."""
+        sent = await send()
+        if sent.status == "error" and sent.error == TIMED_OUT:
+            await self.sleep(self.retry_pause)
+            sent = await send()
+        return sent
+
     async def _one(
         self, position: int, test: dict[str, Any], started: float, run: _Run
     ) -> dict[str, Any]:
-        sent: TargetResult = await run.target.send(test["prompt"])
+        sent = await self._call(run, lambda: run.target.send(test["prompt"]))
         if sent.status == "error":
             return self._result(position, test, started, "error", sent.error)
         verdict = await self._judge(test, run, test["prompt"], sent.reply, ())
@@ -230,7 +374,7 @@ class TargetScanRunner:
                 )
             run.sent += 1
             turns.append({"role": "user", "content": message})
-            sent = await run.target.send_conversation(turns)
+            sent = await self._call(run, lambda: run.target.send_conversation(turns))
             if sent.status == "error":
                 return result("error", sent.error)
             last_reply = sent.reply
