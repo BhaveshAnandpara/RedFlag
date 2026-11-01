@@ -1,5 +1,5 @@
 """The rule check (ticket 12): every attack test gets a rule and an intention, and a rule that
-does not hold up is fixed, or left out and said so.
+does not hold up is fixed, or left to the AI judge, and the plan says so.
 
 No database and no network for the planner tests: a stand-in model plays the planner, every
 persona, the rule writer and the intention checker. The run tests go over HTTP.
@@ -20,7 +20,6 @@ from redflag_backend.validator.checks import (
     check_spec,
 )
 from redflag_backend.validator.loop import MAX_REWRITES
-from redflag_backend.validator.restore import restore
 from tests.helpers import TitleJudge
 from tests.test_multi_turn import GaveInJudge, bot_gives_in_on
 from tests.test_plan_run import made_plan, ran, run_plan
@@ -50,7 +49,7 @@ def test_every_attack_test_gets_a_rule_an_intention_and_two_sample_chats() -> No
         assert spec.oracle is not None and spec.intention
         assert {s.expected for s in spec.samples} == {"broke", "held"}
         assert spec.broke_if and spec.broke_if.startswith("Broke if")
-    assert plan.rejections == [] and plan.checks.dropped == 0
+    assert plan.rejections == [] and plan.checks.to_judge == 0
     assert plan.checks.checked == len(attacks(plan)) == plan.checks.fine_first_time
 
 
@@ -73,15 +72,14 @@ def test_the_rule_is_written_by_its_own_role_and_not_by_a_persona() -> None:
 # --- a rule that does not hold up -------------------------------------------------------------
 
 
-def test_a_rule_that_misses_its_own_sample_is_sent_back_twice_then_left_out_with_the_reason() -> (
-    None
-):
+def test_a_rule_nothing_fixes_is_tried_three_times_then_the_test_stays_for_the_judge() -> None:
     plan, model = planned("never_catches")
-    assert attacks(plan) == []
-    assert plan.checks.dropped == plan.checks.checked > 0 and plan.checks.fixed == 0
+    assert attacks(plan) and all(s.oracle is None for s in attacks(plan))
+    assert all(s.intention for s in attacks(plan))  # the judge still knows what to look for
+    assert plan.checks.to_judge == plan.checks.checked > 0 and plan.checks.fixed == 0
     first = plan.rejections[0]
-    assert first.outcome == "dropped" and first.check == CHECK_SAMPLES
-    assert "did not say Broke" in first.evidence and first.spec is not None
+    assert first.outcome == "judge_only" and first.check == CHECK_SAMPLES
+    assert "did not say Broke" in first.evidence and "AI judge decides" in first.effect
     # the first write, then no more than the rewrites the ticket allows
     asked = model.prompts("rule-author")
     tries = [sum(1 for p in asked if json.dumps(r.opening_message) in p) for r in plan.rejections]
@@ -91,9 +89,8 @@ def test_a_rule_that_misses_its_own_sample_is_sent_back_twice_then_left_out_with
 def test_a_rule_fixed_on_the_second_try_is_kept_and_reported_as_fixed() -> None:
     plan, _ = planned("fixable")
     assert attacks(plan) and all(s.oracle is not None for s in attacks(plan))
-    assert plan.checks.fixed == plan.checks.checked > 0 and plan.checks.dropped == 0
+    assert plan.checks.fixed == plan.checks.checked > 0 and plan.checks.to_judge == 0
     assert {r.outcome for r in plan.rejections} == {"fixed"}
-    assert all(r.spec is None for r in plan.rejections)  # nothing to restore
 
 
 def test_the_reasons_a_rule_was_rejected_are_given_back_to_the_rule_writer() -> None:
@@ -104,20 +101,21 @@ def test_the_reasons_a_rule_was_rejected_are_given_back_to_the_rule_writer() -> 
 
 def test_a_rule_that_looks_for_words_the_tester_itself_wrote_is_rejected() -> None:
     plan, _ = planned("echo")
-    assert attacks(plan) == []
+    assert attacks(plan) and all(s.oracle is None for s in attacks(plan))
     assert {r.check for r in plan.rejections} == {CHECK_RULE}
     assert all("tester itself wrote" in r.evidence for r in plan.rejections)
 
 
 def test_a_rule_that_flags_a_refusal_as_a_break_is_rejected() -> None:
     plan, _ = planned("too_loose")
-    assert attacks(plan) == []
+    assert attacks(plan) and all(s.oracle is None for s in attacks(plan))
     assert all("flags good behaviour" in r.evidence for r in plan.rejections)
 
 
 def test_a_rule_with_no_intention_is_rejected() -> None:
     plan, _ = planned("no_intention")
     assert {r.check for r in plan.rejections} == {CHECK_INTENTION}
+    assert attacks(plan)  # rejected for the judge's sake, but never lost
 
 
 def test_a_test_no_text_can_prove_keeps_no_rule_and_goes_to_the_judge_with_its_intention() -> None:
@@ -203,51 +201,14 @@ def test_a_rule_with_a_missing_sample_is_rejected() -> None:
     assert [c for c, _ in check_spec(spec)] == [CHECK_SAMPLES]
 
 
-# --- restoring a test the check left out ------------------------------------------------------
+# --- a rule that cannot be fixed never costs the plan its tests -------------------------------
 
 
-def test_a_test_that_was_left_out_can_be_put_back_once_and_is_marked_restored() -> None:
-    plan, _ = planned("never_catches")
-    before = plan.summary.tests
-    left_out = plan.rejections[0]
-    assert restore(plan, left_out.id)
-    goal = next(p for p in plan.goals if p.goal.id == left_out.goal_id)
-    back = goal.specs[-1]
-    assert (
-        back.restored and back.oracle is None and back.opening_message == left_out.opening_message
-    )
-    assert plan.summary.tests == before + 1 and left_out.restored
-    assert not restore(plan, left_out.id)  # not twice
-    assert not restore(plan, "r-9999")
-
-
-def test_a_test_that_was_fixed_has_nothing_to_put_back() -> None:
-    plan, _ = planned("fixable")
-    assert not restore(plan, plan.rejections[0].id)
-
-
-def test_the_page_can_restore_a_left_out_test_through_the_api() -> None:
-    from tests.test_quick_plan import finished, start
-
-    with run_client(
-        GaveInJudge(), None, roles=Writers(ONE_GOAL, limit=3, rules="never_catches")
-    ) as (
-        client,
-        _,
-        _,
-    ):
-        plan_id = start(client, rules=[]).json()["plan_id"]
-        plan = finished(client, plan_id)["plan"]
-        rejection = next(r for r in plan["rejections"] if r["can_restore"])
-        assert "spec" not in rejection
-        back = client.post(f"/quick-scans/plan/{plan_id}/restore", json={"id": rejection["id"]})
-        assert back.status_code == 200
-        after = back.json()["plan"]
-        again = client.post(f"/quick-scans/plan/{plan_id}/restore", json={"id": rejection["id"]})
-        missing = client.post("/quick-scans/plan/nope/restore", json={"id": "r-1"})
-    assert after["summary"]["tests"] == plan["summary"]["tests"] + 1
-    assert next(r for r in after["rejections"] if r["id"] == rejection["id"])["restored"]
-    assert again.status_code == 409 and missing.status_code == 404
+def test_a_rule_with_every_test_rejected_still_has_tests_and_is_not_reported_as_untested() -> None:
+    plan, _ = planned("echo")
+    assert plan.untested_rules == [] and plan.warning is None
+    assert all(p.specs for p in plan.goals if p.goal.source == "user" or not p.goal.background)
+    assert plan.summary.tests == sum(len(p.specs) for p in plan.goals) > 0
 
 
 # --- the run uses the rule ---------------------------------------------------------------------
@@ -287,21 +248,7 @@ def test_the_judge_is_told_the_intention_and_still_decides_a_test_the_rule_does_
     assert "What the owner wants caught, in this test:" in asked
 
 
-def test_the_restored_test_is_marked_in_its_proof() -> None:
-    from tests.test_quick_plan import finished, start
-
-    writers = Writers(ONE_GOAL, limit=2, rules="never_catches")
-    with run_client(GaveInJudge(), bot_gives_in_on(99), roles=writers) as (client, _, _):
-        plan_id = start(client, rules=[]).json()["plan_id"]
-        plan = finished(client, plan_id)["plan"]
-        for rejection in plan["rejections"]:
-            client.post(f"/quick-scans/plan/{plan_id}/restore", json={"id": rejection["id"]})
-        scan = ran(client, run_plan(client, plan_id))
-    restored = [r for r in scan["results"] if "put back by you" in r["proof"]["what_happened"]]
-    assert restored
-
-
-def test_the_plan_counts_only_the_tests_that_are_left_after_the_check() -> None:
+def test_the_plan_counts_every_test_it_still_holds() -> None:
     plan, _ = planned("never_catches")
     assert plan.summary.tests == sum(len(p.specs) for p in plan.goals)
 

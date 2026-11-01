@@ -34,7 +34,7 @@ type PlanView = {
   rules_covered: string[];
   skipped: { persona: string; goal: string; reason: string }[];
   // The rule check: what it found, and the tests it sent back.
-  checks: { checked: number; fixed: number; dropped: number; judge_only: number; unchecked: number };
+  checks: { checked: number; fixed: number; to_judge: number; judge_only: number; unchecked: number };
   check_problem: string | null;
   rejections: Rejection[];
 };
@@ -45,10 +45,8 @@ type Rejection = {
   opening_message: string;
   check: string;
   evidence: string;
-  outcome: "fixed" | "dropped";
+  outcome: "fixed" | "judge_only";
   effect: string;
-  restored: boolean;
-  can_restore: boolean;
 };
 type Doing = {
   goal_index: number;
@@ -289,15 +287,6 @@ export function PlanPreview({
     setPhase("error");
   }
 
-  async function restore(id: string): Promise<string | null> {
-    if (!planId) return null;
-    const back = await api.call<{ plan: PlanView }>("POST", `/quick-scans/plan/${planId}/restore`, { id });
-    if (!alive.current) return null;
-    if (!back.ok) return problemFor(back.status, back.data);
-    setPlan(back.data.plan);
-    return null;
-  }
-
   const working = phase === "working";
   const shown = phase === "idle" || phase === "error" ? [] : items;
   const tests = shown.filter((i) => i.kind === "test").length;
@@ -390,7 +379,7 @@ export function PlanPreview({
           </div>
         </div>
       )}
-      {plan && <Summary plan={plan} rules={rules} environment={environment} server={server} onRestore={restore} />}
+      {plan && <Summary plan={plan} rules={rules} environment={environment} server={server} />}
     </div>
   );
 }
@@ -421,16 +410,13 @@ function Summary({
   rules,
   environment,
   server,
-  onRestore,
 }: {
   plan: PlanView;
   rules: string[];
   environment: "staging" | "production";
   server: string;
-  onRestore: (id: string) => Promise<string | null>;
 }) {
-  const [restoreProblem, setRestoreProblem] = useState<string | null>(null);
-  const fixing = plan.checks.fixed + plan.checks.dropped;
+  const fixing = plan.checks.fixed + plan.checks.to_judge;
   return (
     <div className="planview">
       <p className="plan-head">
@@ -451,7 +437,7 @@ function Summary({
         <details className="covered fixes">
           <summary>
             {fixing} {fixing === 1 ? "test needed" : "tests needed"} fixing: {plan.checks.fixed} fixed automatically,{" "}
-            {plan.checks.dropped} left out. See why
+            {plan.checks.to_judge} left to the AI judge. See why
           </summary>
           <ul>
             {plan.rejections.map((r) => (
@@ -461,23 +447,9 @@ function Summary({
                 <span className="hint">
                   {r.check}. {r.evidence} {r.effect}
                 </span>
-                {r.can_restore && (
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={async () => setRestoreProblem(await onRestore(r.id))}
-                  >
-                    Put it back
-                  </button>
-                )}
               </li>
             ))}
           </ul>
-          {restoreProblem && (
-            <div className="alert" role="alert">
-              {restoreProblem}
-            </div>
-          )}
         </details>
       )}
       {plan.checks.judge_only > 0 && (

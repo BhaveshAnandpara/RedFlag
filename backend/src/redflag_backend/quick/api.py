@@ -48,7 +48,6 @@ from redflag_backend.supervisor.run_tests import (
 )
 from redflag_backend.supervisor.view import plan_view
 from redflag_backend.targets.http_target import EndpointConfig
-from redflag_backend.validator.restore import restore
 
 log = logging.getLogger(__name__)
 
@@ -68,10 +67,6 @@ class CheckBody(BaseModel):
 class ProductionTestsBody(BaseModel):
     bot_type: str
     must_never: list[str]
-
-
-class RestoreBody(BaseModel):
-    id: str = Field(min_length=1, max_length=20)
 
 
 class PlanBody(BaseModel):
@@ -264,17 +259,6 @@ def build_quick_router(
         if job["status"] == "running" or not progress.drained(after):
             # Items are handed out a few at a time, so the page can show the plan being written.
             return {"status": "running", **progress.snapshot(after)}
-        return {"status": "done", "plan": job["plan"]}
-
-    @router.post("/plan/{plan_id}/restore", response_model=None)
-    async def restore_test(plan_id: str, body: RestoreBody) -> dict[str, Any] | JSONResponse:
-        """Put back a test the rule check left out. It then runs on the AI judge alone."""
-        job = plans.get(plan_id)
-        if job is None or job["status"] != "done":
-            return _error(404, "no_such_plan")
-        if not restore(job["plan_obj"], body.id):
-            return _error(409, "nothing_to_restore")
-        job["plan"] = plan_view(job["plan_obj"])
         return {"status": "done", "plan": job["plan"]}
 
     @router.post("/check", response_model=None)

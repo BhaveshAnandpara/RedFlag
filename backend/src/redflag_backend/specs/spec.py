@@ -76,8 +76,6 @@ class TestSpec(BaseModel):
     # rule, so a rule that is a little off does not fool it.
     intention: str | None = None
     samples: list[SampleTranscript] = Field(default_factory=list)
-    # Set when the user put back a test the rule check had rejected: it runs on the judge alone.
-    restored: bool = False
 
     @field_validator("persona", "goal", "opening_message")
     @classmethod

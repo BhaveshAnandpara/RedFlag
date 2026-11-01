@@ -94,7 +94,6 @@ def build_tests(plan: Plan, runs: int, stored: list[StoredSpec]) -> list[dict[st
                 "broke_if": spec.broke_if,
                 "held_if": spec.held_if,
                 "intention": spec.intention,
-                "restored": spec.restored,
                 "rule_unconfirmed": False,
                 "real_action": spec.changes_data,
                 "fix": spec.fix_hint,
@@ -164,15 +163,7 @@ def record_for(
         spec_hash=test["spec_hash"],
         test_id=test.get("id"),
         outcome=outcome,
-        what_happened=(
-            said
-            + test["goal"]
-            + (
-                " (put back by you after the rule check left it out)"
-                if test.get("restored")
-                else ""
-            )
-        ),
+        what_happened=said + test["goal"],
         conversation=turns,
         attacker_messages=[t.content for t in turns if t.role == "user"] if decided else [],
         broke_at_turn=replies[-1] if outcome == "broke" else None,

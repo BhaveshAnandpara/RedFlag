@@ -362,10 +362,10 @@ async def _check_rules(
                 if problem == "out_of_time"
                 else "The rule writer could not answer for some tests. The judge decides them."
             )
-        elif totals.fixed or totals.dropped:
+        elif totals.fixed or totals.to_judge:
             progress.say(
-                f"{totals.fixed + totals.dropped} tests needed fixing: {totals.fixed} fixed "
-                f"automatically, {totals.dropped} left out."
+                f"{totals.fixed + totals.to_judge} tests needed fixing: {totals.fixed} fixed "
+                f"automatically, {totals.to_judge} left to the AI judge."
             )
         else:
             progress.say("Every rule passed its checks.")

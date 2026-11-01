@@ -185,8 +185,6 @@ export function describeError(status: number, body: ErrorBody | null | undefined
       return "That test plan is no longer available (the server may have restarted, or the details changed). Create the plan again, then run it.";
     case "not_waiting":
       return "The run is not waiting for you any more.";
-    case "nothing_to_restore":
-      return "That test cannot be put back (it may already be back).";
     case "plan_empty":
       return "That plan has no tests to run. Create the plan again.";
     case "plan_not_for_live_agent":
