@@ -468,6 +468,9 @@ describe("step 2: what the bot does and what it must never do", () => {
               untested_rules: [],
               rules_covered: [],
               skipped: [],
+              checks: { checked: 0, fixed: 0, dropped: 0, judge_only: 0, unchecked: 0 },
+              check_problem: null,
+              rejections: [],
             },
           })
         : json(200, {
@@ -992,6 +995,9 @@ describe("running the test plan", () => {
     untested_rules: [] as string[],
     rules_covered: [] as string[],
     skipped: [] as { persona: string; goal: string; reason: string }[],
+    checks: { checked: 0, fixed: 0, dropped: 0, judge_only: 0, unchecked: 0 },
+    check_problem: null as string | null,
+    rejections: [] as unknown[],
   };
 
   function withPlan(backend: FakeBackend, plan = PLAN) {

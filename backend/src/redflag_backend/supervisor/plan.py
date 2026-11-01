@@ -20,6 +20,7 @@ from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
 from redflag_backend.supervisor.progress import Progress
+from redflag_backend.validator.loop import Rejection, Stats, check_goal
 
 BIGGEST_FEAR_MIN = 30
 CRITICAL_MIN = 15
@@ -64,6 +65,10 @@ class Plan(BaseModel):
     # the plan: the tests that were written still run, and the report lists these as not tested.
     untested_rules: list[str] = Field(default_factory=list)
     warning: str | None = None
+    # The rule check (ticket 12): tests it sent back, what it found overall, and why it did not run.
+    rejections: list[Rejection] = Field(default_factory=list)
+    checks: Stats = Field(default_factory=Stats)
+    check_problem: str | None = None
 
 
 def _words(text: str) -> str:
@@ -269,6 +274,7 @@ async def build_plan(
             specs = specs[:background_left]
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
+    rejections, checks, check_problem = await _check_rules(llm, brief, planned, setup_id, progress)
     if progress is not None:
         progress.working_on("Putting the plan together")
         removed = len(book.removed)
@@ -278,6 +284,9 @@ async def build_plan(
             else "No repeated ideas to remove."
         )
     plan = _finish(planned, fear, book)
+    plan.rejections, plan.checks, plan.check_problem = rejections, checks, check_problem
+    plan.summary.tests = sum(len(p.specs) for p in planned)
+    plan.summary.data_changing = sum(1 for p in planned for s in p.specs if s.changes_data)
     if progress is not None:
         progress.say(
             "Some of your rules have no tests yet."
@@ -286,6 +295,59 @@ async def build_plan(
         )
         progress.say(f"Plan ready: {plan.summary.tests} tests.")
     return plan
+
+
+async def _check_rules(
+    llm: SetupLLM,
+    brief: Brief,
+    planned: list[PlannedGoal],
+    setup_id: int,
+    progress: Progress | None,
+) -> tuple[list[Rejection], Stats, str | None]:
+    """Give every attack test a rule and an intention, and send back the ones that do not hold up.
+    A goal that loses most of its tests says so, so the plan never claims coverage it lost."""
+    rejections: list[Rejection] = []
+    totals = Stats()
+    problem: str | None = None
+    numbers = iter(range(1, 10_000))
+    if progress is not None:
+        progress.working_on("Checking each test's rule")
+        progress.say("Asking the rule writer how to tell, afterwards, whether each attack worked…")
+    for number, item in enumerate(planned, start=1):
+        if not item.specs:
+            continue
+        if progress is not None:
+            progress.say(f"Checking the rules for goal {number} of {len(planned)}…")
+        before = len(item.specs)
+        checked = await check_goal(
+            llm,
+            brief,
+            item.goal.id,
+            item.specs,
+            lambda: f"r-{next(numbers)}",
+            setup_id,
+            progress.patience if progress else None,
+        )
+        item.specs = checked.specs
+        rejections += checked.rejections
+        totals.add(checked.stats)
+        problem = problem or checked.problem
+        lost = before - len(item.specs)
+        if lost and lost * 2 >= before:
+            item.note = (item.note + " " if item.note else "") + (
+                f"The rule check left out {lost} of this goal's {before} tests."
+            )
+    if progress is not None:
+        if problem:
+            progress.say("The rule writer could not answer for some tests. The judge decides them.")
+        elif totals.fixed or totals.dropped:
+            progress.say(
+                f"{totals.fixed + totals.dropped} tests needed fixing: {totals.fixed} fixed "
+                f"automatically, {totals.dropped} left out."
+            )
+        else:
+            progress.say("Every rule passed its checks.")
+    return rejections, totals, problem
 
 
 def _room(goal: Goal, background_left: int, specs: list[TestSpec]) -> int | None:

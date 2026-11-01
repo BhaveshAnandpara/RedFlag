@@ -172,6 +172,7 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
     if (r.proof) {
       lines.push(`- Runs: ${runsText(r.proof, r.kind === "positive")}`);
       lines.push(`- How sure: ${r.proof.how_sure ? HOW_SURE[r.proof.how_sure] : "not decided"}`);
+      if (r.proof.rule) lines.push(`- What was checked: ${r.proof.rule}`);
       lines.push(`- Test: ${r.proof.spec_id} (version ${r.proof.spec_version}, hash ${r.proof.spec_hash})`);
     }
     if (r.turns && r.turns.length > 0) {

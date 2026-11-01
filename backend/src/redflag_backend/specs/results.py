@@ -154,6 +154,8 @@ def proof_view(stored: StoredResult) -> dict[str, Any]:
         "spec_version": stored.spec_version,
         "spec_hash": r.spec_hash[:12],
         "compared_with_last": r.compared_with_last,
+        # The test's rule and intention in plain words: what was checked.
+        "rule": r.extra_proof,
     }
 
 

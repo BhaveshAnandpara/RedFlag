@@ -352,6 +352,12 @@ function ProofBox({ proof, normal }: { proof: Proof; normal: boolean }) {
         <span>How sure</span>
         {proof.how_sure ? HOW_SURE[proof.how_sure] : "Not decided"}
       </div>
+      {proof.rule && (
+        <div className="row">
+          <span>What was checked</span>
+          {proof.rule}
+        </div>
+      )}
       {proof.attacker_messages.length > 0 && (
         <div className="row">
           <span>{normal ? "The exact message sent" : "The attacker's exact messages, to replay this attack"}</span>

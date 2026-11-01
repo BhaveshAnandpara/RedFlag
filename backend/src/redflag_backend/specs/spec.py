@@ -72,7 +72,12 @@ class TestSpec(BaseModel):
     risk: str | None = None  # an OWASP LLM id such as LLM01
     fix_hint: str = ""
     oracle: Oracle | None = None
+    # What the owner wants caught, in context, in plain words. The AI judge reads it beside the
+    # rule, so a rule that is a little off does not fool it.
+    intention: str | None = None
     samples: list[SampleTranscript] = Field(default_factory=list)
+    # Set when the user put back a test the rule check had rejected: it runs on the judge alone.
+    restored: bool = False
 
     @field_validator("persona", "goal", "opening_message")
     @classmethod

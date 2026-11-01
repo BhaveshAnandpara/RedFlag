@@ -44,6 +44,12 @@ def plan_view(plan: Plan) -> dict[str, Any]:
             }
             for p in plan.goals
         ],
+        "checks": plan.checks.model_dump(),
+        "check_problem": plan.check_problem,
+        "rejections": [
+            r.model_dump(exclude={"spec"}) | {"can_restore": r.spec is not None and not r.restored}
+            for r in plan.rejections
+        ],
         "removed": [r.model_dump() for r in plan.removed],
         "counts": [c.model_dump() for c in plan.counts],
     }

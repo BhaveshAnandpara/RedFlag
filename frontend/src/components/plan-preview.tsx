@@ -33,6 +33,22 @@ type PlanView = {
   untested_rules: string[];
   rules_covered: string[];
   skipped: { persona: string; goal: string; reason: string }[];
+  // The rule check: what it found, and the tests it sent back.
+  checks: { checked: number; fixed: number; dropped: number; judge_only: number; unchecked: number };
+  check_problem: string | null;
+  rejections: Rejection[];
+};
+type Rejection = {
+  id: string;
+  persona: string;
+  goal: string;
+  opening_message: string;
+  check: string;
+  evidence: string;
+  outcome: "fixed" | "dropped";
+  effect: string;
+  restored: boolean;
+  can_restore: boolean;
 };
 type Doing = {
   goal_index: number;
@@ -273,6 +289,15 @@ export function PlanPreview({
     setPhase("error");
   }
 
+  async function restore(id: string): Promise<string | null> {
+    if (!planId) return null;
+    const back = await api.call<{ plan: PlanView }>("POST", `/quick-scans/plan/${planId}/restore`, { id });
+    if (!alive.current) return null;
+    if (!back.ok) return problemFor(back.status, back.data);
+    setPlan(back.data.plan);
+    return null;
+  }
+
   const working = phase === "working";
   const shown = phase === "idle" || phase === "error" ? [] : items;
   const tests = shown.filter((i) => i.kind === "test").length;
@@ -365,7 +390,7 @@ export function PlanPreview({
           </div>
         </div>
       )}
-      {plan && <Summary plan={plan} rules={rules} environment={environment} server={server} />}
+      {plan && <Summary plan={plan} rules={rules} environment={environment} server={server} onRestore={restore} />}
     </div>
   );
 }
@@ -396,12 +421,16 @@ function Summary({
   rules,
   environment,
   server,
+  onRestore,
 }: {
   plan: PlanView;
   rules: string[];
   environment: "staging" | "production";
   server: string;
+  onRestore: (id: string) => Promise<string | null>;
 }) {
+  const [restoreProblem, setRestoreProblem] = useState<string | null>(null);
+  const fixing = plan.checks.fixed + plan.checks.dropped;
   return (
     <div className="planview">
       <p className="plan-head">
@@ -412,6 +441,49 @@ function Summary({
         <div className="notice" role="status">
           {plan.warning}
         </div>
+      )}
+      {plan.check_problem && (
+        <div className="notice" role="status">
+          The rule writer could not answer for {plan.checks.unchecked} {plan.checks.unchecked === 1 ? "test" : "tests"}, so the AI judge alone will decide {plan.checks.unchecked === 1 ? "it" : "them"}.
+        </div>
+      )}
+      {fixing > 0 && (
+        <details className="covered fixes">
+          <summary>
+            {fixing} {fixing === 1 ? "test needed" : "tests needed"} fixing: {plan.checks.fixed} fixed automatically,{" "}
+            {plan.checks.dropped} left out. See why
+          </summary>
+          <ul>
+            {plan.rejections.map((r) => (
+              <li key={r.id}>
+                <b>{r.persona}:</b> “{r.opening_message}”
+                <br />
+                <span className="hint">
+                  {r.check}. {r.evidence} {r.effect}
+                </span>
+                {r.can_restore && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={async () => setRestoreProblem(await onRestore(r.id))}
+                  >
+                    Put it back
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {restoreProblem && (
+            <div className="alert" role="alert">
+              {restoreProblem}
+            </div>
+          )}
+        </details>
+      )}
+      {plan.checks.judge_only > 0 && (
+        <p className="hint">
+          {plan.checks.judge_only} {plan.checks.judge_only === 1 ? "test has" : "tests have"} no text rule (no words can prove it), so the AI judge decides {plan.checks.judge_only === 1 ? "it" : "them"} using what it should look for.
+        </p>
       )}
       {plan.rules_covered.length > 0 && (
         <details className="covered">

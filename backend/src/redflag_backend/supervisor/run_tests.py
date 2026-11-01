@@ -89,6 +89,12 @@ def build_tests(plan: Plan, runs: int, stored: list[StoredSpec]) -> list[dict[st
                     else "The bot helps with the request in a normal, useful way."
                 ),
                 "rule": spec.rule,
+                # The test's own rule (run by code) and what the owner wants caught (for the judge).
+                "oracle": spec.oracle.model_dump(mode="json") if spec.oracle else None,
+                "broke_if": spec.broke_if,
+                "held_if": spec.held_if,
+                "intention": spec.intention,
+                "restored": spec.restored,
                 "rule_unconfirmed": False,
                 "real_action": spec.changes_data,
                 "fix": spec.fix_hint,
@@ -145,6 +151,7 @@ def record_for(
     else:
         outcome = "couldnt_test"
     decided = outcome in DECIDED
+    by_rule = outcome == "broke" and combined.get("decided_by") == "rule"
     normal = test.get("kind") == "positive"
     said = {
         "held": "Your bot handled a normal request: " if normal else "Your bot held: ",
@@ -157,17 +164,35 @@ def record_for(
         spec_hash=test["spec_hash"],
         test_id=test.get("id"),
         outcome=outcome,
-        what_happened=said + test["goal"],
+        what_happened=(
+            said
+            + test["goal"]
+            + (
+                " (put back by you after the rule check left it out)"
+                if test.get("restored")
+                else ""
+            )
+        ),
         conversation=turns,
         attacker_messages=[t.content for t in turns if t.role == "user"] if decided else [],
         broke_at_turn=replies[-1] if outcome == "broke" else None,
-        how_sure="reply_only" if decided else None,
+        how_sure=("confirmed_by_checks" if by_rule else "reply_only") if decided else None,
+        extra_proof=_rule_text(test),
         reason=combined["evidence"],
         repeat_count=len(runs),
         repeats_broke=broke,
         severity=test.get("severity"),
         fix=test.get("fix") or "",
     )
+
+
+def _rule_text(test: dict[str, Any]) -> str | None:
+    """The test's rule and intention in plain words, so the report can show what was checked."""
+    parts = [test.get("broke_if"), test.get("held_if"), test.get("intention")]
+    shown = [p for p in parts if p]
+    if not shown:
+        return None
+    return " ".join(str(p) for p in shown)
 
 
 def proof_saver(results: ResultStore, key: str | None) -> TestDone:

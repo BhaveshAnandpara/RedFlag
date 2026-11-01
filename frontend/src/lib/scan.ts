@@ -34,6 +34,8 @@ export type Proof = {
   spec_version: number;
   spec_hash: string;
   compared_with_last: "new" | "still_broken" | "fixed" | "first_run" | null;
+  // The test's rule and what it wants caught, in plain words: what was checked.
+  rule?: string | null;
 };
 
 export type ScanResult = {

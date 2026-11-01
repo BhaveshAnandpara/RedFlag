@@ -86,10 +86,13 @@ class JudgeRequest:
 
 @dataclass(frozen=True)
 class JudgeVerdict:
-    status: Literal["pass", "fail", "unavailable"]
+    # "disputed": the test's own rule said Broke but the judge read the reply as fine.
+    status: Literal["pass", "fail", "unavailable", "disputed"]
     reason: str
     model: str | None = None
     provider: str | None = None
+    # True when the test's own rule, checked by code, decided it (the judge only confirmed).
+    by_rule: bool = False
 
 
 class Judge:
