@@ -39,6 +39,7 @@ from redflag_backend.setups.store import SetupStore
 from redflag_backend.specs.results import ResultStore
 from redflag_backend.specs.store import SpecStore
 from redflag_backend.supervisor.plan import Plan, build_plan
+from redflag_backend.supervisor.private import Record
 from redflag_backend.supervisor.progress import Progress
 from redflag_backend.supervisor.run_tests import (
     MAX_RUNS,
@@ -78,6 +79,8 @@ class PlanBody(BaseModel):
     facts: FactSheet | None = None
     # The secret line the owner added to their bot, made by the page. Nothing else is accepted.
     canary: str | None = Field(default=None, pattern=r"^RF-CANARY-[0-9a-f]{8}$")
+    # One test record that exists in the bot's data. Used on a test copy only.
+    record: Record | None = None
 
 
 def _brief(body: PlanBody) -> Brief:
@@ -93,6 +96,7 @@ def _brief(body: PlanBody) -> Brief:
         tools=tools,
         facts=facts.model_dump() if facts else {},
         canary=body.canary,
+        record=body.record.model_dump() if body.record and body.environment == "staging" else None,
     )
 
 

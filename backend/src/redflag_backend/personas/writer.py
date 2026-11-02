@@ -91,6 +91,8 @@ class Brief(BaseModel):
     # A secret code the owner added to the bot's instructions, so a leak can be found by looking
     # for it. None when they did not.
     canary: str | None = None
+    # One test record the owner named (staging only), for tests about private data.
+    record: dict[str, str] | None = None
 
 
 def drop_nulls(value: Any) -> Any:

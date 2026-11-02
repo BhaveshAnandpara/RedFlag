@@ -23,6 +23,7 @@ from redflag_backend.specs.spec import TestSpec
 from redflag_backend.supervisor.canaries import can_plant, can_plant_secret, plant, plant_secret
 from redflag_backend.supervisor.disguise import copies
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
+from redflag_backend.supervisor.private import Record, record_tests
 from redflag_backend.supervisor.progress import Progress
 from redflag_backend.supervisor.similar import alike, fingerprint
 from redflag_backend.validator.loop import DEFAULT_REWRITES, Rejection, Stats, check_goal
@@ -300,6 +301,7 @@ async def build_plan(
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
     planted = _plant_words(planned, progress, brief.canary)
+    planted += _add_private_tests(planned, brief, progress)
     rejections, checks, check_problem = await _check_rules(
         llm,
         brief,
@@ -400,6 +402,33 @@ async def _check_rules(
         else:
             progress.say("Every rule passed its checks.")
     return rejections, totals, problem
+
+
+def _add_private_tests(planned: list[PlannedGoal], brief: Brief, progress: Progress | None) -> int:
+    """The tests about a record the owner named, added to the private-data goal. No record, no
+    tests. No model is called."""
+    if not brief.record:
+        return 0
+    goal = next((p for p in planned if p.goal.risk == "LLM02" and not p.goal.background), None)
+    if goal is None:
+        return 0
+    made = record_tests(Record.model_validate(brief.record), goal.goal.rule)
+    goal.specs += made
+    if progress is not None and made:
+        for spec in made:
+            persona_id = next(p.id for p in PERSONAS.values() if p.name == spec.persona)
+            progress.test(
+                persona_id,
+                spec.persona,
+                f"{goal.goal.question} (test record)",
+                spec.opening_message,
+                False,
+            )
+        progress.say(
+            f"{len(made)} tests ask for your test record's details, decided by whether the "
+            "detail shows up."
+        )
+    return len(made)
 
 
 def _plant_words(

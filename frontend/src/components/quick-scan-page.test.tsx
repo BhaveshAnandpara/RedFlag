@@ -606,6 +606,56 @@ describe("the step 2 chat", () => {
     expect(screen.queryByText(/Type your answer first/)).not.toBeInTheDocument();
   });
 
+  it("fills the test record from the chat, and sends it with the plan only when both parts are there", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/plan"] = () => json(202, { plan_id: "p1" });
+    backend.overrides["GET /quick-scans/plan/p1"] = () =>
+      json(200, { status: "running", events: [], next: 0, total: 0, goal_index: 0, goal_total: 0, waiting: false, seconds_left: 0 });
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(
+        200,
+        said({
+          done: true,
+          purpose: "A support bot for Acme Bank.",
+          bot_type: "chatbot",
+          record: { who: "Account 100234", secret: "$4,812.55" },
+        }),
+      );
+    const user = await confirmedAnswerOnChat(backend);
+    await send(user, "Account 100234 holds $4,812.55 in our test data.");
+    await screen.findByText("Thanks. What must it never do?");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    const who = await screen.findByLabelText(/Whose data is it/);
+    const secret = screen.getByLabelText(/A private detail it holds/);
+    expect(who).toHaveValue("Account 100234");
+    expect(secret).toHaveValue("$4,812.55");
+    // too short to be a safe match: no record is sent
+    await user.clear(secret);
+    await user.type(secret, "12");
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    await waitFor(() => expect(backend.bodies("/quick-scans/plan").length).toBe(1));
+    expect(backend.bodies("/quick-scans/plan")[0]).not.toHaveProperty("record");
+    // changing the record throws the plan away, so the button is back
+    await user.clear(secret);
+    await user.type(secret, "$4,812.55");
+    await user.click(await screen.findByRole("button", { name: "Create Test Plan" }));
+    await waitFor(() => expect(backend.bodies("/quick-scans/plan").length).toBe(2));
+    expect(backend.bodies("/quick-scans/plan")[1]).toMatchObject({
+      record: { who: "Account 100234", secret: "$4,812.55" },
+    });
+  }, 20000);
+
+  it("does not overwrite a test record the person typed themselves", async () => {
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/interview"] = () =>
+      json(200, said({ record: { who: "Chat Person", secret: "from the chat" } }));
+    const user = await confirmedAnswerOnChat(backend);
+    await send(user, "hello");
+    await screen.findByText("Thanks. What must it never do?");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByLabelText(/Whose data is it/)).toHaveValue("Chat Person");
+  });
+
   it("highlights Next and says so once Redflag has what it needs", async () => {
     const backend = new FakeBackend();
     backend.overrides["POST /quick-scans/interview"] = () =>

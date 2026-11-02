@@ -144,6 +144,15 @@ export function QuickScanPage({
   // A secret line the owner can add to their bot, so a leak is found by looking for it.
   const [canary] = useState(makeCanary);
   const [plantedSecret, setPlantedSecret] = useState(false);
+  // One test record that exists in the bot's data, for tests about private data. Optional: with
+  // none, those tests are not written. The chat fills it in unless the person typed it.
+  const [recWho, setRecWho] = useState("");
+  const [recSecret, setRecSecret] = useState("");
+  const [recTyped, setRecTyped] = useState(false);
+  const testRecord =
+    env === "staging" && recWho.trim() && recSecret.trim().length >= 4
+      ? { who: recWho.trim(), secret: recSecret.trim() }
+      : null;
 
   // step 1
   const [addr, setAddr] = useState("");
@@ -376,6 +385,7 @@ export function QuickScanPage({
       purpose?: string | null;
       bot_type?: Kind | null;
       must_never?: string[];
+      record?: { who: string; secret: string } | null;
       done?: boolean;
       limit_reached: boolean;
     }>("POST", "/quick-scans/interview", {
@@ -387,6 +397,7 @@ export function QuickScanPage({
       logs: hello?.logs ?? null,
       purpose: purpose.trim(),
       rules: rules.filter((r) => r.on).map((r) => r.t),
+      record: testRecord,
     });
     setChatBusy(false);
     if (!answer.ok) {
@@ -398,6 +409,10 @@ export function QuickScanPage({
     if (said.limit_reached) setChatLimit(true);
     setChatDone(Boolean(said.done) || said.limit_reached);
     if (said.purpose && !purposeTyped) setPurpose(said.purpose);
+    if (said.record && !recTyped) {
+      setRecWho(said.record.who);
+      setRecSecret(said.record.secret);
+    }
     // The chat fills in what the person said. Their own edits win: a kind they already chose stays,
     // and a rule they switched off is not switched back on.
     const nextKind = kind ?? said.bot_type ?? null;
@@ -1089,6 +1104,50 @@ export function QuickScanPage({
                 )}
               </label>
 
+              {env === "staging" && (
+                <div>
+                  <div className="lab" style={{ marginBottom: 6 }}>
+                    <span>Test record (optional)</span>
+                    <small>for tests about private data</small>
+                  </div>
+                  <p className="hint">
+                    If your bot looks up customers&apos; data, name one test record that exists in it. We then ask your
+                    bot for that person&apos;s details as a stranger, and look for the detail in its replies. Use test
+                    data only, never a real person&apos;s. Leave it empty to skip these tests.
+                  </p>
+                  <label className="f">
+                    <span className="lab">
+                      <span>Whose data is it? (an ID or a name)</span>
+                    </span>
+                    <input
+                      className="in"
+                      id="record-who"
+                      placeholder="Account 100234"
+                      value={recWho}
+                      onChange={(e) => {
+                        setRecWho(e.target.value);
+                        setRecTyped(true);
+                      }}
+                    />
+                  </label>
+                  <label className="f">
+                    <span className="lab">
+                      <span>A private detail it holds (4 or more characters)</span>
+                    </span>
+                    <input
+                      className="in"
+                      id="record-secret"
+                      placeholder="$4,812.55"
+                      value={recSecret}
+                      onChange={(e) => {
+                        setRecSecret(e.target.value);
+                        setRecTyped(true);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
               {kind && (
                 <div>
                   <div className="lab" style={{ marginBottom: 6 }}>
@@ -1225,6 +1284,7 @@ export function QuickScanPage({
                 facts={hello?.recon?.facts ?? null}
                 server={buildEndpoint(fields).url}
                 canary={plantedSecret ? canary : null}
+                record={testRecord}
                 onBusy={setPlanning}
                 onPlan={setReadyPlan}
                 reset={planReset}
