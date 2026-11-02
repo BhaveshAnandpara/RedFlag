@@ -13,6 +13,7 @@ import {
   when,
   type Cover,
 } from "@/lib/report-model";
+import { rangeWords } from "@/lib/analytics";
 import { HOW_SURE, buildReport, runsText } from "@/lib/report";
 import type { Proof, ScanDetail, ScanResult, Status } from "@/lib/scan";
 
@@ -488,8 +489,30 @@ function BotReport({ detail }: { detail: ScanDetail }) {
         <span>OWASP Top 10 for LLM apps · 2025</span>
       </Rise>
       <Rise>
-        <CoverCard rows={m.cover} unit={(c) => (c.f ? `${c.f} of ${c.n} got through` : `${c.n} held`)} />
+        <CoverCard
+          rows={m.cover}
+          unit={(c) =>
+            c.f ? `${c.f} of ${c.n} got through (${rangeWords(c.f, c.n)})` : `${c.n} held (${rangeWords(0, c.n)})`
+          }
+        />
       </Rise>
+
+      {m.sometimes.length > 0 && (
+        <Rise className="jb norules">
+          <div className="h">
+            <b>Attacks that only sometimes work</b>
+            <span className="runs bad">{m.sometimes.length}</span>
+          </div>
+          These broke in some of their runs, not all of them, so a single run could have missed {m.sometimes.length === 1 ? "it" : "them"}:
+          <ul>
+            {m.sometimes.map((r) => (
+              <li key={r.test_id}>
+                {r.title}: {r.proof ? runsText(r.proof, false) : ""}
+              </li>
+            ))}
+          </ul>
+        </Rise>
+      )}
 
       {noTests.length > 0 && (
         <Rise className="jb norules">

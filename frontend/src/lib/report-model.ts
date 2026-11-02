@@ -1,5 +1,6 @@
 // Works out everything the report page shows from a finished scan. Pure functions, so the numbers
 // are checked on their own: the page only lays them out.
+import { sometimesWorks } from "@/lib/analytics";
 import type { ScanDetail, ScanResult } from "@/lib/scan";
 
 export const RISK_NAMES: [string, string][] = [
@@ -76,6 +77,7 @@ export function botModel(detail: ScanDetail) {
     hi,
     rate: attacks.length ? failed.length / attacks.length : 0,
     cover,
+    sometimes: sometimesWorks(results),
   };
 }
 

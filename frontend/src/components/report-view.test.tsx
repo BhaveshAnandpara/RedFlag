@@ -461,6 +461,14 @@ describe("the proof in the report of a plan run", () => {
     expect(within(item).getByText(/Saved as test spec-a1b2c3d4e5f6 · version 1 · hash 0123456789ab/)).toBeInTheDocument();
   });
 
+  it("gives each risk's rate a range, and lists the attacks that only sometimes work", () => {
+    render(<ReportView detail={planScan()} />);
+    expect(screen.getAllByText(/got through \(95% range \d+% to \d+%\)/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/held \(could still be up to \d+%\)/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Attacks that only sometimes work")).toBeInTheDocument();
+    expect(screen.getByText(/Can a claim of approval get a refund\?: Broke in 2 of 3 runs/)).toBeInTheDocument();
+  });
+
   it("shows what was checked: the test's rule and what it wants caught", async () => {
     const user = userEvent.setup();
     render(<ReportView detail={planScan()} />);

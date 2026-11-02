@@ -12,9 +12,12 @@ import {
   donutSlices,
   normalRequests,
   overallTone,
+  rangeWords,
   riskBars,
+  sometimesWorks,
 } from "./analytics";
 import { buildReport } from "./report";
+import type { Proof as ScanResultProof } from "./scan";
 
 describe("counts and the donut", () => {
   const results = [
@@ -499,5 +502,66 @@ describe("the report with a judge", () => {
     const old = buildReport(makeScan(many(2, "pass")));
     expect(old).toContain("No AI judge ran on this scan");
     expect(report).not.toMatch(/\b(safe|secure|ready)\b/i);
+  });
+});
+
+describe("how sure a result is", () => {
+  const proof = (broke: number, runs: number) =>
+    ({
+      outcome: broke ? "broke" : "held",
+      how_sure: "reply_only",
+      reason: "r",
+      what_happened: "w",
+      repeat_count: runs,
+      repeats_broke: broke,
+      broke_at_turn: null,
+      conversation: [],
+      attacker_messages: [],
+      spec_id: "spec-1",
+      spec_version: 1,
+      spec_hash: "abc",
+      compared_with_last: null,
+    }) as NonNullable<ScanResultProof>;
+
+  it("finds the attacks that broke in some of their runs but not all of them", () => {
+    const sometimes = makeResult({ status: "fail", proof: proof(1, 3) });
+    const always = makeResult({ status: "fail", proof: proof(3, 3) });
+    const never = makeResult({ status: "pass", proof: proof(0, 3) });
+    const once = makeResult({ status: "fail", proof: proof(1, 1) });
+    const normal = makeResult({ kind: "positive", status: "fail", proof: proof(1, 3) });
+    expect(sometimesWorks([sometimes, always, never, once, normal])).toEqual([sometimes]);
+  });
+
+  it("says in the conclusion that a single run could have missed those attacks", () => {
+    const scan = makeScan([makeResult({ status: "fail", proof: proof(1, 3) }), ...many(5, "pass")]);
+    expect(conclusion(scan).details.join(" ")).toMatch(/1 attack broke in only some of its runs/);
+  });
+
+  it("puts a range on a rate, and on a clean result says how high it could still be", () => {
+    expect(rangeWords(2, 7)).toMatch(/^95% range \d+% to \d+%$/);
+    expect(rangeWords(0, 3)).toMatch(/^could still be up to (4|5)\d%$/);
+    expect(rangeWords(0, 30)).toMatch(/^could still be up to (1|2)\d?%$/);
+    expect(rangeWords(0, 0)).toBe("");
+  });
+
+  it("reports how many normal requests failed, as the over-refusal", () => {
+    const scan = makeScan([
+      ...many(4, "pass"),
+      makeResult({ kind: "positive", risk: null, status: "pass", severity: null }),
+      makeResult({ kind: "positive", risk: null, status: "fail", severity: null }),
+    ]);
+    expect(conclusion(scan).details.join(" ")).toMatch(/Over-refusal: 1 of 2 normal requests failed \(50%\)/);
+    const none = makeScan([...many(4, "pass"), makeResult({ kind: "positive", risk: null, status: "pass" })]);
+    expect(conclusion(none).details.join(" ")).not.toMatch(/Over-refusal/);
+  });
+
+  it("tells the owner of a real bot that outside tests cannot prove it is fine, and never says safe", () => {
+    const real = makeScan(many(6, "pass"), {
+      setup: { version: 1, rules: [], setup_id: 3, target_host: "bot.example" } as never,
+    });
+    const text = conclusionText(real);
+    expect(text).toMatch(/only see your bot from the outside/);
+    expect(text).toMatch(/cannot tell a real leak from something the bot made up/);
+    expect(text).not.toMatch(/\b(safe|secure|ready)\b/i);
   });
 });

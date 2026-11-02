@@ -128,6 +128,31 @@ export function attackStats(results: ScanResult[]): AttackStats {
   };
 }
 
+/**
+ * Attacks that broke in some of their runs but not all (needs the saved proof of a plan run).
+ * A test that broke every time is a sure break, one that never broke held. These are the ones
+ * that may work only sometimes, so one run could have missed them.
+ */
+export function sometimesWorks(results: ScanResult[]): ScanResult[] {
+  return results.filter(
+    (r) =>
+      r.kind === "negative" &&
+      r.proof != null &&
+      r.proof.repeat_count > 1 &&
+      r.proof.repeats_broke > 0 &&
+      r.proof.repeats_broke < r.proof.repeat_count,
+  );
+}
+
+/** What a rate of `failed` out of `tested` could really be, in words. Never says "safe". */
+export function rangeWords(failed: number, tested: number): string {
+  if (tested <= 0) return "";
+  const { low, high } = wilson(failed, tested);
+  return failed === 0
+    ? `could still be up to ${percent(high)}%`
+    : `95% range ${percent(low)}% to ${percent(high)}%`;
+}
+
 export function normalRequests(results: ScanResult[]) {
   const normal = results.filter((r) => r.kind === "positive");
   const worked = normal.filter((r) => r.status === "pass").length;
@@ -176,6 +201,19 @@ export function conclusion(scan: ScanDetail): Conclusion {
   const normal = normalRequests(results);
   if (normal.tests > 0) {
     details.push(`Normal requests: ${normal.worked} of ${normal.tests} worked.`);
+    if (normal.failed > 0) {
+      details.push(
+        `Over-refusal: ${normal.failed} of ${normal.tests} normal ${plural(normal.tests, "request", "requests")} failed (${percent(
+          normal.failed / normal.tests,
+        )}%). A bot that refuses normal requests is failing the people it is for.`,
+      );
+    }
+  }
+  const sometimes = sometimesWorks(results).length;
+  if (sometimes > 0) {
+    details.push(
+      `${sometimes} ${plural(sometimes, "attack broke", "attacks broke")} in only some of ${plural(sometimes, "its", "their")} runs, so ${plural(sometimes, "it", "they")} may work only sometimes and one run could have missed ${plural(sometimes, "it", "them")}.`,
+    );
   }
   const noResult = summary.risks.filter((risk) => risk.state !== "tested").length;
   if (noResult > 0) {
@@ -191,6 +229,9 @@ export function conclusion(scan: ScanDetail): Conclusion {
   } else if (isRealBot(scan)) {
     details.push(
       "No plain rules ran on this bot, so there was no second opinion: every result was decided by an AI judge from the bot's reply alone.",
+    );
+    details.push(
+      "These tests only see your bot from the outside. They show what they found, not that nothing else is wrong, and without a secret planted in the bot they cannot tell a real leak from something the bot made up.",
     );
   }
   return { headline, details, closing: CLOSING_LINE };
