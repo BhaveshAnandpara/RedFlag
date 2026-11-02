@@ -95,6 +95,7 @@ def build_tests(plan: Plan, runs: int, stored: list[StoredSpec]) -> list[dict[st
                 "broke_if": spec.broke_if,
                 "held_if": spec.held_if,
                 "intention": spec.intention,
+                "canaries": spec.setup.canaries,
                 "technique": DISGUISES[spec.technique].name if spec.technique else None,
                 "rule_unconfirmed": False,
                 "real_action": spec.changes_data,

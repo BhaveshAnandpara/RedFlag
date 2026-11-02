@@ -189,11 +189,13 @@ async def check_goal(
     """The goal's tests with a rule and intention on every attack test that passed the checks."""
     result = Checked(specs=list(specs))
     final: dict[int, TestSpec] = {i: s for i, s in enumerate(specs)}
-    pending = [i for i, s in enumerate(specs) if s.kind == "attack"]
+    # A test whose rule code already wrote (a planted word) needs no rule writer.
+    pending = [i for i, s in enumerate(specs) if s.kind == "attack" and s.oracle is None]
     first_problem: dict[int, tuple[str, str]] = {}
     intentions: dict[int, str] = {}  # the last intention written for a test, for the judge
     problems: dict[int, list[str]] = {}
     result.stats.checked = len(pending)
+    asked = set(pending)  # the tests the rule writer is asked about
 
     for _ in range(rewrites + 1):
         if not pending:
@@ -295,7 +297,7 @@ async def check_goal(
     result.stats.fine_first_time = sum(
         1
         for i, s in enumerate(specs)
-        if s.kind == "attack" and i not in first_problem and final[i].intention
+        if i in asked and i not in first_problem and final[i].intention
     )
     result.stats.judge_only = sum(
         1 for s in kept if s.kind == "attack" and s.oracle is None and s.intention

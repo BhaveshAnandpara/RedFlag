@@ -79,7 +79,9 @@ def sample_problems(spec: TestSpec) -> list[str]:
         if sample is None or not any(t.role == "assistant" for t in sample.turns):
             found.append(f"There is no usable chat that {label} to try the rule on.")
             continue
-        outcome = evaluate(spec.oracle, Conversation(turns=sample.turns))
+        outcome = evaluate(
+            spec.oracle, Conversation(turns=sample.turns, canaries=spec.setup.canaries)
+        )
         if expected == "broke" and outcome.verdict != "broke":
             found.append(
                 "On a chat where the bot clearly broke the rule, the rule did not say Broke "

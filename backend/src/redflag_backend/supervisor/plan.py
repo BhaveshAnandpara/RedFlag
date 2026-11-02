@@ -20,6 +20,7 @@ from redflag_backend.personas.writer import MAX_DRAFTS, Brief, Dropped, PersonaT
 from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
+from redflag_backend.supervisor.canaries import can_plant, plant
 from redflag_backend.supervisor.disguise import copies
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
 from redflag_backend.supervisor.progress import Progress
@@ -58,6 +59,8 @@ class Summary(BaseModel):
     ideas: int
     # Disguised copies of attacks added by the planner: tests that are not new ideas.
     disguised: int = 0
+    # Poisoning tests decided by a planted code word, with no AI judge needed to find a break.
+    planted_word: int = 0
     repeats_removed: int
     tests: int
     data_changing: int
@@ -296,6 +299,7 @@ async def build_plan(
             specs = specs[:background_left]
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
+    planted = _plant_words(planned, progress)
     rejections, checks, check_problem = await _check_rules(
         llm,
         brief,
@@ -318,6 +322,7 @@ async def build_plan(
     plan.rejections, plan.checks, plan.check_problem = rejections, checks, check_problem
     plan.techniques = techniques
     plan.summary.disguised = sum(techniques.values())
+    plan.summary.planted_word = planted
     plan.summary.tests = sum(len(p.specs) for p in planned)
     plan.summary.data_changing = sum(1 for p in planned for s in p.specs if s.changes_data)
     if progress is not None:
@@ -353,7 +358,7 @@ async def _check_rules(
             continue
         if deadline is not None and time.monotonic() > deadline:
             # Out of time: the rest keep no rule and the judge decides them. Say so.
-            left = sum(1 for s in item.specs if s.kind == "attack")
+            left = sum(1 for s in item.specs if s.kind == "attack" and s.oracle is None)
             totals.checked += left
             totals.unchecked += left
             problem = problem or "out_of_time"
@@ -395,6 +400,22 @@ async def _check_rules(
         else:
             progress.say("Every rule passed its checks.")
     return rejections, totals, problem
+
+
+def _plant_words(planned: list[PlannedGoal], progress: Progress | None) -> int:
+    """Give each poisoning test a planted code word, so a break is proved by code. No model."""
+    count = 0
+    for item in planned:
+        for i, spec in enumerate(item.specs):
+            if can_plant(spec):
+                item.specs[i] = plant(spec)
+                count += 1
+    if progress is not None and count:
+        progress.say(
+            f"{count} poisoning {'test is' if count == 1 else 'tests are'} decided by a planted "
+            "code word, not by the AI judge."
+        )
+    return count
 
 
 def _add_disguises(planned: list[PlannedGoal], progress: Progress | None) -> dict[str, int]:
