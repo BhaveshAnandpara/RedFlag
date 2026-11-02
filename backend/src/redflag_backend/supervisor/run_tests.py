@@ -8,7 +8,7 @@ spec is saved and locked first, so a result can say exactly which test it proves
 import asyncio
 from typing import Any
 
-from redflag_backend.attacks.disguises import DISGUISES
+from redflag_backend.attacks.disguises import technique_name
 from redflag_backend.scan.target_runner import TestDone, representative
 from redflag_backend.specs.contract import DECIDED, Outcome, ResultRecord
 from redflag_backend.specs.oracle import Turn
@@ -96,7 +96,8 @@ def build_tests(plan: Plan, runs: int, stored: list[StoredSpec]) -> list[dict[st
                 "held_if": spec.held_if,
                 "intention": spec.intention,
                 "canaries": spec.setup.canaries,
-                "technique": DISGUISES[spec.technique].name if spec.technique else None,
+                "technique": technique_name(spec.technique) if spec.technique else None,
+                "escalate_to": spec.escalate_to,
                 "rule_unconfirmed": False,
                 "real_action": spec.changes_data,
                 "fix": spec.fix_hint,

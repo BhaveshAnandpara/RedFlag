@@ -13,7 +13,7 @@ import time
 
 from pydantic import BaseModel, Field
 
-from redflag_backend.attacks.disguises import DISGUISES
+from redflag_backend.attacks.disguises import technique_name
 from redflag_backend.personas.merge import NEEDS_TEST_COPY, Count, Skipped, needs_test_copy
 from redflag_backend.personas.registry import PERSONAS
 from redflag_backend.personas.writer import MAX_DRAFTS, Brief, Dropped, PersonaTests, write_tests
@@ -21,8 +21,10 @@ from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
 from redflag_backend.supervisor.canaries import can_plant, can_plant_secret, plant, plant_secret
-from redflag_backend.supervisor.disguise import copies
+from redflag_backend.supervisor.crescendo import MAX_CRESCENDO, crescendo_copy
+from redflag_backend.supervisor.disguise import can_disguise, copies
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
+from redflag_backend.supervisor.languages import MAX_TRANSLATED, translations
 from redflag_backend.supervisor.private import Record, record_tests
 from redflag_backend.supervisor.progress import Progress
 from redflag_backend.supervisor.similar import (
@@ -336,7 +338,11 @@ async def build_plan(
         None if check_seconds is None else began + check_seconds,
         rewrites,
     )
-    techniques = _add_disguises(planned, progress)
+    techniques = await _add_translations(llm, planned, setup_id, progress)
+    for name, number in {**_add_crescendo(planned, progress)}.items():
+        techniques[name] = techniques.get(name, 0) + number
+    for name, number in _add_disguises(planned, progress).items():
+        techniques[name] = techniques.get(name, 0) + number
     if progress is not None:
         progress.working_on("Putting the plan together")
         removed = len(book.removed)
@@ -541,6 +547,72 @@ def _plant_words(
     return count
 
 
+async def _add_translations(
+    llm: SetupLLM, planned: list[PlannedGoal], setup_id: int, progress: Progress | None
+) -> dict[str, int]:
+    """A few plain attacks, from different goals, translated into other languages in one model
+    call: filters that hold in English are often weaker elsewhere."""
+    picks: list[tuple[PlannedGoal, TestSpec]] = []
+    for item in planned:  # scariest goal first
+        spec = next((s for s in item.specs if not item.goal.background and can_disguise(s)), None)
+        if spec is not None:
+            picks.append((item, spec))
+        if len(picks) == MAX_TRANSLATED:
+            break
+    if not picks:
+        return {}
+    if progress is not None:
+        progress.working_on("Writing a few attacks in other languages")
+        progress.say("Asking a translator for a few attacks in other languages…")
+    made, failed = await translations(
+        llm,
+        [spec for _, spec in picks],
+        setup_id,
+        progress.patience if progress else None,
+    )
+    counts: dict[str, int] = {}
+    for index, spec in made:
+        item = picks[index][0]
+        item.specs.append(spec)
+        name = technique_name(spec.technique or "")
+        counts[name] = counts.get(name, 0) + 1
+        _show(progress, item.goal, [spec], None)
+    if progress is not None:
+        progress.say(
+            f"Added {len(made)} {'attack' if len(made) == 1 else 'attacks'} in other languages."
+            if made
+            else "The translator could not answer, so no attacks in other languages were added."
+            if failed
+            else "No translation was usable, so none was added."
+        )
+    return counts
+
+
+def _add_crescendo(planned: list[PlannedGoal], progress: Progress | None) -> dict[str, int]:
+    """For the most serious goals, a copy of an attack that starts harmlessly and works up to the
+    request over several turns. No model is called here; the live attacker does it in the run."""
+    counts: dict[str, int] = {}
+    made = 0
+    for item in planned:  # scariest goal first
+        if item.goal.background or made == MAX_CRESCENDO:
+            continue
+        original = next((s for s in item.specs if can_disguise(s)), None)
+        if original is None:
+            continue
+        spec = crescendo_copy(original, made)
+        made += 1
+        item.specs.append(spec)
+        name = technique_name(spec.technique or "")
+        counts[name] = counts.get(name, 0) + 1
+        _show(progress, item.goal, [spec], None)
+    if progress is not None and made:
+        progress.say(
+            f"Added {made} gradual {'conversation' if made == 1 else 'conversations'} that work "
+            "up to the request over several turns."
+        )
+    return counts
+
+
 def _add_disguises(planned: list[PlannedGoal], progress: Progress | None) -> dict[str, int]:
     """Add disguised copies of some attacks (see `supervisor/disguise.py`). No model is called."""
     counts: dict[str, int] = {}
@@ -549,7 +621,7 @@ def _add_disguises(planned: list[PlannedGoal], progress: Progress | None) -> dic
         made, position = copies(item.specs, position)
         item.specs += made
         for spec in made:
-            name = DISGUISES[spec.technique or ""].name
+            name = technique_name(spec.technique or "")
             counts[name] = counts.get(name, 0) + 1
             if progress is not None:
                 persona_id = next(p.id for p in PERSONAS.values() if p.name == spec.persona)

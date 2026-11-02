@@ -115,6 +115,18 @@ class Writers(RoleModel):
             return self.write_rules(system, request.messages[1].content)
         if role == "rule-check":
             return self.check_meaning(request.messages[1].content)
+        if role == "translator":
+            if "translator" in self.broken:
+                return LLMAnswer("not json", "writers", 10, 5)
+            found = re.search(
+                r"<<<THE MESSAGES (\w+)\n(.*?)\n\1>>>",
+                request.messages[1].content,
+                re.DOTALL,
+            )
+            assert found is not None
+            wanted = json.loads(found.group(2))
+            done = [{"n": m["n"], "text": f"[{m['language']}] {m['text']}"} for m in wanted]
+            return LLMAnswer(json.dumps({"translations": done}), "writers", 10, 5)
         if role == "planner":
             text = self.goals if isinstance(self.goals, str) else json.dumps({"goals": self.goals})
             return LLMAnswer(text or "not json", "writers", 10, 5)

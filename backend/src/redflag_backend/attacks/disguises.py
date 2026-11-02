@@ -164,6 +164,28 @@ DISGUISES: dict[str, Strategy] = {
 }
 
 
+# Attacks written in another language (a model translates them) and the gradual conversation.
+LANGUAGES = {
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "hi": "Hindi",
+    "pt": "Portuguese",
+    "it": "Italian",
+}
+LANGUAGE_PREFIX = "lang_"
+CRESCENDO = "crescendo"
+
+
+def technique_name(technique_id: str) -> str:
+    """A technique in plain words, for the page and the report."""
+    if technique_id == CRESCENDO:
+        return "Gradual escalation"
+    if technique_id.startswith(LANGUAGE_PREFIX):
+        return f"Another language ({LANGUAGES[technique_id.removeprefix(LANGUAGE_PREFIX)]})"
+    return DISGUISES[technique_id].name
+
+
 def disguise(technique_id: str, prompt: str) -> str:
     """The prompt dressed up by a technique. An unknown technique is an error, never a no-op."""
     return DISGUISES[technique_id].apply(prompt)

@@ -122,18 +122,21 @@ def test_at_one_run_every_test_runs_once_and_more_runs_run_attacks_again() -> No
         endpoint = refusing()
         with run_client(GaveInJudge(), endpoint, roles=small()) as (client, _, _):
             plan_id = made_plan(client)
+            plan = client.get(f"/quick-scans/plan/{plan_id}?after=9999").json()["plan"]
             scan = ran(client, run_plan(client, plan_id, runs=setting))
         attacks, normals = counts(scan)
         assert attacks > 0 and normals > 0
-        # a hello, then each attack's runs times its two turns, then one message per normal test.
-        # The writers here ask for at most two runs of an attack, so a setting of 3 runs it twice.
-        runs = 1 if setting == 1 else 2
-        assert len(endpoint.requests) == 1 + attacks * runs * 2 + normals
+        # a hello, then every test as many times and turns as the plan says. A refusing bot never
+        # ends a conversation early, so the plan's own count is the number sent. The writers here
+        # ask for at most two runs of an attack, so a setting of 3 runs it twice; a gradual
+        # conversation runs once, over six turns.
+        assert len(endpoint.requests) == 1 + plan["summary"]["messages_by_runs"][setting - 1]
         sent[setting] = len(endpoint.requests)
         shown[setting] = [r["evidence"] for r in scan["results"] if r["kind"] == "negative"]
     assert sent[3] > sent[1]
     assert not any(e.startswith("Held in all") for e in shown[1])
-    assert all(e.startswith("Held in all 2 runs.") for e in shown[3])
+    # a gradual conversation runs once, so it has no "all runs" summary
+    assert all(e.startswith(("Held in all 2 runs.", "AI judge (PASS)")) for e in shown[3])
 
 
 def test_a_normal_request_is_checked_once_whatever_the_runs() -> None:
@@ -171,7 +174,10 @@ def test_one_break_is_proof_and_the_result_says_how_often_it_broke() -> None:
         scan = ran(client, run_plan(client, plan_id, runs=3))
     attacks = [r for r in scan["results"] if r["kind"] == "negative"]
     assert attacks and all(r["status"] == "fail" for r in attacks)
-    assert all(r["evidence"].startswith("Broke in 2 of 2 runs.") for r in attacks)
+    # a gradual conversation runs once, so it has no "of N runs" summary
+    assert all(
+        r["evidence"].startswith(("Broke in 2 of 2 runs.", "AI judge (FAIL)")) for r in attacks
+    )
     assert all(r["status"] == "pass" for r in scan["results"] if r["kind"] == "positive")
     assert [t["role"] for t in attacks[0]["turns"]] == ["user", "assistant", "user", "assistant"]
 
@@ -224,7 +230,7 @@ def test_every_test_is_saved_as_a_locked_spec_with_a_result_that_points_at_it() 
     broke = [p.result for p in saved if p.result.outcome == "broke"]
     assert broke
     for result in broke:
-        assert (result.repeat_count, result.repeats_broke) == (2, 2)
+        assert (result.repeat_count, result.repeats_broke) in {(2, 2), (1, 1)}
         assert result.conversation[result.broke_at_turn or 0].role == "assistant"
         assert "GAVE_IN" in result.conversation[result.broke_at_turn or 0].content
         assert result.attacker_messages == [

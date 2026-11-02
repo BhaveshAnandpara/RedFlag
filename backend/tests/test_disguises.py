@@ -135,7 +135,8 @@ def test_a_plan_has_disguised_copies_of_its_attacks_across_many_techniques() -> 
     # no goal uses the same technique twice
     for item in plan.goals:
         used = [s.technique for s in item.specs if s.technique]
-        assert len(used) == len(set(used)) <= MAX_PER_GOAL
+        # the code disguises, plus at most one translation and one gradual conversation
+        assert len(used) == len(set(used)) <= MAX_PER_GOAL + 2
 
 
 def test_the_copies_add_no_model_calls() -> None:
@@ -155,7 +156,8 @@ def test_the_live_page_gets_a_card_for_each_copy() -> None:
     model = Writers(GOALS)
     plan = asyncio.run(build_plan(llm_for(model), BRIEF, progress=progress))
     cards = [e for e in progress.events if e["kind"] == "test" and "disguised:" in e["goal"]]
-    assert len(cards) == plan.summary.disguised > 0
+    assert cards and len(cards) <= plan.summary.disguised
+    assert progress.tests == plan.summary.tests  # every test in the plan was shown as a card
     assert any(e["text"].startswith("Added ") for e in progress.events if e["kind"] == "status")
 
 

@@ -65,6 +65,9 @@ class TestSpec(BaseModel):
     # The disguise the planner dressed this attack in (an id from `attacks/disguises.py`), or
     # None for a plain attack as the persona wrote it.
     technique: str | None = None
+    # For a gradual conversation: the request it works up to over its turns. The opening
+    # message is then a harmless warm-up, not the request.
+    escalate_to: str | None = None
     setup: Setup = Field(default_factory=Setup)
     opening_message: str = Field(min_length=1)
     max_turns: int = Field(default=1, ge=1, le=MAX_TURNS)
