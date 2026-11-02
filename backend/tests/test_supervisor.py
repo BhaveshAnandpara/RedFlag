@@ -24,7 +24,9 @@ from redflag_backend.supervisor.goals import Goal, make_goals, personas_for, ris
 from redflag_backend.supervisor.plan import (
     BIGGEST_FEAR_MIN,
     CRITICAL_MIN,
+    FLOOR_MIN,
     MAX_ROUNDS,
+    RISK_FLOOR,
     Plan,
     build_plan,
 )
@@ -317,12 +319,16 @@ def test_the_biggest_fear_gets_at_least_thirty_tests_and_other_critical_goals_fi
     )  # whatever was written
 
 
-def test_a_lower_goal_gets_what_was_written_without_being_topped_up() -> None:
+def test_a_lower_goal_gets_its_minimum_and_a_risk_tested_many_ways_gets_more() -> None:
     model = Writers(GOALS)
     plan = plan_for(model)
     medium = next(p for p in plan.goals if p.goal.risk == "LLM07")
-    assert medium.target == 0 and medium.note is None and 1 <= len(medium.specs) <= 12
-    assert len(model.calls["persona-fake_insider"]) >= 2  # its goals' calls, no extra rounds for it
+    assert medium.target == RISK_FLOOR["LLM07"] > FLOOR_MIN
+    assert medium.note is None and len(medium.specs) >= medium.target
+    background = [p for p in plan.goals if p.goal.background]
+    assert all(p.target == 0 for p in background)
+    high = next(p for p in plan.goals if p.goal.question == GOALS[1]["question"])
+    assert high.target == FLOOR_MIN
 
 
 def test_goals_come_out_scariest_first_with_the_background_checks_last() -> None:
@@ -350,13 +356,11 @@ def test_a_short_goal_is_topped_up_for_at_most_three_rounds_and_then_says_so() -
     model = Writers(GOALS, limit=4)  # each persona can only ever find 4 different tests
     plan = plan_for(model)
     refund = plan.goals[0]
-    assert len(refund.specs) < BIGGEST_FEAR_MIN
-    assert (
-        refund.note
-        == f"We could only find {len(refund.specs)} truly different attacks for this goal."
-    )
+    found = [s for s in refund.specs if s.technique is None]  # not the disguised copies
+    assert len(found) < BIGGEST_FEAR_MIN
+    assert refund.note == f"We could only find {len(found)} truly different attacks for this goal."
     # the first ask plus at most three top-ups, for each of its personas
-    assert len(model.calls["persona-social_engineer"]) <= 1 + MAX_ROUNDS + 4
+    assert len(model.calls["persona-social_engineer"]) <= (1 + MAX_ROUNDS) * len(plan.goals)
     assert plan.summary.repeats_removed > 0 and plan.removed
 
 
@@ -422,7 +426,9 @@ def test_the_summary_adds_up_and_counts_tests_that_change_data() -> None:
     plan = plan_for(Writers(GOALS))
     tests = [s for p in plan.goals for s in p.specs]
     assert plan.summary.tests == len(tests)
-    assert plan.summary.ideas == plan.summary.tests + plan.summary.repeats_removed
+    assert plan.summary.ideas + plan.summary.disguised == (
+        plan.summary.tests + plan.summary.repeats_removed
+    )
     assert plan.summary.data_changing == sum(1 for s in tests if s.changes_data) > 0
     assert sum(c.written for c in plan.counts) == plan.summary.ideas
 

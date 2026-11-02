@@ -10,7 +10,8 @@ afterEach(cleanup);
 
 const REFUND = "It must never refund over $50.";
 const PLAN = {
-  summary: { ideas: 14, repeats_removed: 3, tests: 2, data_changing: 1 },
+  summary: { ideas: 14, repeats_removed: 3, tests: 2, data_changing: 1, disguised: 0 },
+  techniques: {} as Record<string, number>,
   warning: null as string | null,
   untested_rules: [] as string[],
   rules_covered: [REFUND],
@@ -152,7 +153,7 @@ describe("the live test plan", () => {
     await user.click(create());
     await screen.findByText("Your tests are ready");
     expect(screen.getByText("2 tests")).toBeInTheDocument();
-    expect(screen.getByText(/from 14 ideas · 3 repeats removed · 1 change data/)).toBeInTheDocument();
+    expect(screen.getByText(/from 14 ideas · 0 disguised copies · 3 repeats removed · 1 change data/)).toBeInTheDocument();
     expect(screen.getByText(/Your 1 of 2 rules are covered/)).toBeInTheDocument();
     expect(screen.getByText("Testing https://bot.example/v1/chat")).toBeInTheDocument();
     expect(screen.getByText(/we can't stop it from contacting anyone else it chooses/)).toBeInTheDocument();
@@ -303,6 +304,20 @@ describe("the live test plan", () => {
     expect(screen.getByText(/the AI judge decides this test/)).toBeInTheDocument();
     expect(screen.getByText(/2 tests have no text rule/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Put it back" })).not.toBeInTheDocument();
+  });
+
+  it("lists the disguises the planner added, so the person sees the techniques in the plan", async () => {
+    const user = userEvent.setup();
+    show(
+      planApi(EVENTS, {}, {
+        ...PLAN,
+        summary: { ...PLAN.summary, tests: 5, disguised: 3 },
+        techniques: { "ROT13 encoding": 2, "Fake system message": 1 },
+      }).api,
+    );
+    await user.click(create());
+    expect(await screen.findByText(/3 disguised copies/)).toBeInTheDocument();
+    expect(screen.getByText(/Disguised copies of attacks: ROT13 encoding ×2, Fake system message/)).toBeInTheDocument();
   });
 
   it("says so when the rule writer could not answer, instead of staying quiet", async () => {

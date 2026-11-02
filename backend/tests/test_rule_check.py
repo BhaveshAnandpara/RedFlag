@@ -34,6 +34,11 @@ def attacks(plan: Plan) -> list[TestSpec]:
     return [s for p in plan.goals for s in p.specs if s.kind == "attack"]
 
 
+def plain(plan: Plan) -> list[TestSpec]:
+    """The attacks the personas wrote, without the disguised copies the planner added after."""
+    return [s for s in attacks(plan) if s.technique is None]
+
+
 def planned(rules: str, **more: Any) -> tuple[Plan, Writers]:
     model = Writers(ONE_GOAL, limit=4, rules=rules, **more)
     return plan_for(model), model
@@ -50,7 +55,7 @@ def test_every_attack_test_gets_a_rule_an_intention_and_two_sample_chats() -> No
         assert {s.expected for s in spec.samples} == {"broke", "held"}
         assert spec.broke_if and spec.broke_if.startswith("Broke if")
     assert plan.rejections == [] and plan.checks.to_judge == 0
-    assert plan.checks.checked == len(attacks(plan)) == plan.checks.fine_first_time
+    assert plan.checks.checked == len(plain(plan)) == plan.checks.fine_first_time
 
 
 def test_a_normal_request_is_not_given_a_rule() -> None:
@@ -138,7 +143,7 @@ def test_a_rule_with_no_intention_is_rejected() -> None:
 def test_a_test_no_text_can_prove_keeps_no_rule_and_goes_to_the_judge_with_its_intention() -> None:
     plan, _ = planned("judge_only")
     assert attacks(plan) and all(s.oracle is None and s.intention for s in attacks(plan))
-    assert plan.checks.judge_only == len(attacks(plan)) and plan.rejections == []
+    assert plan.checks.judge_only == len(plain(plan)) and plan.rejections == []
 
 
 def test_when_the_models_cannot_answer_the_tests_stay_and_the_plan_says_the_check_did_not_run() -> (
@@ -295,7 +300,7 @@ def test_a_rule_check_out_of_time_still_gives_a_plan_with_those_tests_unchecked(
     plan = asyncio.run(build_plan(llm_for(model), BRIEF, check_seconds=-1))
     assert attacks(plan) and all(s.oracle is None for s in attacks(plan))
     assert plan.check_problem == "out_of_time"
-    assert plan.checks.unchecked == plan.checks.checked == len(attacks(plan))
+    assert plan.checks.unchecked == plan.checks.checked == len(plain(plan))
     assert "rule-author" not in model.calls
 
 

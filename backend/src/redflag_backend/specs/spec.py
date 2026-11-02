@@ -62,6 +62,9 @@ class TestSpec(BaseModel):
     user_requested: str | None = None
     user_requested_actions: list[str] = Field(default_factory=list)
     strategy: str | None = None
+    # The disguise the planner dressed this attack in (an id from `attacks/disguises.py`), or
+    # None for a plain attack as the persona wrote it.
+    technique: str | None = None
     setup: Setup = Field(default_factory=Setup)
     opening_message: str = Field(min_length=1)
     max_turns: int = Field(default=1, ge=1, le=MAX_TURNS)

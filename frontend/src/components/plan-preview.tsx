@@ -25,6 +25,7 @@ type PlanView = {
     repeats_removed: number;
     tests: number;
     data_changing: number;
+    disguised?: number;
     /** The most messages a run could send to the bot, for 1 to 5 runs per attack (first is for 1). */
     messages_by_runs: number[];
   };
@@ -33,6 +34,8 @@ type PlanView = {
   untested_rules: string[];
   rules_covered: string[];
   skipped: { persona: string; goal: string; reason: string }[];
+  // The disguised copies added to the plan, by technique.
+  techniques?: Record<string, number>;
   // The rule check: what it found, and the tests it sent back.
   checks: { checked: number; fixed: number; to_judge: number; judge_only: number; unchecked: number };
   check_problem: string | null;
@@ -420,13 +423,22 @@ function Summary({
   return (
     <div className="planview">
       <p className="plan-head">
-        <b>{plan.summary.tests} tests</b> from {plan.summary.ideas} ideas · {plan.summary.repeats_removed} repeats
-        removed · {plan.summary.data_changing} change data
+        <b>{plan.summary.tests} tests</b> from {plan.summary.ideas} ideas · {plan.summary.disguised ?? 0} disguised
+        copies · {plan.summary.repeats_removed} repeats removed · {plan.summary.data_changing} change data
       </p>
       {plan.warning && (
         <div className="notice" role="status">
           {plan.warning}
         </div>
+      )}
+      {Object.keys(plan.techniques ?? {}).length > 0 && (
+        <p className="hint">
+          Disguised copies of attacks:{" "}
+          {Object.entries(plan.techniques ?? {})
+            .map(([name, count]) => `${name}${count > 1 ? ` ×${count}` : ""}`)
+            .join(", ")}
+          .
+        </p>
       )}
       {plan.check_problem && (
         <div className="notice" role="status">

@@ -13,18 +13,25 @@ import time
 
 from pydantic import BaseModel, Field
 
+from redflag_backend.attacks.disguises import DISGUISES
 from redflag_backend.personas.merge import NEEDS_TEST_COPY, Count, Skipped, needs_test_copy
 from redflag_backend.personas.registry import PERSONAS
 from redflag_backend.personas.writer import MAX_DRAFTS, Brief, Dropped, PersonaTests, write_tests
 from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
+from redflag_backend.supervisor.disguise import copies
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
 from redflag_backend.supervisor.progress import Progress
+from redflag_backend.supervisor.similar import alike, fingerprint
 from redflag_backend.validator.loop import DEFAULT_REWRITES, Rejection, Stats, check_goal
 
 BIGGEST_FEAR_MIN = 30
 CRITICAL_MIN = 15
+# Every goal of the user gets at least this many tests, and the risks that are tested in many
+# different ways (asking for the bot's instructions, getting it to ignore its rules) get more.
+FLOOR_MIN = 5
+RISK_FLOOR = {"LLM07": 10, "LLM01": 8}
 MAX_ROUNDS = 3
 BACKGROUND_CAP = 10
 FIRST_ROUND_MIN = 3
@@ -49,6 +56,8 @@ class PlannedGoal(BaseModel):
 
 class Summary(BaseModel):
     ideas: int
+    # Disguised copies of attacks added by the planner: tests that are not new ideas.
+    disguised: int = 0
     repeats_removed: int
     tests: int
     data_changing: int
@@ -66,6 +75,8 @@ class Plan(BaseModel):
     # the plan: the tests that were written still run, and the report lists these as not tested.
     untested_rules: list[str] = Field(default_factory=list)
     warning: str | None = None
+    # The disguised copies added to the plan: how many of each, by the technique's plain name.
+    techniques: dict[str, int] = Field(default_factory=dict)
     # The rule check (ticket 12): tests it sent back, what it found overall, and why it did not run.
     rejections: list[Rejection] = Field(default_factory=list)
     checks: Stats = Field(default_factory=Stats)
@@ -105,7 +116,9 @@ def _target(goal: Goal, fear: Goal | None) -> int:
         return BIGGEST_FEAR_MIN
     if goal.severity == "critical":
         return CRITICAL_MIN
-    return 0
+    if goal.background:
+        return 0
+    return max(FLOOR_MIN, RISK_FLOOR.get(goal.risk or "", 0))
 
 
 class _Book:
@@ -114,6 +127,7 @@ class _Book:
     def __init__(self) -> None:
         self.openings: set[str] = set()
         self.ideas: set[tuple[str, str, str, tuple[str, ...]]] = set()
+        self.prints: list[frozenset[str]] = []
         self.removed: list[Removed] = []
         self.dropped: list[Dropped] = []
         self.skipped: list[Skipped] = []
@@ -149,12 +163,16 @@ class _Book:
                 count.after_repeats_removed += 1
                 continue
             opening, idea = _words(spec.opening_message), _idea(spec)
+            print_ = fingerprint(spec.opening_message)
             if opening in self.openings:
                 reason = "Same opening message as an earlier test."
             elif idea is not None and idea in self.ideas:
                 reason = "Same idea as an earlier test: same persona, approach, mode and tools."
+            elif any(alike(print_, seen) for seen in self.prints):
+                reason = "Almost the same wording as an earlier test: only names or numbers differ."
             else:
                 self.openings.add(opening)
+                self.prints.append(print_)
                 if idea is not None:
                     self.ideas.add(idea)
                 count.after_repeats_removed += 1
@@ -287,6 +305,7 @@ async def build_plan(
         None if check_seconds is None else began + check_seconds,
         rewrites,
     )
+    techniques = _add_disguises(planned, progress)
     if progress is not None:
         progress.working_on("Putting the plan together")
         removed = len(book.removed)
@@ -297,6 +316,8 @@ async def build_plan(
         )
     plan = _finish(planned, fear, book)
     plan.rejections, plan.checks, plan.check_problem = rejections, checks, check_problem
+    plan.techniques = techniques
+    plan.summary.disguised = sum(techniques.values())
     plan.summary.tests = sum(len(p.specs) for p in planned)
     plan.summary.data_changing = sum(1 for p in planned for s in p.specs if s.changes_data)
     if progress is not None:
@@ -374,6 +395,34 @@ async def _check_rules(
         else:
             progress.say("Every rule passed its checks.")
     return rejections, totals, problem
+
+
+def _add_disguises(planned: list[PlannedGoal], progress: Progress | None) -> dict[str, int]:
+    """Add disguised copies of some attacks (see `supervisor/disguise.py`). No model is called."""
+    counts: dict[str, int] = {}
+    position = 0
+    for item in planned:
+        made, position = copies(item.specs, position)
+        item.specs += made
+        for spec in made:
+            name = DISGUISES[spec.technique or ""].name
+            counts[name] = counts.get(name, 0) + 1
+            if progress is not None:
+                persona_id = next(p.id for p in PERSONAS.values() if p.name == spec.persona)
+                progress.test(
+                    persona_id,
+                    spec.persona,
+                    f"{item.goal.question} (disguised: {name})",
+                    spec.opening_message,
+                    spec.changes_data,
+                )
+    if progress is not None and counts:
+        total = sum(counts.values())
+        progress.say(
+            f"Added {total} disguised {'copy' if total == 1 else 'copies'} of attacks, "
+            f"using {len(counts)} {'technique' if len(counts) == 1 else 'techniques'}."
+        )
+    return counts
 
 
 def _room(goal: Goal, background_left: int, specs: list[TestSpec]) -> int | None:

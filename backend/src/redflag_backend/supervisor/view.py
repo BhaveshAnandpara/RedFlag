@@ -44,6 +44,7 @@ def plan_view(plan: Plan) -> dict[str, Any]:
             }
             for p in plan.goals
         ],
+        "techniques": plan.techniques,
         "checks": plan.checks.model_dump(),
         "check_problem": plan.check_problem,
         "rejections": [r.model_dump() for r in plan.rejections],

@@ -8,6 +8,7 @@ spec is saved and locked first, so a result can say exactly which test it proves
 import asyncio
 from typing import Any
 
+from redflag_backend.attacks.disguises import DISGUISES
 from redflag_backend.scan.target_runner import TestDone, representative
 from redflag_backend.specs.contract import DECIDED, Outcome, ResultRecord
 from redflag_backend.specs.oracle import Turn
@@ -94,6 +95,7 @@ def build_tests(plan: Plan, runs: int, stored: list[StoredSpec]) -> list[dict[st
                 "broke_if": spec.broke_if,
                 "held_if": spec.held_if,
                 "intention": spec.intention,
+                "technique": DISGUISES[spec.technique].name if spec.technique else None,
                 "rule_unconfirmed": False,
                 "real_action": spec.changes_data,
                 "fix": spec.fix_hint,
@@ -179,7 +181,8 @@ def record_for(
 
 def _rule_text(test: dict[str, Any]) -> str | None:
     """The test's rule and intention in plain words, so the report can show what was checked."""
-    parts = [test.get("broke_if"), test.get("held_if"), test.get("intention")]
+    disguised = f"Disguised as: {test['technique']}." if test.get("technique") else None
+    parts = [disguised, test.get("broke_if"), test.get("held_if"), test.get("intention")]
     shown = [p for p in parts if p]
     if not shown:
         return None
