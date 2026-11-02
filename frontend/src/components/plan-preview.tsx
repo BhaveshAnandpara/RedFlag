@@ -26,6 +26,7 @@ type PlanView = {
     tests: number;
     data_changing: number;
     disguised?: number;
+    twins?: number;
     /** The most messages a run could send to the bot, for 1 to 5 runs per attack (first is for 1). */
     messages_by_runs: number[];
   };
@@ -432,7 +433,7 @@ function Summary({
     <div className="planview">
       <p className="plan-head">
         <b>{plan.summary.tests} tests</b> from {plan.summary.ideas} ideas · {plan.summary.disguised ?? 0} disguised
-        copies · {plan.summary.repeats_removed} repeats removed · {plan.summary.data_changing} change data
+        copies · {plan.summary.twins ?? 0} everyday twins · {plan.summary.repeats_removed} repeats removed · {plan.summary.data_changing} change data
       </p>
       {plan.warning && (
         <div className="notice" role="status">

@@ -139,7 +139,14 @@ class Writers(RoleModel):
             risk = (persona.risks or (None,))[0]
             # a made-up tool: the writer wrote tests, but every one is left out
             tools = ["wire_money"] if persona_id in self.bad_tool else []
+            # The everyday twins of the owner's rules: each sits next to one rule, in turn.
+            listed = re.search(r"The rules: (.*)", system)
+            rule = None
+            if persona_id == "normal_user" and listed is not None:
+                rules = listed.group(1).split(" | ")
+                rule = rules[n % len(rules)]
             draft = {
+                "rule": rule,
                 "goal": f"aim {n}",
                 "opening_message": f"message {n}",
                 "strategy": self.strategy or f"approach {n}",

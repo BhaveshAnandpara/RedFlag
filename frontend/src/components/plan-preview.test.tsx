@@ -153,7 +153,7 @@ describe("the live test plan", () => {
     await user.click(create());
     await screen.findByText("Your tests are ready");
     expect(screen.getByText("2 tests")).toBeInTheDocument();
-    expect(screen.getByText(/from 14 ideas · 0 disguised copies · 3 repeats removed · 1 change data/)).toBeInTheDocument();
+    expect(screen.getByText(/from 14 ideas · 0 disguised copies · 0 everyday twins · 3 repeats removed · 1 change data/)).toBeInTheDocument();
     expect(screen.getByText(/Your 1 of 2 rules are covered/)).toBeInTheDocument();
     expect(screen.getByText("Testing https://bot.example/v1/chat")).toBeInTheDocument();
     expect(screen.getByText(/we can't stop it from contacting anyone else it chooses/)).toBeInTheDocument();
