@@ -364,12 +364,12 @@ def test_a_short_goal_is_topped_up_for_at_most_three_rounds_and_then_says_so() -
     assert plan.summary.repeats_removed > 0 and plan.removed
 
 
-def test_a_top_up_asks_for_different_angles_from_what_was_already_written() -> None:
+def test_a_top_up_asks_to_start_differently_from_what_was_already_written() -> None:
     model = Writers(GOALS, limit=6)
     plan_for(model)
     prompts = [c.messages[0].content for c in model.calls["persona-social_engineer"]]
-    assert any("different angles" in p for p in prompts)
-    assert any("message 1" in p for p in prompts if "different angles" in p)
+    assert any("Start in a different way" in p for p in prompts)
+    assert any("message 1" in p for p in prompts if "Start in a different way" in p)
 
 
 def test_repeats_are_removed_with_the_reason_shown() -> None:

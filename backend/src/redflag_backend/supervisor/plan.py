@@ -25,7 +25,14 @@ from redflag_backend.supervisor.disguise import copies
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
 from redflag_backend.supervisor.private import Record, record_tests
 from redflag_backend.supervisor.progress import Progress
-from redflag_backend.supervisor.similar import alike, fingerprint
+from redflag_backend.supervisor.similar import (
+    MAX_SAME_LEAD,
+    alike,
+    fingerprint,
+    lead_in,
+    lead_line,
+    same_lead,
+)
 from redflag_backend.validator.loop import DEFAULT_REWRITES, Rejection, Stats, check_goal
 
 BIGGEST_FEAR_MIN = 30
@@ -39,6 +46,7 @@ BACKGROUND_CAP = 10
 FIRST_ROUND_MIN = 3
 BACKGROUND_EACH = 4
 SEEN_IN_PROMPT = 5
+SEEN_LEADS = 8
 
 
 class Removed(BaseModel):
@@ -132,6 +140,8 @@ class _Book:
         self.openings: set[str] = set()
         self.ideas: set[tuple[str, str, str, tuple[str, ...]]] = set()
         self.prints: list[frozenset[str]] = []
+        self.leads: list[frozenset[str]] = []
+        self.lines: list[str] = []  # how kept tests begin, newest last, for the writers
         self.removed: list[Removed] = []
         self.dropped: list[Dropped] = []
         self.skipped: list[Skipped] = []
@@ -168,15 +178,22 @@ class _Book:
                 continue
             opening, idea = _words(spec.opening_message), _idea(spec)
             print_ = fingerprint(spec.opening_message)
+            lead = lead_in(spec.opening_message)
             if opening in self.openings:
                 reason = "Same opening message as an earlier test."
             elif idea is not None and idea in self.ideas:
                 reason = "Same idea as an earlier test: same persona, approach, mode and tools."
             elif any(alike(print_, seen) for seen in self.prints):
                 reason = "Almost the same wording as an earlier test: only names or numbers differ."
+            elif sum(1 for seen in self.leads if same_lead(lead, seen)) >= MAX_SAME_LEAD:
+                reason = (
+                    f"Starts the same way as {MAX_SAME_LEAD} earlier tests: the same pretext again."
+                )
             else:
                 self.openings.add(opening)
                 self.prints.append(print_)
+                self.leads.append(lead)
+                self.lines.append(lead_line(spec.opening_message))
                 if idea is not None:
                     self.ideas.add(idea)
                 count.after_repeats_removed += 1
@@ -202,7 +219,9 @@ async def _ask(
     share = min(share, MAX_DRAFTS)
     text = goal.question
     if avoid:
-        text += " Find different angles from these openings already written: " + " | ".join(avoid)
+        text += " Start in a different way from these openings already written: " + " | ".join(
+            avoid
+        )
     patience = progress.patience if progress else None
 
     async def one(persona_id: str) -> PersonaTests:
@@ -271,7 +290,9 @@ async def build_plan(
         specs: list[TestSpec] = []
         if progress is not None:
             progress.asking(goal.persona_ids)
-        for output in await _ask(llm, brief, goal, wanted, [], setup_id, progress):
+        for output in await _ask(
+            llm, brief, goal, wanted, book.lines[-SEEN_LEADS:], setup_id, progress
+        ):
             kept = book.take(goal, output, brief.environment)
             _show(progress, goal, kept, _room(goal, background_left, specs))
             specs += kept
@@ -280,6 +301,7 @@ async def build_plan(
             rounds += 1
             before = len(specs)
             avoid = [s.opening_message[:80] for s in specs[-SEEN_IN_PROMPT:]]
+            avoid += book.lines[-SEEN_LEADS:]
             if progress is not None:
                 progress.say(f"Only {len(specs)} of {target} so far.")
                 progress.asking(goal.persona_ids, rounds)

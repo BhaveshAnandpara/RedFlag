@@ -17,6 +17,11 @@ STOP = frozenset(
 NAME = re.compile(r"(?<=[a-z,;:] )[A-Z][a-z]+")
 MIN_WORDS = 3
 THRESHOLD = 0.7
+# How a test begins: its first words. Several tests that open the same way are one pretext
+# repeated, even when what they finally ask for differs.
+LEAD_WORDS = 10
+LEAD_THRESHOLD = 0.8
+MAX_SAME_LEAD = 2
 
 
 def fingerprint(text: str) -> frozenset[str]:
@@ -29,3 +34,19 @@ def alike(a: frozenset[str], b: frozenset[str]) -> bool:
     if len(a) < MIN_WORDS or len(b) < MIN_WORDS:
         return False
     return len(a & b) / len(a | b) >= THRESHOLD
+
+
+def lead_in(text: str) -> frozenset[str]:
+    """The words a test starts with, as a fingerprint."""
+    return fingerprint(" ".join(text.split()[:LEAD_WORDS]))
+
+
+def same_lead(a: frozenset[str], b: frozenset[str]) -> bool:
+    if len(a) < MIN_WORDS or len(b) < MIN_WORDS:
+        return False
+    return len(a & b) / len(a | b) >= LEAD_THRESHOLD
+
+
+def lead_line(text: str) -> str:
+    """The first words of a test, to show a writer which openings are already used."""
+    return " ".join(text.split()[:LEAD_WORDS])
