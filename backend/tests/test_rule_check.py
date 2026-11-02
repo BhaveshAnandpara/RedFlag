@@ -19,7 +19,7 @@ from redflag_backend.validator.checks import (
     CHECK_SAMPLES,
     check_spec,
 )
-from redflag_backend.validator.loop import MAX_REWRITES
+from redflag_backend.validator.loop import DEFAULT_REWRITES
 from tests.helpers import TitleJudge
 from tests.test_multi_turn import GaveInJudge, bot_gives_in_on
 from tests.test_plan_run import made_plan, ran, run_plan
@@ -72,7 +72,7 @@ def test_the_rule_is_written_by_its_own_role_and_not_by_a_persona() -> None:
 # --- a rule that does not hold up -------------------------------------------------------------
 
 
-def test_a_rule_nothing_fixes_is_tried_three_times_then_the_test_stays_for_the_judge() -> None:
+def test_a_rule_nothing_fixes_is_tried_twice_then_the_test_stays_for_the_judge() -> None:
     plan, model = planned("never_catches")
     assert attacks(plan) and all(s.oracle is None for s in attacks(plan))
     assert all(s.intention for s in attacks(plan))  # the judge still knows what to look for
@@ -83,7 +83,24 @@ def test_a_rule_nothing_fixes_is_tried_three_times_then_the_test_stays_for_the_j
     # the first write, then no more than the rewrites the ticket allows
     asked = model.prompts("rule-author")
     tries = [sum(1 for p in asked if json.dumps(r.opening_message) in p) for r in plan.rejections]
-    assert tries and max(tries) == MAX_REWRITES + 1
+    assert tries and max(tries) == DEFAULT_REWRITES + 1
+
+
+def test_the_number_of_rewrites_is_a_setting_and_zero_keeps_only_the_first_rule() -> None:
+    from redflag_backend.supervisor.plan import build_plan
+    from tests.test_supervisor import BRIEF, llm_for
+
+    counts = {}
+    for rewrites in (0, 1, 2):
+        model = Writers(ONE_GOAL, limit=4, rules="never_catches")
+        plan = asyncio.run(build_plan(llm_for(model), BRIEF, rewrites=rewrites))
+        asked = model.prompts("rule-author")
+        most = max(
+            sum(1 for p in asked if json.dumps(r.opening_message) in p) for r in plan.rejections
+        )
+        counts[rewrites] = (most, len(asked))
+    assert [counts[n][0] for n in (0, 1, 2)] == [1, 2, 3]
+    assert counts[0][1] < counts[1][1] < counts[2][1]  # fewer rewrites, fewer calls
 
 
 def test_a_rule_fixed_on_the_second_try_is_kept_and_reported_as_fixed() -> None:

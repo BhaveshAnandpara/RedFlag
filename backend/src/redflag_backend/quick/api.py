@@ -227,7 +227,14 @@ def build_quick_router(
         async def work() -> None:
             try:
                 plan = await asyncio.wait_for(
-                    build_plan(llm, brief, budget_key, progress, settings.quick_plan_check_seconds),
+                    build_plan(
+                        llm,
+                        brief,
+                        budget_key,
+                        progress,
+                        settings.quick_plan_check_seconds,
+                        settings.quick_plan_rule_rewrites,
+                    ),
                     settings.quick_plan_timeout_seconds,
                 )
                 plans[plan_id] = {

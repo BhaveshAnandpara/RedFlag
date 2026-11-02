@@ -128,6 +128,9 @@ class Settings(BaseSettings):
     # After this long, no new goal is rule-checked: the rest keep no rule and the judge decides
     # them, and the plan says so. Every check still runs when the models answer in time.
     quick_plan_check_seconds: float = 2400.0
+    # How many times a rejected rule goes back to the rule writer. Each round is about a sixth of
+    # a plan's calls; a paid plan can afford 2.
+    quick_plan_rule_rewrites: int = Field(default=1, ge=0, le=3)
     quick_plan_quota_wait_seconds: float = 60.0
     quick_plan_max_waits: int = 6
     # The most tests one setup version may hold (generated tests plus attack variations).

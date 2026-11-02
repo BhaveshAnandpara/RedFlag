@@ -1,13 +1,12 @@
-"""Checking a goal's tests before the user sees the plan, and fixing or dropping the bad ones.
+"""Checking a goal's tests before the user sees the plan, and fixing the bad rules.
 
 Round one asks the rule writer for every attack test's rule. Code checks each rule, and a second
 model call reads each intention against the two made-up chats. A test that fails is sent back with
-the reasons, at most twice; after that it stays in the plan with no machine rule and the AI judge
-decides it using its intention, and the plan says why. A test is never lost to a rule that could
-not be written. A normal request has no
-Broke rule (the judge decides it), so it is not checked. If the models cannot answer, the test keeps
-no rule and the judge decides it, and the plan says the check did not run: nothing is silently
-skipped and nothing is blocked.
+the reasons, a set number of times (one by default). After that it stays in the plan with no
+machine rule and the AI judge decides it using its intention, and the plan says why: a test is
+never lost to a rule that could not be written. A normal request has no Broke rule (the judge
+decides it), so it is not checked. If the models cannot answer, the test keeps no rule and the
+judge decides it, and the plan says the check did not run: nothing is silently skipped.
 """
 
 import asyncio
@@ -27,7 +26,7 @@ from redflag_backend.specs.spec import TestSpec
 from redflag_backend.validator.author import BATCH, RuleDraft, with_rule, write_rules
 from redflag_backend.validator.checks import CHECK_MEANING, CHECK_RULE, check_spec
 
-MAX_REWRITES = 2
+DEFAULT_REWRITES = 1
 CHECK_BATCH = 8
 
 MEANING_SYSTEM = """ROLE: rule-check
@@ -185,6 +184,7 @@ async def check_goal(
     next_id: Callable[[], str],
     setup_id: int = NO_SETUP,
     patience: Patience | None = None,
+    rewrites: int = DEFAULT_REWRITES,
 ) -> Checked:
     """The goal's tests with a rule and intention on every attack test that passed the checks."""
     result = Checked(specs=list(specs))
@@ -195,7 +195,7 @@ async def check_goal(
     problems: dict[int, list[str]] = {}
     result.stats.checked = len(pending)
 
-    for _ in range(MAX_REWRITES + 1):
+    for _ in range(rewrites + 1):
         if not pending:
             break
         batches = _chunks(pending, BATCH)

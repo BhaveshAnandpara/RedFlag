@@ -21,7 +21,7 @@ from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
 from redflag_backend.supervisor.progress import Progress
-from redflag_backend.validator.loop import Rejection, Stats, check_goal
+from redflag_backend.validator.loop import DEFAULT_REWRITES, Rejection, Stats, check_goal
 
 BIGGEST_FEAR_MIN = 30
 CRITICAL_MIN = 15
@@ -226,6 +226,7 @@ async def build_plan(
     setup_id: int = NO_SETUP,
     progress: Progress | None = None,
     check_seconds: float | None = None,
+    rewrites: int = DEFAULT_REWRITES,
 ) -> Plan:
     began = time.monotonic()
     if progress is not None:
@@ -284,6 +285,7 @@ async def build_plan(
         setup_id,
         progress,
         None if check_seconds is None else began + check_seconds,
+        rewrites,
     )
     if progress is not None:
         progress.working_on("Putting the plan together")
@@ -314,6 +316,7 @@ async def _check_rules(
     setup_id: int,
     progress: Progress | None,
     deadline: float | None = None,
+    rewrites: int = DEFAULT_REWRITES,
 ) -> tuple[list[Rejection], Stats, str | None]:
     """Give every attack test a rule and an intention, and send back the ones that do not hold up.
     A goal that loses most of its tests says so, so the plan never claims coverage it lost."""
@@ -345,6 +348,7 @@ async def _check_rules(
             lambda: f"r-{next(numbers)}",
             setup_id,
             progress.patience if progress else None,
+            rewrites,
         )
         item.specs = checked.specs
         rejections += checked.rejections
