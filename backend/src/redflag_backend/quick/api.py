@@ -76,6 +76,8 @@ class PlanBody(BaseModel):
     purpose: str = Field(default="", max_length=500)
     rules: list[str] = Field(default_factory=list, max_length=20)
     facts: FactSheet | None = None
+    # The secret line the owner added to their bot, made by the page. Nothing else is accepted.
+    canary: str | None = Field(default=None, pattern=r"^RF-CANARY-[0-9a-f]{8}$")
 
 
 def _brief(body: PlanBody) -> Brief:
@@ -90,6 +92,7 @@ def _brief(body: PlanBody) -> Brief:
         rules=rules,
         tools=tools,
         facts=facts.model_dump() if facts else {},
+        canary=body.canary,
     )
 
 

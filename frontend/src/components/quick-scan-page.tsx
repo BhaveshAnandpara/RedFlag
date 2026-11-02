@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { parseConnection } from "@/lib/connect-parse";
 import { hostOf, problemFor, readOpenScan, reportPath } from "@/lib/open-api";
+import { canaryLine, makeCanary } from "@/lib/canary";
 import type { ScanDetail, ScanResult } from "@/lib/scan";
 import type { Endpoint } from "@/lib/setup";
 import { SetupApi } from "@/lib/setup-api";
@@ -140,6 +141,9 @@ export function QuickScanPage({
   // Staging is the safer starting point: it asks for the "dev or test copy" tick before going on.
   const [env, setEnv] = useState<Env>("staging");
   const [stagingTick, setStagingTick] = useState(false);
+  // A secret line the owner can add to their bot, so a leak is found by looking for it.
+  const [canary] = useState(makeCanary);
+  const [plantedSecret, setPlantedSecret] = useState(false);
 
   // step 1
   const [addr, setAddr] = useState("");
@@ -1187,6 +1191,32 @@ export function QuickScanPage({
                   </div>
                 </div>
               )}
+              <div
+                id="canary-tick"
+                className={`sandbox ${plantedSecret ? "on" : ""}`}
+                role="checkbox"
+                aria-checked={plantedSecret}
+                aria-label="I added the secret line to my bot's instructions"
+                tabIndex={0}
+                onClick={() => setPlantedSecret(!plantedSecret)}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    setPlantedSecret(!plantedSecret);
+                  }
+                }}
+              >
+                <span className="box" />
+                <div>
+                  <b>Plant a secret in your bot (optional, finds leaks for certain).</b>
+                  <span>
+                    Add this line to your bot&apos;s hidden instructions, then tick here. Tests that try to
+                    get your bot to reveal its instructions then look for the code, instead of an AI&apos;s
+                    opinion.
+                  </span>
+                  <code onClick={(e) => e.stopPropagation()}>{canaryLine(canary)}</code>
+                </div>
+              </div>
               <PlanPreview
                 api={api}
                 environment={env}
@@ -1194,6 +1224,7 @@ export function QuickScanPage({
                 rules={rules.filter((r) => r.on).map((r) => r.t)}
                 facts={hello?.recon?.facts ?? null}
                 server={buildEndpoint(fields).url}
+                canary={plantedSecret ? canary : null}
                 onBusy={setPlanning}
                 onPlan={setReadyPlan}
                 reset={planReset}

@@ -98,6 +98,8 @@ type Props = {
   rules: string[];
   facts: unknown;
   server: string;
+  /** The secret line the owner added to their bot, or null if they did not. */
+  canary?: string | null;
   beatMs?: number;
   minMs?: number;
   /** Told when a plan starts and ends being made, so the page can hold the Run button meanwhile. */
@@ -118,6 +120,7 @@ export function PlanPreview({
   rules,
   facts,
   server,
+  canary = null,
   beatMs = BEAT_MS,
   minMs = MIN_MS,
   onBusy,
@@ -140,7 +143,7 @@ export function PlanPreview({
   const stuck = useRef(true);
   const made = useRef("");
   const began = useRef(0);
-  const inputs = JSON.stringify([environment, purpose, rules, facts]);
+  const inputs = JSON.stringify([environment, purpose, rules, facts, canary]);
 
   useEffect(() => {
     alive.current = true;
@@ -240,6 +243,7 @@ export function PlanPreview({
       purpose,
       rules,
       facts,
+      ...(canary ? { canary } : {}),
     });
     if (!alive.current) return;
     if (!started.ok) {

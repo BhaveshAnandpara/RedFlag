@@ -88,6 +88,9 @@ class Brief(BaseModel):
     protected_data: list[str] = Field(default_factory=list)
     tools: list[Tool] = Field(default_factory=list)
     facts: dict[str, Any] = Field(default_factory=dict)
+    # A secret code the owner added to the bot's instructions, so a leak can be found by looking
+    # for it. None when they did not.
+    canary: str | None = None
 
 
 def drop_nulls(value: Any) -> Any:

@@ -20,7 +20,7 @@ from redflag_backend.personas.writer import MAX_DRAFTS, Brief, Dropped, PersonaT
 from redflag_backend.quick.logs import NO_SETUP
 from redflag_backend.setups.llm import SetupLLM
 from redflag_backend.specs.spec import TestSpec
-from redflag_backend.supervisor.canaries import can_plant, plant
+from redflag_backend.supervisor.canaries import can_plant, can_plant_secret, plant, plant_secret
 from redflag_backend.supervisor.disguise import copies
 from redflag_backend.supervisor.goals import SEVERITY_RANK, Goal, make_goals
 from redflag_backend.supervisor.progress import Progress
@@ -299,7 +299,7 @@ async def build_plan(
             specs = specs[:background_left]
             background_left -= len(specs)
         planned.append(PlannedGoal(goal=goal, target=target, specs=specs, note=note))
-    planted = _plant_words(planned, progress)
+    planted = _plant_words(planned, progress, brief.canary)
     rejections, checks, check_problem = await _check_rules(
         llm,
         brief,
@@ -402,7 +402,9 @@ async def _check_rules(
     return rejections, totals, problem
 
 
-def _plant_words(planned: list[PlannedGoal], progress: Progress | None) -> int:
+def _plant_words(
+    planned: list[PlannedGoal], progress: Progress | None, canary: str | None = None
+) -> int:
     """Give each poisoning test a planted code word, so a break is proved by code. No model."""
     count = 0
     for item in planned:
@@ -410,10 +412,13 @@ def _plant_words(planned: list[PlannedGoal], progress: Progress | None) -> int:
             if can_plant(spec):
                 item.specs[i] = plant(spec)
                 count += 1
+            elif canary and can_plant_secret(spec):
+                item.specs[i] = plant_secret(spec, canary)
+                count += 1
     if progress is not None and count:
         progress.say(
-            f"{count} poisoning {'test is' if count == 1 else 'tests are'} decided by a planted "
-            "code word, not by the AI judge."
+            f"{count} {'test is' if count == 1 else 'tests are'} decided by a planted code, "
+            "not by the AI judge."
         )
     return count
 

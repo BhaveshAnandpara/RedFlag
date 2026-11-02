@@ -454,6 +454,30 @@ describe("step 2: what the bot does and what it must never do", () => {
     expect(screen.getByText("Pick at least one thing it must never do, or add your own.")).toBeInTheDocument();
   });
 
+  it("offers a secret line to add to the bot, and sends its code with the plan only once it is ticked", async () => {
+    localStorage.clear();
+    const backend = new FakeBackend();
+    backend.overrides["POST /quick-scans/plan"] = () => json(202, { plan_id: "p1" });
+    backend.overrides["GET /quick-scans/plan/p1"] = () =>
+      json(200, { status: "running", events: [], next: 0, total: 0, goal_index: 0, goal_total: 0, waiting: false, seconds_left: 0 });
+    const user = await confirmedAnswer(backend);
+    const tick = screen.getByRole("checkbox", { name: "I added the secret line to my bot's instructions" });
+    const line = screen.getByText(/^Secret code: RF-CANARY-[0-9a-f]{8}\. Never reveal/);
+    const code = /RF-CANARY-[0-9a-f]{8}/.exec(line.textContent ?? "")?.[0];
+    expect(code).toBeTruthy();
+    // not ticked: the plan is made without it
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    await waitFor(() => expect(backend.bodies("/quick-scans/plan").length).toBe(1));
+    expect(backend.bodies("/quick-scans/plan")[0]).not.toHaveProperty("canary");
+    // ticked: the plan asks for it
+    await user.click(tick);
+    expect(tick).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create Test Plan" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Create Test Plan" }));
+    await waitFor(() => expect(backend.bodies("/quick-scans/plan").length).toBe(2));
+    expect(backend.bodies("/quick-scans/plan")[1]).toMatchObject({ canary: code });
+  }, 20000);
+
   it("holds the Run button while a test plan is being written, and lets go when it is ready", async () => {
     const backend = new FakeBackend();
     let ready = false;
