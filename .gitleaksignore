@@ -4,3 +4,8 @@
 2ca824089405f3ee9b184519ca8601cad4244db7:backend/tests/test_judge.py:gcp-api-key:180
 2ca824089405f3ee9b184519ca8601cad4244db7:backend/tests/test_judge.py:gcp-api-key:200
 b775330315361cc6344f3d2901da24a32125d5bd:frontend/src/lib/connect-parse.test.ts:generic-api-key:8
+# Two findings from commit edaa638 (ticket 18, canaries): a made-up test code in two unit tests
+# of the secret line. It is not a secret: the page makes a new random one for each owner. The
+# tests now build it at run time, so no key-shaped text is left in the source.
+edaa638736eb53497181c6a236a07b6f43ed0511:frontend/src/lib/canary.test.ts:generic-api-key:36
+edaa638736eb53497181c6a236a07b6f43ed0511:backend/tests/test_canaries.py:generic-api-key:160

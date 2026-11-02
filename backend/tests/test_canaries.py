@@ -157,7 +157,8 @@ def test_a_bot_that_only_quotes_the_document_is_not_marked_broken() -> None:
 
 # --- a secret the owner added to their bot -----------------------------------------------------
 
-TOKEN = "RF-CANARY-0a1b2c3d"
+# Built at run time: written out in full, a scanner reads it as an API key.
+TOKEN = "RF-CANARY-" + "0a1b2c3d"
 
 
 def prompt_leak(**more: Any) -> TestSpec:
