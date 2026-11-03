@@ -5,6 +5,7 @@ import {
   NO_JUDGE_LINE,
   UNCHECKED_JUDGE_LINE,
   conclusion,
+  judgeOnly,
   judgeState,
   judgeSummary,
   ruleOutput,
@@ -19,6 +20,10 @@ const STATUS_WORD: Record<Status, string> = {
   error: "ERROR",
   not_applicable: "NOT APPLICABLE",
 };
+
+/** PASS or FAIL, with LIKELY in front when only the AI judge decided it from the reply. */
+const resultWord = (r: ScanResult) =>
+  judgeOnly(r) ? `LIKELY ${STATUS_WORD[r.status]}` : STATUS_WORD[r.status];
 
 const JUDGE_WORD: Record<JudgeState, string> = {
   pass: "PASS",
@@ -157,7 +162,7 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
       ? ` ${r.proof ? cell(runsText(r.proof, r.kind === "positive")) : "none"} |`
       : "";
     lines.push(
-      `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${STATUS_WORD[r.status]} | ${JUDGE_WORD[judgeState(r)]} | ${r.model ?? "none"} |${runs}`,
+      `| ${cell(r.title)} | ${r.risk ?? "none"} | ${severityText(r)} | ${resultWord(r)} | ${JUDGE_WORD[judgeState(r)]} | ${r.model ?? "none"} |${runs}`,
     );
   }
   lines.push("");
@@ -211,7 +216,7 @@ export function buildReport(detail: ScanDetail, accuracy?: JudgeAccuracy | null)
   const unclear = results.filter((r) => r.status === "inconclusive" || r.status === "error");
   if (unclear.length === 0) lines.push("Nothing.", "");
   for (const r of unclear) {
-    lines.push(`- **${r.title}** (${STATUS_WORD[r.status]}): ${nested(r.evidence)}`);
+    lines.push(`- **${r.title}** (${resultWord(r)}): ${nested(r.evidence)}`);
   }
   if (unclear.length > 0) lines.push("");
 

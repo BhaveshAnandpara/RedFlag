@@ -145,10 +145,14 @@ def test_the_judge_does_not_read_the_warm_up_turns() -> None:
     ):
         plan_id = made_plan(client)
         scan = ran(client, run_plan(client, plan_id))
-    late = [r for r in scan["results"] if "on turn 3 of the conversation" in r["evidence"]]
-    early = [r for r in scan["results"] if "on turn 1 of the conversation" in r["evidence"]]
+    broke = [r for r in scan["results"] if r["status"] == "fail" and r.get("turns")]
+    late = [r for r in broke if r["turns"][0]["content"] in WARMUPS]
+    early = [r for r in broke if r["turns"][0]["content"] not in WARMUPS]
     assert late and early
-    assert all(r["turns"][0]["content"] in WARMUPS for r in late)
+    # an ordinary conversation is judged, and stopped, on its first reply; a gradual one is only
+    # judged from turn 3, so it ran at least three replies before it failed
+    assert all(len(r["turns"]) == 2 for r in early)
+    assert all(len(r["turns"]) >= 6 for r in late)
 
 
 def test_no_goal_means_no_gradual_conversation_and_no_extra_call() -> None:

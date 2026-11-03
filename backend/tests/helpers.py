@@ -270,6 +270,43 @@ def judge_text(verdict: str = "pass", reason: str = "Nothing in the reply breaks
     return json.dumps({"verdict": verdict, "reason": reason})
 
 
+def asks_for_a_quote(request: LLMRequest) -> bool:
+    """True when the judge was told a fail must carry a quote (a real-bot test)."""
+    return "must also carry a quote" in request.messages[0].content
+
+
+def last_reply_line(request: LLMRequest) -> str:
+    """The last line of the app's reply in a judge prompt: words that are really in it."""
+    found = re.search(r"<<<REPLY (\w+)\n(.*?)\n\1>>>", request.messages[1].content, re.DOTALL)
+    lines = [ln for ln in (found.group(2) if found else "").splitlines() if ln.strip()]
+    return lines[-1] if lines else "no reply"
+
+
+def fail_answer(request: LLMRequest, reason: str, quote: str | None = None) -> str:
+    """A fail from a stand-in judge, with a quote only when the judge was asked for one."""
+    if not asks_for_a_quote(request):
+        return judge_text("fail", reason)
+    return json.dumps(
+        {"verdict": "fail", "reason": reason, "quote": quote or last_reply_line(request)}
+    )
+
+
+# The titles of the judge's own check cases that a correct judge fails (the other two it passes).
+SELF_CHECK_BREAKS = {"Self-check: a plain leak", "Self-check: a note aimed at the judge"}
+
+
+def self_check_answer(request: LLMRequest) -> LLMAnswer | None:
+    """A correct judge's answer to one of the judge's own check cases, or None for other tests."""
+    title = next(
+        (ln for ln in request.messages[1].content.splitlines() if ln.startswith("Test: ")), ""
+    ).removeprefix("Test: ")
+    if not title.startswith("Self-check: "):
+        return None
+    if title in SELF_CHECK_BREAKS:
+        return LLMAnswer(fail_answer(request, "The reply broke the rule."), "judge-model", 10, 5)
+    return LLMAnswer(judge_text("pass"), "judge-model", 10, 5)
+
+
 class TitleJudge:
     """A stand-in judge model that decides by the test title it is shown.
 
@@ -290,6 +327,8 @@ class TitleJudge:
         self.garbage = garbage or set()
         self.down = down or set()
         self.calls: list[LLMRequest] = []
+        # The judge's own check cases are kept apart, so counting a run's calls is unchanged.
+        self.checks: list[LLMRequest] = []
 
     def titles(self) -> list[str]:
         found = []
@@ -301,6 +340,10 @@ class TitleJudge:
         return found
 
     async def complete(self, request: LLMRequest) -> LLMAnswer:
+        checked = self_check_answer(request)
+        if checked is not None:
+            self.checks.append(request)
+            return checked
         self.calls.append(request)
         user = request.messages[1].content
         title = next((ln for ln in user.splitlines() if ln.startswith("Test: ")), "")
@@ -310,7 +353,7 @@ class TitleJudge:
         if title in self.garbage:
             return LLMAnswer("I am not sure what you want.", "judge-model", 10, 5)
         if title in self.fail:
-            return LLMAnswer(judge_text("fail", self.fail[title]), "judge-model", 10, 5)
+            return LLMAnswer(fail_answer(request, self.fail[title]), "judge-model", 10, 5)
         return LLMAnswer(judge_text("pass"), "judge-model", 10, 5)
 
 

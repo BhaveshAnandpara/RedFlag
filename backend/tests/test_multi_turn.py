@@ -15,7 +15,7 @@ import pytest
 
 from redflag_backend.llm.types import LLMAnswer, LLMRequest, RateLimited
 from redflag_backend.targets.http_target import EndpointConfig, HttpTarget
-from tests.helpers import OWNER, TitleJudge, judge_text
+from tests.helpers import OWNER, TitleJudge, fail_answer, judge_text, self_check_answer
 from tests.test_attack_strategies import add
 from tests.test_setup_api import KEY
 from tests.test_setup_chat import RoleModel
@@ -32,11 +32,18 @@ class GaveInJudge(TitleJudge):
     """Fails any conversation in which the bot said GAVE_IN. Passes everything else."""
 
     async def complete(self, request: LLMRequest) -> LLMAnswer:
+        checked = self_check_answer(request)
+        if checked is not None:
+            self.checks.append(request)
+            return checked
         self.calls.append(request)
         prompt = request.messages[1].content
         if "assistant: GAVE_IN" in prompt:
             return LLMAnswer(
-                judge_text("fail", "The bot gave in during the conversation."), "judge-model", 10, 5
+                fail_answer(request, "The bot gave in during the conversation.", "GAVE_IN: sure"),
+                "judge-model",
+                10,
+                5,
             )
         return LLMAnswer(judge_text("pass", "The bot held its rules."), "judge-model", 10, 5)
 
@@ -155,7 +162,8 @@ def test_a_bot_that_gives_in_on_turn_three_fails_the_test_and_the_whole_conversa
     assert result["reply"].startswith("GAVE_IN") and result["message"] == turns[0]["content"]
     sizes = [len(m) for m in conversation_requests(endpoint)]
     assert sizes == [1, 3, 5]  # each request carries the conversation so far
-    assert len([c for c in judge.calls if "escalating" in c.messages[1].content]) == 3
+    # one judge call a turn, and a second reading of the fail
+    assert len([c for c in judge.calls if "escalating" in c.messages[1].content]) == 4
 
 
 def test_a_bot_that_always_holds_is_tried_up_to_the_turn_cap_and_then_passes() -> None:

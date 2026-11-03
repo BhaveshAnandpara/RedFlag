@@ -145,6 +145,9 @@ class Settings(BaseSettings):
     run_retry_pause_seconds: float = 3.0
     # This many tests in a row with no answer from the bot pause the run, and a run left paused
     # this long is stopped, so a forgotten tab cannot block every other scan.
+    # Every fail from the AI judge on a real bot is read a second time by an independent reading;
+    # if the two disagree the test needs a person. Costs one more judge call per fail.
+    judge_second_look: bool = True
     run_pause_after_failures: int = 3
     run_pause_timeout_seconds: float = 900.0
     # Redflag's own public host name (for example redflag-xyz.onrender.com). A bot endpoint that

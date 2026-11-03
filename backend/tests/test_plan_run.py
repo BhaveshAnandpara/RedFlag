@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
+from redflag_backend.llm.types import LLMAnswer
 from redflag_backend.personas.registry import PERSONAS
 from redflag_backend.scan.store import ScanStore
 from redflag_backend.specs.results import ResultStore, StoredResult
@@ -27,7 +28,7 @@ from redflag_backend.supervisor.run_tests import (
     runs_for,
     turns_for,
 )
-from tests.helpers import OWNER, TEST_DB_URL, wait_for_scan
+from tests.helpers import OWNER, TEST_DB_URL, TitleJudge, wait_for_scan
 from tests.test_multi_turn import GaveInJudge, bot_gives_in_on
 from tests.test_quick_plan import finished, start
 from tests.test_quick_scan import all_rules, quick
@@ -485,3 +486,65 @@ def test_the_proof_names_its_test_so_it_lands_beside_the_right_result() -> None:
     assert sorted(p.result.test_id or "" for p in saved) == sorted(
         f"p-{n}" for n in range(1, len(saved) + 1)
     )
+
+
+# --- the break is pinned to the reply the judge quoted -----------------------------------------
+
+
+class LateJudge(GaveInJudge):
+    """Reads the first reply as fine, and only fails the conversation once three replies are in,
+    quoting the words the bot gave in with."""
+
+    async def complete(self, request: Any) -> Any:
+        prompt = request.messages[1].content
+        if prompt.count("assistant: ") < 3:
+            return await TitleJudge.complete(self, request)
+        return await super().complete(request)
+
+
+def test_the_proof_points_at_the_reply_the_judge_quoted_not_the_last_reply() -> None:
+    # the bot gives in on reply 1 and refuses after; the judge only fails it at reply 3
+    with run_client(LateJudge(), bot_gives_in_on(1), roles=small()) as (client, _, _):
+        plan_id = made_plan(client)
+        info = run_plan(client, plan_id, runs=1).json()
+        wait_for_scan(client, info["scan_id"], timeout=90)
+        report = client.get(f"/open-scans/{info['scan_id']}", params={"key": info["view_key"]})
+    broke = [r["proof"] for r in report.json()["results"] if r["proof"]["outcome"] == "broke"]
+    assert broke
+    for proof in broke:
+        at = proof["broke_at_turn"]
+        assert proof["conversation"][at]["role"] == "assistant"
+        assert "GAVE_IN" in proof["conversation"][at]["content"]
+        assert at < len(proof["conversation"]) - 1  # not the last reply
+
+
+class DoubtfulJudge(GaveInJudge):
+    """Fails on the first reading and passes on the second, as a judge that is not sure would."""
+
+    async def complete(self, request: Any) -> Any:
+        if "SECOND, independent reading" in request.messages[0].content:
+            self.calls.append(request)
+            return LLMAnswer(
+                json.dumps({"verdict": "pass", "reason": "On a second look it held.", "quote": ""}),
+                "judge-model",
+                10,
+                5,
+            )
+        return await super().complete(request)
+
+
+def test_two_readings_that_disagree_make_the_test_needs_review_not_failed() -> None:
+    with run_client(DoubtfulJudge(), bot_gives_in_on(1), roles=small()) as (client, _, _):
+        plan_id = made_plan(client)
+        scan = ran(client, run_plan(client, plan_id))
+    attacks = [r for r in scan["results"] if r["kind"] == "negative"]
+    assert attacks and all(r["status"] == "inconclusive" for r in attacks)
+    assert all("two readings disagree" in r["evidence"] for r in attacks)
+
+
+def test_two_readings_that_agree_fail_the_test_and_say_so() -> None:
+    with run_client(GaveInJudge(), bot_gives_in_on(1), roles=small()) as (client, _, _):
+        plan_id = made_plan(client)
+        scan = ran(client, run_plan(client, plan_id))
+    failed = [r for r in scan["results"] if r["kind"] == "negative" and r["status"] == "fail"]
+    assert failed and all("second, independent reading agreed" in r["evidence"] for r in failed)

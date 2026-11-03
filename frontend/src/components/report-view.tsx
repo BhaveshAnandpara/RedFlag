@@ -13,7 +13,7 @@ import {
   when,
   type Cover,
 } from "@/lib/report-model";
-import { rangeWords } from "@/lib/analytics";
+import { judgeOnly, rangeWords } from "@/lib/analytics";
 import { HOW_SURE, buildReport, runsText } from "@/lib/report";
 import type { Proof, ScanDetail, ScanResult, Status } from "@/lib/scan";
 
@@ -55,7 +55,9 @@ function Rise({ children, as: Tag = "div", className = "", ...rest }: { children
   );
 }
 
-const Badge = ({ status }: { status: Status }) => <span className={`badge ${look(status)}`}>{WORD[status]}</span>;
+const Badge = ({ status, likely = false }: { status: Status; likely?: boolean }) => (
+  <span className={`badge ${look(status)}`}>{likely ? `LIKELY ${WORD[status]}` : WORD[status]}</span>
+);
 const SevTag = ({ s }: { s?: string | null }) => <span className={`sev ${s || "none"}`}>{s || "not rated"}</span>;
 
 export function ReportView({ detail }: { detail: ScanDetail }) {
@@ -326,7 +328,7 @@ function BotDetail({ r }: { r: ScanResult }) {
       </div>
       <div className="jb">
         <div className="h">
-          AI judge <Badge status={r.status} />
+          AI judge <Badge status={r.status} likely={judgeOnly(r)} />
         </div>
         {r.judge_reason ?? r.evidence}
         <span style={{ fontSize: 12, color: "var(--faint)" }}>
@@ -600,7 +602,7 @@ function BotReport({ detail }: { detail: ScanDetail }) {
                 cells={
                   <>
                     <td>
-                      <Badge status={r.status} />
+                      <Badge status={r.status} likely={judgeOnly(r)} />
                     </td>
                     <td>{r.title}</td>
                     <td className="mono t-risk">{r.risk ?? "normal"}</td>

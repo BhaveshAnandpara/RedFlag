@@ -91,6 +91,16 @@ class ScanStore:
                 {"now": now, "id": scan_id},
             )
 
+    def merge_settings(self, scan_id: int, extra: dict[str, Any]) -> None:
+        """Add facts learned during the run (such as the judge check) to the scan's settings."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE scans SET settings = settings || CAST(:extra AS jsonb) WHERE id = :id"
+                ),
+                {"extra": json.dumps(extra), "id": scan_id},
+            )
+
     def touch(self, scan_id: int, now: float) -> None:
         """Say the run is still working. A long test can go minutes between saved results, and a
         scan with no sign of life is treated as interrupted."""

@@ -191,6 +191,7 @@ def create_app(
                 rate_retries=settings.attacker_rate_retries,
             ),
             max_turns=settings.multi_turn_max_turns,
+            second_look=settings.judge_second_look,
             reply_wait=settings.run_reply_timeout_seconds,
             retry_pause=settings.run_retry_pause_seconds,
             pause_after=settings.run_pause_after_failures,

@@ -142,6 +142,9 @@ def record_for(
     base = representative(runs)
     turns = _turns_of(base)
     replies = [i for i, turn in enumerate(turns) if turn.role == "assistant"]
+    # The reply the judge quoted (1 is the first); the last reply when no quote decided it.
+    quoted = base.get("broke_at_reply")
+    broke_at = replies[quoted - 1] if quoted and 0 < quoted <= len(replies) else None
     status = combined["status"]
     broke = sum(1 for r in runs if r["status"] == "fail")
     outcome: Outcome
@@ -170,7 +173,9 @@ def record_for(
         what_happened=said + test["goal"],
         conversation=turns,
         attacker_messages=[t.content for t in turns if t.role == "user"] if decided else [],
-        broke_at_turn=replies[-1] if outcome == "broke" else None,
+        broke_at_turn=(broke_at if broke_at is not None else replies[-1])
+        if outcome == "broke"
+        else None,
         how_sure=("confirmed_by_checks" if by_rule else "reply_only") if decided else None,
         extra_proof=_rule_text(test),
         reason=combined["evidence"],

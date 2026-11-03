@@ -144,6 +144,18 @@ export function sometimesWorks(results: ScanResult[]): ScanResult[] {
   );
 }
 
+/**
+ * A pass or fail that only the AI judge decided, from the bot's reply alone: nothing else (a
+ * planted word, one of Redflag's own checks, a log) confirmed it. These read as "likely" and are
+ * counted apart, so they never pass for a proven break or a proven hold.
+ */
+export function judgeOnly(result: ScanResult): boolean {
+  return (
+    (result.status === "pass" || result.status === "fail") &&
+    result.proof?.how_sure === "reply_only"
+  );
+}
+
 /** What a rate of `failed` out of `tested` could really be, in words. Never says "safe". */
 export function rangeWords(failed: number, tested: number): string {
   if (tested <= 0) return "";
@@ -227,6 +239,15 @@ export function conclusion(scan: ScanDetail): Conclusion {
       "This is a check of an MCP server. The description and schema checks use plain rules that look for known patterns. Redflag only called the tools you ticked, and an AI judge read what each tool sent back.",
     );
   } else if (isRealBot(scan)) {
+    const checkLine = judgeCheckLine(scan);
+    if (checkLine) details.push(checkLine);
+    const likelyFailed = results.filter((r) => r.kind === "negative" && r.status === "fail" && judgeOnly(r)).length;
+    const likelyHeld = results.filter((r) => r.kind === "negative" && r.status === "pass" && judgeOnly(r)).length;
+    if (likelyFailed + likelyHeld > 0) {
+      details.push(
+        `${likelyFailed} of the ${stats.failed} failed and ${likelyHeld} of the ${stats.tested - stats.failed} held attack tests are "likely" results: the AI judge decided ${plural(likelyFailed + likelyHeld, "it", "them")} from the bot's reply alone and nothing else confirmed ${plural(likelyFailed + likelyHeld, "it", "them")}. Only a result confirmed by a planted word or one of Redflag's own checks is sure.`,
+      );
+    }
     details.push(
       "No plain rules ran on this bot, so there was no second opinion: every result was decided by an AI judge from the bot's reply alone.",
     );
@@ -240,6 +261,22 @@ export function conclusion(scan: ScanDetail): Conclusion {
 export function conclusionText(scan: ScanDetail): string {
   const { headline, details, closing } = conclusion(scan);
   return [headline, ...details, closing].join(" ");
+}
+
+/** The sentence about the AI judge's own check, or null for a scan that did not record one. */
+export function judgeCheckLine(scan: ScanDetail): string | null {
+  const check = scan.scan.settings.judge_check;
+  if (!check) return null;
+  if (!check.ran) return "Judge check: not needed, because no test used the AI judge.";
+  const { passed = 0, total = 0, unavailable = 0 } = check;
+  const model = check.model ? ` (${check.model})` : "";
+  if (unavailable > 0) {
+    return `Judge check: the AI judge could not answer ${unavailable} of ${total} check cases${model}, so how accurate it is on your key is unknown.`;
+  }
+  if (passed < total) {
+    return `The AI judge on your key did not pass our check (${passed} of ${total})${model}. Every result it decided alone is marked as needing review; results confirmed by a planted word or a Redflag check are not affected.`;
+  }
+  return `Judge check: passed ${passed} of ${total}${model}.`;
 }
 
 /** A scan of the owner's own bot (M6) records the setup version it ran with. */

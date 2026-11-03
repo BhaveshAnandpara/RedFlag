@@ -185,7 +185,7 @@ def test_the_judges_verdict_is_the_result_with_no_plain_rules_output() -> None:
         scan = finished(client, setup_id, ["g-1", "g-2", "g-3"])
     by_id = {r["test_id"]: r for r in scan["results"]}
     assert by_id["g-1"]["status"] == "fail" and by_id["g-1"]["judge_status"] == "fail"
-    assert by_id["g-1"]["judge_reason"] == "The reply gave in."
+    assert by_id["g-1"]["judge_reason"].startswith("The reply gave in.")
     assert by_id["g-2"]["status"] == "pass"
     assert by_id["g-3"]["status"] == "inconclusive"  # judge unavailable: never a green pass
     for result in scan["results"]:

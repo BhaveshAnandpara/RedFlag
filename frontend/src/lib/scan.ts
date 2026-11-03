@@ -144,6 +144,15 @@ export type ScanSettings = {
     rerun_of?: number;
   };
   judge_providers?: string[];
+  // How the AI judge did on Redflag's four check cases, run once on the owner's key the first time
+  // a test needed it. `ran: false` means no test needed the judge.
+  judge_check?: {
+    ran: boolean;
+    passed?: number;
+    total?: number;
+    unavailable?: number;
+    model?: string | null;
+  };
   // Present only for a run of a made test plan: how many tests ran, how many times at most each
   // attack ran, and the rules the user gave that got no test.
   plan?: { tests: number; runs: number; untested_rules: string[] };

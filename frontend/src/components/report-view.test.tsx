@@ -528,6 +528,23 @@ describe("the proof in the report of a plan run", () => {
     expect(within(item).getByText("Broke in 1 of 1 run")).toBeInTheDocument();
   });
 
+  it("calls a result only the AI judge decided LIKELY, and one a check confirmed plain FAIL", () => {
+    const checked = makeResult({
+      test_id: "p-5",
+      title: "Checked by a planted word",
+      status: "fail",
+      proof: { ...PROOF, how_sure: "confirmed_by_checks" },
+    });
+    render(
+      <ReportView
+        detail={makeScan([planned, checked], { id: 17, botId: "target-8", setup: { version: 1, rules: [] } })}
+      />,
+    );
+    const rowOf = (title: string) => screen.getByText(title, { selector: "td" }).closest("tr") as HTMLElement;
+    expect(within(rowOf("Can a claim of approval get a refund?")).getByText("LIKELY FAIL")).toBeInTheDocument();
+    expect(within(rowOf("Checked by a planted word")).getByText("FAIL")).toBeInTheDocument();
+  });
+
   it("keeps the report as it was for a scan with no proof: no Runs column, no Proof box", async () => {
     const user = userEvent.setup();
     render(<ReportView detail={botScan()} />);

@@ -17,7 +17,7 @@ import {
   sometimesWorks,
 } from "./analytics";
 import { buildReport } from "./report";
-import type { Proof as ScanResultProof } from "./scan";
+import type { Proof as ScanResultProof, ScanDetail } from "./scan";
 
 describe("counts and the donut", () => {
   const results = [
@@ -347,7 +347,7 @@ describe("the banner colour", () => {
 
 // --- the AI judge (M5) -----------------------------------------------------------------------
 
-import { judgeState, judgeSummary, ruleOutput } from "./analytics";
+import { judgeCheckLine, judgeOnly, judgeState, judgeSummary, ruleOutput } from "./analytics";
 
 const judged = (
   rule: "pass" | "fail" | "inconclusive",
@@ -563,5 +563,80 @@ describe("how sure a result is", () => {
     expect(text).toMatch(/only see your bot from the outside/);
     expect(text).toMatch(/cannot tell a real leak from something the bot made up/);
     expect(text).not.toMatch(/\b(safe|secure|ready)\b/i);
+  });
+});
+
+describe("results only the AI judge decided", () => {
+  const proofWith = (how_sure: NonNullable<ScanResultProof["how_sure"]>) =>
+    ({
+      outcome: "broke",
+      how_sure,
+      reason: "r",
+      what_happened: "w",
+      repeat_count: 1,
+      repeats_broke: 1,
+      broke_at_turn: 1,
+      conversation: [],
+      attacker_messages: [],
+      spec_id: "spec-1",
+      spec_version: 1,
+      spec_hash: "abc",
+      compared_with_last: null,
+    }) as NonNullable<ScanResultProof>;
+
+  it("is a pass or fail whose proof rests on the reply alone, and nothing else", () => {
+    expect(judgeOnly(makeResult({ status: "fail", proof: proofWith("reply_only") }))).toBe(true);
+    expect(judgeOnly(makeResult({ status: "pass", proof: proofWith("reply_only") }))).toBe(true);
+    expect(judgeOnly(makeResult({ status: "fail", proof: proofWith("confirmed_by_checks") }))).toBe(false);
+    expect(judgeOnly(makeResult({ status: "inconclusive", proof: proofWith("reply_only") }))).toBe(false);
+    expect(judgeOnly(makeResult({ status: "fail", proof: null }))).toBe(false);
+  });
+
+  it("is counted apart in the conclusion of a real-bot scan, so it never reads as proven", () => {
+    const sure = makeResult({ status: "fail", proof: proofWith("confirmed_by_checks") });
+    const likely = makeResult({ status: "fail", proof: proofWith("reply_only") });
+    const held = makeResult({ status: "pass", proof: proofWith("reply_only") });
+    const scan = makeScan([sure, likely, held], { id: 3, botId: "target-1", setup: { version: 1, rules: [] } });
+    const text = conclusion(scan).details.join(" ");
+    expect(text).toContain('1 of the 2 failed and 1 of the 1 held attack tests are "likely" results');
+    expect(text).toContain("Only a result confirmed by a planted word");
+  });
+
+  it("is marked LIKELY in the Markdown report, and a checked result is not", () => {
+    const sure = makeResult({ title: "Sure one", status: "fail", proof: proofWith("confirmed_by_checks") });
+    const likely = makeResult({ title: "Likely one", status: "fail", proof: proofWith("reply_only") });
+    const text = buildReport(makeScan([sure, likely], { id: 3, botId: "target-1", setup: { version: 1, rules: [] } }));
+    expect(text).toMatch(/\| Likely one \|.*\| LIKELY FAIL \|/);
+    expect(text).toMatch(/\| Sure one \|.*\| FAIL \|/);
+  });
+});
+
+describe("the judge's own check in the conclusion", () => {
+  const withCheck = (judge_check: NonNullable<ScanDetail["scan"]["settings"]["judge_check"]> | undefined) => {
+    const scan = makeScan([makeResult({ status: "pass" })], { id: 4, botId: "target-1", setup: { version: 1, rules: [] } });
+    scan.scan.settings = { ...scan.scan.settings, judge_check };
+    return scan;
+  };
+
+  it("says how the judge did when it passed", () => {
+    expect(judgeCheckLine(withCheck({ ran: true, passed: 4, total: 4, unavailable: 0, model: "m-1" }))).toBe(
+      "Judge check: passed 4 of 4 (m-1).",
+    );
+  });
+
+  it("says plainly that a judge that failed is not trusted and what that does to the results", () => {
+    const line = judgeCheckLine(withCheck({ ran: true, passed: 2, total: 4, unavailable: 0, model: "m-1" }));
+    expect(line).toContain("did not pass our check (2 of 4)");
+    expect(line).toContain("marked as needing review");
+    expect(conclusionText(withCheck({ ran: true, passed: 2, total: 4, unavailable: 0 }))).toContain("2 of 4");
+  });
+
+  it("does not call a judge that could not answer inaccurate", () => {
+    expect(judgeCheckLine(withCheck({ ran: true, passed: 0, total: 4, unavailable: 4 }))).toContain("unknown");
+  });
+
+  it("says the judge was not used, and says nothing for a scan that recorded no check", () => {
+    expect(judgeCheckLine(withCheck({ ran: false }))).toContain("not needed");
+    expect(judgeCheckLine(withCheck(undefined))).toBeNull();
   });
 });
